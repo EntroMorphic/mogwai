@@ -1,0 +1,2 @@
+source /Users/aaronjosserand-austin/Projects/tinyenc/esp32/build/bootloader/gdbinit/symbols
+source /Users/aaronjosserand-austin/Projects/tinyenc/esp32/build/bootloader/gdbinit/connect

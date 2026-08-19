@@ -1,0 +1,17 @@
+Command: make -j 12 all
+/Users/aaronjosserand-austin/Projects/tinyenc/esp32/main/main.c: In function 'parse_blob':
+/Users/aaronjosserand-austin/Projects/tinyenc/esp32/main/main.c:32:5: error: this 'if' clause does not guard... [-Werror=misleading-indentation]
+   32 |     if(memcmp(cur,"TENC",4)) return -1; cur+=4;
+      |     ^~
+/Users/aaronjosserand-austin/Projects/tinyenc/esp32/main/main.c:32:41: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the 'if'
+   32 |     if(memcmp(cur,"TENC",4)) return -1; cur+=4;
+      |                                         ^~~
+In file included from /Users/aaronjosserand-austin/Projects/tinyenc/esp32/main/main.c:13:
+/Users/aaronjosserand-austin/Projects/tinyenc/esp32/main/ref_vectors.h: At top level:
+/Users/aaronjosserand-austin/Projects/tinyenc/esp32/main/ref_vectors.h:7:20: warning: 'ref_text' defined but not used [-Wunused-variable]
+    7 | static const char *ref_text[REF_N] = {"turn the kitchen lights on","i am freezing","set pin 13 high"};
+      |                    ^~~~~~~~
+cc1: some warnings being treated as errors
+make[2]: *** [esp-idf/main/CMakeFiles/__idf_main.dir/main.c.obj] Error 1
+make[1]: *** [esp-idf/main/CMakeFiles/__idf_main.dir/all] Error 2
+make: *** [all] Error 2

@@ -1,0 +1,5 @@
+Command: make -j 12 all
+In file included from /Users/aaronjosserand-austin/Projects/tinyenc/esp32/main/main.c:13:
+/Users/aaronjosserand-austin/Projects/tinyenc/esp32/main/ref_vectors.h:7:20: warning: 'ref_text' defined but not used [-Wunused-variable]
+    7 | static const char *ref_text[REF_N] = {"turn the kitchen lights on","i am freezing","set pin 13 high"};
+      |                    ^~~~~~~~
