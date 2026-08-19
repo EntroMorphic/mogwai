@@ -27,9 +27,12 @@ int t_active(const tvec *v) {
     for (int i = 0; i < RWORDS; i++) n += __builtin_popcount(v->m[i]);
     return n;
 }
-/* integer normalisation: longer index entries must not win on support alone */
-int t_score(const tvec *q, const tvec *b) {
+/* Dice: 2*dot / (|a| + |b|). Symmetric and length-invariant, unlike dividing
+ * by |b| alone — which made the score drift 23% with query length (149->184),
+ * biasing strict-on-short / loose-on-long. IoT commands are short; the
+ * negatives are long, so the bias ran exactly the wrong way. */
+int t_score(const tvec *q, const tvec *b, int aa) {
     int d = t_dot(q, b);
     int ab = t_active(b);
-    return (d * 256) / (ab + 8);
+    return (2 * d * 256) / (aa + ab + 8);
 }

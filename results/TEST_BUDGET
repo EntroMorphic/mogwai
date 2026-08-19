@@ -1,0 +1,4 @@
+evaluation 1: VOID — measured d=256/mask=none/veto=off, a config selected
+  entirely from a dev set that was 75.6% leaked via NLU-Eval.
+  Cause found and fixed; assertions added. Budget not reset: it was spent.
+1

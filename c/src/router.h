@@ -11,7 +11,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define RD        512
+#ifndef RD
+#define RD        256
+#endif
 #define RWORDS    (RD / 32)          /* 16 words = 64 bytes per vector */
 #define RMAXCLS   16
 #define RNAMELEN  32

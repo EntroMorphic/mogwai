@@ -3,7 +3,7 @@ CC      := cc
 CFLAGS  := -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter
 SRC     := c/src
 BIN     := c/bin
-CORE    := $(SRC)/router.c $(SRC)/ternary.c
+CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c
 DATA    := data/train.json data/validation.json data/test.json data/nlu_home.csv
 LOG     := results/RESULTS.tsv
 
@@ -21,7 +21,8 @@ $(DATA):
 	@./scripts/fetch.sh
 
 # every run appends one row to results/RESULTS.tsv, stamped with the git SHA
-compare: $(BIN)/compare $(DATA) log-header
+compare: $(BIN)/compare $(DATA) log-header   # dev only
+test: $(BIN)/compare $(DATA) log-header
 	@mkdir -p results
 	@sha=$$(git rev-parse --short HEAD 2>/dev/null || echo nogit); \
 	 dirty=$$(git diff --quiet 2>/dev/null && echo clean || echo DIRTY); \

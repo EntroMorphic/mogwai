@@ -10,6 +10,6 @@
 typedef struct { uint32_t m[RWORDS], s[RWORDS]; } tvec;
 void t_encode(const router_t *r, const char *text, tvec *out);
 int  t_dot(const tvec *a, const tvec *b);       /* raw agreement, [-RD,+RD] */
-int  t_score(const tvec *q, const tvec *b);     /* normalised by b's support */
+int  t_score(const tvec *q, const tvec *b, int aa); /* Dice: symmetric, length-invariant */
 int  t_active(const tvec *v);
 #endif
