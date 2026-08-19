@@ -123,3 +123,40 @@ Every step held PARITY EXACT.
 unchanged in proportion: popcount ~63%, flash loads ~37%. Neither has a
 peripheral that beats the CPU on this part. The open levers are all code —
 popcount byte-LUT in IRAM, d=128, pruning the index to the ~1,300 IoT entries.
+
+## Popcount table: killing the 47%
+
+Xtensa LX6 has no popcount instruction, so `__builtin_popcount` compiles to a
+~15-op SWAR sequence, and `t_dot` runs 16 of them per vector. The profile put
+that at 47% of scan time — the largest single cost, and the one with no
+hardware home.
+
+**Placement constraint:** the table must live in **DRAM, not IRAM**.
+ESP32-classic IRAM permits only 32-bit aligned access, so a byte load from it
+faults. `DRAM_ATTR` also keeps it out of `.rodata`, which would land in flash
+and be read back through the cache MMU — defeating the point.
+
+Verified **exhaustively**: the table equals `__builtin_popcount` on all 2^32
+words (`c/test/t_popcnt.c`), so the swap cannot change any result. The
+algebraic rewrite `dot = pc(both) - 2*pc(both&diff)` was checked against the
+original two-mask form over 2M random vector pairs.
+
+| variant | 1 core | 2 cores | DRAM |
+|---|---|---|---|
+| builtin SWAR | 77.5 ms | 39.5 ms | 0 |
+| **8-bit table (shipped)** | **43.8 ms** (1.77x) | **25.9 ms** | **256 B** |
+| 16-bit table | 38.5 ms (2.01x) | 25.8 ms | 64 KB |
+
+All three held PARITY EXACT (64/64 class and score vs host).
+
+**The 16-bit table was rejected**, and the reason is the useful finding: it is
+12% faster on one core but *identical* on two (25.80 vs 25.85 ms). With the
+popcount cost gone the dual-core scan is **no longer compute-bound** — both
+cores now contend for the same flash cache. 64 KB of DRAM for 0.05 ms is a bad
+trade, and it says the next bottleneck moved.
+
+**Cumulative on-device: 200.4 -> 102.1 -> 78.8 -> 40.1 -> 25.9 ms (7.7x).**
+
+Also made `esp32_router/main/{router,ternary}.{c,h}` symlinks into `c/src/`.
+They were hand-copies and had already drifted once; host and device now cannot
+diverge by construction.

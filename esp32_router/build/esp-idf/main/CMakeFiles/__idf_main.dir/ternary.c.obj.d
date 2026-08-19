@@ -31,4 +31,5 @@ esp-idf/main/CMakeFiles/__idf_main.dir/ternary.c.obj: \
  /Users/aaronjosserand-austin/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/xtensa-esp-elf/include/sys/_locale.h \
  /Users/aaronjosserand-austin/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/xtensa-esp-elf/include/assert.h \
  /Users/aaronjosserand-austin/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/xtensa-esp-elf/include/strings.h \
- /Users/aaronjosserand-austin/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/xtensa-esp-elf/include/sys/string.h
+ /Users/aaronjosserand-austin/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/xtensa-esp-elf/include/sys/string.h \
+ /Users/aaronjosserand-austin/Projects/esp-idf/components/esp_common/include/esp_attr.h

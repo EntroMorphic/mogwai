@@ -180,6 +180,7 @@ static void rtos_tax(const char *txt) {
     printf("    -> cycles/index-vector  : %.1f\n", (double)noint / R.n_index);
 }
 void app_main(void) {
+    t_popcnt_init();          /* no-op unless the 16-bit table is compiled in */
     esp_chip_info_t ci; esp_chip_info(&ci);
     printf("\n===== twin-ternary router on ESP32 =====\n");
     printf("chip        : %d core, rev %d\n", ci.cores, ci.revision);

@@ -16,4 +16,5 @@ int  t_score(const tvec *q, const tvec *b, int aa); /* Dice: symmetric, length-i
    2335 cycles per vector on ESP32 (24%) - 8 redundant popcounts per compare. */
 int  t_score_pre(const tvec *q, const tvec *b, int aa, int ab);
 int  t_active(const tvec *v);
+void t_popcnt_init(void);   /* no-op unless the 16-bit table is compiled in */
 #endif

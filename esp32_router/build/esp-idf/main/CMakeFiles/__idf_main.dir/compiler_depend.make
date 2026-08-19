@@ -171,6 +171,7 @@ esp-idf/main/CMakeFiles/__idf_main.dir/ternary.c.obj: /Users/aaronjosserand-aust
   /Users/aaronjosserand-austin/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/xtensa-esp-elf/include/sys/lock.h \
   /Users/aaronjosserand-austin/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/xtensa-esp-elf/include/sys/reent.h \
   /Users/aaronjosserand-austin/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/xtensa-esp-elf/include/sys/string.h \
+  /Users/aaronjosserand-austin/Projects/esp-idf/components/esp_common/include/esp_attr.h \
   /Users/aaronjosserand-austin/Projects/esp-idf/components/newlib/platform_include/assert.h \
   /Users/aaronjosserand-austin/Projects/esp-idf/components/newlib/platform_include/sys/lock.h \
   /Users/aaronjosserand-austin/Projects/esp-idf/components/newlib/platform_include/sys/reent.h \
