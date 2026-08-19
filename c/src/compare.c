@@ -3,6 +3,7 @@
 #include "ternary.h"
 #include "cascade.h"
 #include "invariants.h"
+#include "prior.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +15,11 @@ static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static char T_l[4000][RNAMELEN]; static int T_n;
 static router_t R; static tvec *TI; static tvec TSIG[RMAXCLS];
 static int SIGMODE = 0;  /* re-open: mask choice also came from leaked dev */
-static int NOVETO  = 0;  /* re-open: the OFF decision came from leaked dev */
+static int NOVETO  = 1;   /* signature veto DROPPED: hash-derived, measured inert */
+static int ATTEN   = 1;   /* prior yields: score >>= ATTEN on disagreement */
+static prior_t PR;
+static int FIXTH = 1<<30;  /* --fixth=N: skip tuning, force this threshold */
+static int CURVE = 0;
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
 
 static int js(const char*l,const char*k,char*o,int cap){
@@ -51,12 +56,24 @@ static hit score_bin(const char*txt){
     for(uint32_t c=0;c<R.n_class;c++){int s=r_sim(&q,&R.sig[c]); if(s>sb){sb=s;sc=(int)c;}}
     hit h={best, r_family(&R,sc)!=r_family(&R,cls)?-1:cls}; return h;
 }
-static hit score_ter(const char*txt){
+static hit score_ter_impl(const char*txt,int use_prior){
     tvec q; t_encode(&R,txt,&q); int aa=t_active(&q);
-    int best=-1<<28; uint32_t bi=0;
+    int best=-(1<<28); uint32_t bi=0;
     for(uint32_t i=0;i<R.n_index;i++){int s=t_score(&q,&TI[i],aa); if(s>best){best=s;bi=i;}}
-    hit h={best, veto(&q,aa,r_apply_polarity(&R,R.label[bi],txt))}; return h;
+    int cls0=r_apply_polarity(&R,R.label[bi],txt);
+    if(use_prior){
+        int mg=0, pc=pr_vote(&PR,txt,&mg);
+        /* The prior abstains when no word carries evidence (pc<0), and it never
+           overrides: on disagreement it only attenuates and the threshold
+           adjudicates. No imported constant - the trit-count threshold from
+           the-reflex is meaningless in these units and never fired. */
+        if(pc>=0 && r_family(&R,pc)!=r_family(&R,cls0)) best >>= ATTEN;
+        (void)mg;
+    }
+    hit h; h.score=best; h.cls=cls0; return h;
 }
+static hit score_ter(const char*txt){ return score_ter_impl(txt,0); }
+static hit score_ter_wp(const char*txt){ return score_ter_impl(txt,1); } /* --curve only */
 /* stage 1 REORDERS (counting sort on mask overlap), never rejects.
  * stage 2 reranks the survivors against the stored text. */
 static hit score_cas(const char*txt){
@@ -116,9 +133,20 @@ static void mcnemar(hit *A, int ta, hit *B, int tb, char la[][RNAMELEN], int n) 
     printf("      vs %-18s wrong: fixed %-3d broke %-3d %s\n",
            LAST_NAME, fixed, broke, broke == 0 ? "(non-destructive)" : "");
 }
+/* Does the prior MOVE the operating curve, or merely slide along it?
+ * If its (wrong, missed) frontier sits on top of the no-prior frontier, it is
+ * 82.9%-accurate machinery duplicating a scalar we already have. */
+static void curve(const char *name, hit (*f)(const char *), int lo, int hi) {
+    hit *H = precompute(f, V_t, V_n);
+    for (int th = lo; th <= hi; th += 2) {
+        TX z = tally(H, th, V_l, V_n);
+        printf("CURVE\t%s\t%d\t%d\t%d\n", name, th, z.fa + z.wa, z.ms);
+    }
+    free(H);
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
-    int th = tune(hv, V_l, V_n, lo, hi);
+    int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
     hit *hh = USE_TEST ? precompute(f, T_t, T_n) : hv;
     char (*lab)[RNAMELEN] = USE_TEST ? T_l : V_l;
     int n = USE_TEST ? T_n : V_n;
@@ -135,7 +163,9 @@ int main(int argc,char**argv){
     for(int i=5;i<argc;i++){ if(!strcmp(argv[i],"--test")) USE_TEST=1;
         else if(!strncmp(argv[i],"--sig=",6)) SIGMODE=atoi(argv[i]+6);
         else if(!strcmp(argv[i],"--noveto")) NOVETO=1;
-        else if(!strcmp(argv[i],"--leak")) LEAKTEST=1; }
+        else if(!strcmp(argv[i],"--leak")) LEAKTEST=1;
+        else if(!strncmp(argv[i],"--fixth=",8)) FIXTH=atoi(argv[i]+8);
+        else if(!strcmp(argv[i],"--curve")) CURVE=1; }
     if(USE_TEST){
         FILE *bf=fopen("results/TEST_BUDGET","r"); int used=0;
         if(bf){ if(fscanf(bf,"%d",&used)!=1) used=0; fclose(bf); }
@@ -207,10 +237,14 @@ int main(int argc,char**argv){
             if(cnt&&ob[d]*2>=cnt) R.sig[c].w[d>>5]|=1u<<(d&31);
             if(cnt&&om[d]*4>=cnt){ TSIG[c].m[d>>5]|=1u<<(d&31);
                 if(ob[d]*2>=om[d]) TSIG[c].s[d>>5]|=1u<<(d&31); } } }
+    pr_build(&PR, U_t, R.label, U_n, (int)R.n_class);
     long tb=0; for(int i=0;i<U_n;i++) tb+=strlen(U_t[i])+1;
     printf("\n  %-20s %8s %-8s %-8s %8s\n","representation","iot acc","wrong","missed","index KB");
+    if(CURVE){ curve("no-prior",score_ter,-512,512); curve("prior",score_ter_wp,-512,512); return 0; }
     report("binary (1 bit)",   score_bin,-RD,RD,          U_n*sizeof(rvec)/1024.0);
     report("twin-ternary (2b)",score_ter,-512,512,        U_n*sizeof(tvec)/1024.0);
+    /* word prior CUT: passes breaks-zero but does not move the operating curve.
+       Reproduce with --curve. Code retained in prior.c, not in the router path. */
     (void)score_cas; (void)tb;   /* cascade measured: identical on every axis, cut */
     return 0;
 }

@@ -48,3 +48,49 @@ not a discipline anyone has to remember.
    normalisation changes which dims clear the centre.
 2. `om[d]*4 >= cnt` in the signature mask is an unjustified constant.
 3. Never measured on the ESP32. The board still runs an archived encoder.
+
+## The acceptance test was wrong (2026-08-19)
+
+"Admit a mechanism iff it breaks zero cases" is **necessary but not
+sufficient**. A mechanism that only ever converts wrong actuations into
+abstentions will *always* show broke=0, and will therefore always appear to
+pass — while contributing nothing.
+
+The correct test is **curve dominance**: does the (wrong actuations, missed)
+frontier move, or does the system merely slide along the frontier it already
+had? A threshold slides along it for free.
+
+| mechanism | breaks zero | moves the curve |
+|---|---|---|
+| twin-ternary vs binary | no (broke 3) | **yes, +5.2 pts** |
+| signature veto (hash-derived) | yes | no — inert at every attenuation |
+| retrieval cascade + text rerank | yes | no — identical on every axis |
+| word prior (lift, text-derived) | yes, at all 5 thresholds | **no** — 3 tie / 2 lose / 3 win by 1-2 |
+
+All three rejected mechanisms passed breaks-zero. Only the representation
+change moved the frontier.
+
+## Prior-signal separation (the-reflex, EntroMorphic)
+
+Tested the architecture from `github.com/EntroMorphic/the-reflex`: prior-holder,
+evidence-reader, structural wall, disagreement detector, evidence-deference.
+
+Finding: the framework needs an unstated **component (0) — the prior must be
+derived from information the evidence channel cannot represent.** Our first
+prior was a majority-bit summary of the same hash vectors retrieval scans; it
+was inert at every attenuation setting because it structurally could not
+disagree. A prior that mirrors the evidence channel is not a wall, it is a
+mirror.
+
+Rebuilt from words (which char-n-gram hashing provably destroys: order-
+insensitive, collision-prone). Raw P(c|word) collapsed to the majority class —
+"none" holds 88% of the index, so it won every vote; the prior was 11.4%
+correct. Lift against the class base rate fixed it: **11.4% -> 82.9%** standing
+alone, one line of arithmetic.
+
+And it still did not move the curve. Retrieval over 10,500 real utterances
+already knows what the words say. On the ESP32 the prior carries *temporal*
+information the classifier structurally cannot see; ours carried lexical
+information retrieval had already indexed. Separation is necessary, an
+independent channel is necessary, and neither is sufficient if the channel is
+redundant.
