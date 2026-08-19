@@ -1,0 +1,6 @@
+# corpora are fetched, not vendored; SHA256 is tracked so runs are reproducible
+data/*.json
+data/*.csv
+data/*.gz
+c/bin/
+*.o
