@@ -138,6 +138,75 @@ static void bench_mt(void) {
     printf("    parity     : %d/%lu  (device 2-core == device 1-core == host)\n",
            agree, (unsigned long)NREF);
 }
+/* ---- red-team the popcount result ----------------------------------------
+ * The claim "16-bit table is identical on two cores, therefore flash-bound"
+ * rested on 25.80 vs 25.85 ms with n=1 and no error bars. Two separate
+ * problems: (a) no variance estimate, (b) a mechanism inferred from a null
+ * result rather than tested. This measures both.
+ * Integer only: min/median/max over repeats, never mean+-sd (needs sqrt). */
+static int scan_n(const tvec *q, int aa, uint32_t n) {
+    int best = -(1 << 28);
+    for (uint32_t i = 0; i < n; i++) {
+        int s = t_score_pre(q, &TI[i], aa, ACT[i]);
+        if (s > best) best = s;
+    }
+    return best;
+}
+static int scan_n2(const tvec *q, int aa, uint32_t n) {
+    uint32_t mid = n / 2;
+    g_job.q = q; g_job.aa = aa; g_job.lo = mid; g_job.hi = n;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    xTaskNotifyGive(g_worker);
+    job_t mine = { q, aa, 0, mid, 0, 0 };
+    scan_range(&mine);
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    return g_job.best > mine.best ? g_job.best : mine.best;
+}
+#define NREP 15
+static void isort(int64_t *v, int n) {
+    for (int i = 1; i < n; i++) { int64_t k = v[i]; int j = i - 1;
+        while (j >= 0 && v[j] > k) { v[j+1] = v[j]; j--; } v[j+1] = k; }
+}
+static void reps(const char *label, int cores, uint32_t n) {
+    int64_t t[NREP];
+    for (int r = 0; r < NREP; r++) {
+        const uint8_t *p = REFP; int64_t acc = 0;
+        for (uint32_t i = 0; i < NREF; i++) {
+            uint8_t len = *p++; char txt[128];
+            memcpy(txt, p, len); txt[len] = 0; p += len + 5;
+            tvec q; t_encode(&R, txt, &q); int aa = t_active(&q);
+            int64_t t0 = esp_timer_get_time();
+            if (cores == 1) scan_n(&q, aa, n); else scan_n2(&q, aa, n);
+            acc += esp_timer_get_time() - t0;
+        }
+        t[r] = acc / NREF;
+    }
+    isort(t, NREP);
+    printf("    %-34s min %6lld  med %6lld  max %6lld us   (spread %lld)\n",
+           label, t[0], t[NREP/2], t[NREP-1], t[NREP-1] - t[0]);
+}
+static void redteam(void) {
+    uint32_t full = R.n_index, small = 400;   /* 400*64B = 25KB, fits 32KB cache */
+    printf("\n  === RED-TEAM: %d repeats each, TPOPCNT=%d ===\n", NREP, TPOPCNT);
+    printf("  -- full index (%lu vec, %lu KB, flash-resident) --\n",
+           (unsigned long)full, (unsigned long)(full * sizeof(tvec) / 1024));
+    reps("1 core", 1, full);
+    reps("2 cores", 2, full);
+    printf("  -- SMALL index (%lu vec, %lu KB, CACHE-resident) --\n",
+           (unsigned long)small, (unsigned long)(small * sizeof(tvec) / 1024));
+    reps("1 core", 1, small);
+    reps("2 cores", 2, small);
+    /* dispatch cost with zero work: is degraded scaling just sync overhead? */
+    int64_t s[NREP]; tvec q; t_encode(&R, "x", &q); int aa = t_active(&q);
+    for (int r = 0; r < NREP; r++) {
+        int64_t t0 = esp_timer_get_time();
+        for (int k = 0; k < 64; k++) scan_n2(&q, aa, 0);
+        s[r] = (esp_timer_get_time() - t0) / 64;
+    }
+    isort(s, NREP);
+    printf("  -- dual-core dispatch+join, zero work: med %lld us --\n", s[NREP/2]);
+}
 static void profile(const char *txt) {
     tvec q; t_encode(&R, txt, &q); int aa = t_active(&q);
     uint32_t small = 400;              /* 400 * 64B = 25KB, fits the 32KB cache */
@@ -218,6 +287,7 @@ void app_main(void) {
     rtos_tax("turn off the light in the bathroom");
     profile("turn off the light in the bathroom");
     bench_mt();
+    redteam();
     printf("\n===== %s =====\n",
            (agree_cls == (int)NREF && agree_score == (int)NREF) ? "PARITY EXACT" : "PARITY FAILED");
     while (1) vTaskDelay(pdMS_TO_TICKS(1000));

@@ -160,3 +160,59 @@ trade, and it says the next bottleneck moved.
 Also made `esp32_router/main/{router,ternary}.{c,h}` symlinks into `c/src/`.
 They were hand-copies and had already drifted once; host and device now cannot
 diverge by construction.
+
+### Red-team of the popcount result
+
+Six attacks. Four found something.
+
+**1. n=1, no error bars.** The claim "16-bit table is identical on two cores"
+came from 25.80 vs 25.85 ms, single-shot. Same reasoning that produced the
+"+2.7 Dice was 1.1 SE" retraction. Remeasured, 15 repeats, min/median/max:
+
+    full index   TPOPCNT=1   1 core 43439/43440/43440   2 cores 25749/25749/25750
+    full index   TPOPCNT=2   1 core 38193/38193/38194   2 cores 25750/25751/25752
+
+Spread is 1-2 us. The claim SURVIVES, far more strongly than it was made:
+25749 vs 25750 against a 1 us spread.
+
+**2. Mechanism inferred from a null result, never tested.** "Identical, therefore
+flash-bound" is an inference, not evidence. Tested directly against a
+cache-resident index (400 vectors, 25 KB, fits the 32 KB cache):
+
+    SMALL index  TPOPCNT=1   1 core   747   2 cores   366   (2.04x)
+    SMALL index  TPOPCNT=2   1 core   543   2 cores   256   (2.12x)
+
+Cache-resident, the 16-bit table IS faster on two cores (256 vs 366, 1.43x) and
+scaling is ~2x. Flash-resident, both variants hit the same wall at 25.75 ms no
+matter how fast the arithmetic. **Flash contention confirmed by direct test.**
+
+Quantitatively: 2-core full scan = 25749 us / 10500 vec = 588 cycles/vector
+aggregate, against a single core's *touch-only* cost of 646 cycles/vector. Two
+cores in aggregate barely exceed one core's raw memory throughput — the flash
+cache MMU is a shared, serialising resource.
+
+**3. Confound: is degraded scaling just sync overhead?** Scaling fell 1.97x ->
+1.69x as compute got cheaper, which fixed dispatch cost would also produce.
+Measured directly (dispatch+join with zero work): **29 us**. The full-index gap
+from ideal is ~4000 us, 138x larger. Not sync. Confound eliminated.
+
+**4. DRAM placement was asserted, not verified.** Checked the symbol:
+`PC8 @ 0x3ffb167c`, section `.data` — internal SRAM. And the counterfactual,
+proving the attribute is load-bearing rather than cargo cult:
+
+    static const uint8_t WITHOUT[256]     -> .rodata   (linker-mapped to FLASH)
+    static DRAM_ATTR const uint8_t WITH[] -> .dram1    (internal SRAM)
+
+**5. `make compare` was a silent no-op.** It listed prerequisites but carried no
+recipe — the recipe was attached to `test:` alone. It exited 0 and printed
+nothing: a validation command that passed without validating. Fixed; `make test`
+now refuses (it is a habit-typo for a budgeted resource) in favour of explicit
+`make compare` (dev) and `make testset` (burns one test evaluation).
+
+**6. Accuracy drift.** Re-ran the host comparison on the LUT path:
+85.9% +-2.5 iot, 14 wrong, 14 missed, 656 KB — identical to the recorded config,
+as the exhaustive 2^32 proof requires.
+
+**Consequence for the remaining levers.** The bottleneck is now *bytes scanned*,
+not arithmetic. This re-ranks everything: index pruning and d=128 attack the
+real constraint; further arithmetic optimisation is worthless on two cores.
