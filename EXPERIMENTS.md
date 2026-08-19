@@ -94,3 +94,32 @@ information the classifier structurally cannot see; ours carried lexical
 information retrieval had already indexed. Separation is necessary, an
 independent channel is necessary, and neither is sufficient if the channel is
 redundant.
+
+## What the ESP32's silicon can actually take off the CPU
+
+Asked after the profile: which of this work can be handed to hardware?
+Surveyed, then measured rather than asserted (both prior perf hypotheses were wrong).
+
+| Peripheral | Verdict |
+|---|---|
+| **Second core** | **Taken. 1.97x, parity exact.** |
+| SIMD / popcount instr | Absent on Xtensa LX6. The 63% has no hardware home. |
+| AES/SHA/RSA accel | Wrong primitives. Encode is 0.05% anyway. |
+| ULP coprocessor | 8-instruction FSM. Cannot. |
+| DMA -> parallel-out -> GPIO loopback -> PCNT (GIE-style hardware bit-count) | **Priced and rejected.** PCNT counts *edges*, capping a full scan at 268 ms vs 78.8 ms on the CPU. The XOR would still need the CPU, so it adds a stage rather than removing one. Viable on S3/C6 with PARLIO; not on classic ESP32. |
+
+Dual-core scan: index halved by range, no shared state, no ordering constraint —
+the scan is embarrassingly parallel. Acquire/release fences around the job
+descriptor; worker pinned to core 1 via task notification.
+
+    one core   78855 us
+    two cores  40093 us   (1.97x)
+    parity     64/64 class and score, device-2core == device-1core == host
+
+**Cumulative on-device: 200.4 -> 102.1 (clocks) -> 78.8 (precomputed active) -> 40.1 ms.**
+Every step held PARITY EXACT.
+
+**The remaining cost is software, not hardware.** Post-split the breakdown is
+unchanged in proportion: popcount ~63%, flash loads ~37%. Neither has a
+peripheral that beats the CPU on this part. The open levers are all code —
+popcount byte-LUT in IRAM, d=128, pruning the index to the ~1,300 IoT entries.
