@@ -72,6 +72,16 @@ int t_active(const tvec *v) {
     for (int i = 0; i < RWORDS; i++) n += pc(v->m[i]);
     return n;
 }
+/* TSMOOTH: smoothing in the Dice denominator. Suspected of being a constant
+ * implicitly fitted at d=256 that would handicap smaller d (where the active
+ * counts halve, doubling its relative weight). Measured, and the suspicion was
+ * WRONG in direction: d=128 prefers 16, not 4 — the optimum moves opposite to
+ * dimension. Scaling it as RD/32 makes small d worse, so it stays constant.
+ * Swept at d=256: 2/4/8/16 are tied within noise and only 32 degrades, so the
+ * shipping config is not perched on a tuned peak. */
+#ifndef TSMOOTH
+#define TSMOOTH 8
+#endif
 /* Dice: 2*dot / (|a| + |b|). Symmetric and length-invariant, unlike dividing
  * by |b| alone — which made the score drift 23% with query length (149->184),
  * biasing strict-on-short / loose-on-long. IoT commands are short; the
@@ -79,9 +89,9 @@ int t_active(const tvec *v) {
 int t_score(const tvec *q, const tvec *b, int aa) {
     int d = t_dot(q, b);
     int ab = t_active(b);
-    return (2 * d * 256) / (aa + ab + 8);
+    return (2 * d * 256) / (aa + ab + TSMOOTH);
 }
 
 int t_score_pre(const tvec *q, const tvec *b, int aa, int ab) {
-    return (2 * t_dot(q, b) * 256) / (aa + ab + 8);
+    return (2 * t_dot(q, b) * 256) / (aa + ab + TSMOOTH);
 }

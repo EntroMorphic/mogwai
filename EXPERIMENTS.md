@@ -402,3 +402,50 @@ flash-resident 2274. The same N=1000 at d=256 is 62 KB, does not fit, and shows
 no such discount. The cliff is where the hardware says it is.
 
 PARITY EXACT held at d=128. Shipping config unchanged: d=256, full index.
+
+### Red-team of lever 2
+
+**1. The smoothing confound was real — and my proposed fix was backwards.** The
+Dice denominator carries a hardcoded `+8`. At d=128 the active counts halve, so
+that constant has twice the relative weight: a hyperparameter implicitly fitted
+at d=256, quietly handicapping every other dimension. Made it `TSMOOTH` and
+swept it. The suspicion was right that it matters and **wrong about direction**:
+
+    d=128  TSMOOTH= 4   72.9%      d=128  TSMOOTH=16   78.1%
+    d=128  TSMOOTH= 8   76.6%      d=128  TSMOOTH=32   71.4%
+
+d=128 prefers **16**, not 4 — the optimum moves *opposite* to dimension, so the
+`RD/32` scaling I proposed makes small d worse. Reverted to a constant.
+
+**The rejection survives at d=128's best case.** Curve, best smoothing per row:
+
+    min MISSED at wrong<=      8    12    16    20    24
+      d=128 / s8             80    50    36    27    19
+      d=128 / s16            67    54    36    27    20
+      d=128 / s32            79    54    42    31    29
+      d=256 / s8             46    23    12     6     5
+
+36 against 12 at `wrong<=16` no matter how the constant is set. Lever 2 stays
+rejected, now on a fair comparison rather than a handicapped one.
+
+**2. Red-teamed the SHIPPING config while there.** Is 8 optimal at d=256? Swept:
+2/4/8/16 are tied within noise (differences of 1-6 items against ~5.5 SE), and
+only 32 degrades. No free win, but a genuine robustness result: the config is
+**not perched on a tuned peak** — it tolerates an 8x range of this constant.
+
+**3. I made the two-point-fit mistake again, one section after criticising it.**
+The `58.4 ns/byte + 406 ns/vector` model was fitted on d=256 and d=128 alone.
+Took a third point at d=64 (16 B/vector): predicted 1340 ns/vector, **measured
+1260 — 6% over**. Refitted on three:
+
+    B/vector   measured   model   residual
+        16       1260     1283    -1.8%
+        32       2274     2240    +1.5%
+        64       4142     4153    -0.3%
+
+    cost per vector = 59.8 ns/byte * bytes + 326 ns
+
+Residuals within 1.8%. The two-point fit had overstated the per-vector intercept
+by 25%. At d=256 bytes are **92%** of cost and the per-vector floor is **8%**.
+
+PARITY EXACT at d=64. Shipping config restored: d=256, full index, TSMOOTH=8.
