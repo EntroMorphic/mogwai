@@ -1,1 +1,0 @@
-Command: cmake -G Unix Makefiles -DPYTHON_DEPS_CHECKED=1 -DPYTHON=/Users/aaronjosserand-austin/.espressif/python_env/idf5.5_py3.14_env/bin/python -DESP_PLATFORM=1 -DTPOPCNT=1 -DRD=64 -DCCACHE_ENABLE=0 /Users/aaronjosserand-austin/Projects/tinyenc/esp32_router

@@ -449,3 +449,44 @@ Residuals within 1.8%. The two-point fit had overstated the per-vector intercept
 by 25%. At d=256 bytes are **92%** of cost and the per-vector floor is **8%**.
 
 PARITY EXACT at d=64. Shipping config restored: d=256, full index, TSMOOTH=8.
+
+## Lever 3: QIO flash — ALREADY TAKEN (my earlier note was wrong)
+
+I had recorded QIO as "still DIO — choice-group conflict, risks non-boot". That
+was a misreading. `sdkconfig` looks contradictory:
+
+    CONFIG_ESPTOOLPY_FLASHMODE_QIO=y        <- the choice
+    CONFIG_ESPTOOLPY_FLASHMODE="dio"        <- the string
+
+but the ESP-IDF Kconfig says why, explicitly:
+
+    # Note: we use esptool.py to flash bootloader in
+    # dio mode for QIO/QOUT, bootloader then upgrades
+    # itself to quad mode during initialisation
+    default "dio" if ESPTOOLPY_FLASHMODE_QIO
+
+The string is only the mode used to *write* the bootloader — the ROM must read
+it before quad mode exists. The bootloader upgrades itself at init. **QIO has
+been active for every measurement in this series.** There is no non-boot risk to
+take and no win to collect; it was collected before we started.
+
+Measured what it is worth by forcing the alternatives:
+
+    QIO   43498 us   (PARITY EXACT)
+    DIO   62138 us   (PARITY EXACT)
+
+Backing out the per-vector floor (326 ns x 10500 = 3.4 ms, which does not scale
+with flash width):
+
+    QIO byte term 40.1 ms   DIO byte term 58.7 ms   -> quad buys 1.47x
+
+Not 2x, because command/address phases and cache-fill latency do not scale with
+data width. So the 43.4 ms figure already includes a 1.43x flash-mode win.
+
+**Methodological trap worth recording: `idf.py` caches `-D` variables in the
+CMake cache.** "Restoring" the config by rebuilding without the override
+silently reused the previous iteration's `SDKCONFIG_DEFAULTS`, producing a
+66525 us reading and a PARITY FAILURE that looked like a real regression. A
+config sweep MUST pass the override explicitly on every invocation, or
+`rm -rf build`. Caught only because the number was slower than the slowest
+legitimate variant.
