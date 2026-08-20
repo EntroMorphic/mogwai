@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 #define MAXU 40000
 static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
@@ -171,10 +172,23 @@ int main(int argc,char**argv){
         else if(prune_parse(argv[i],&PRUNE)) { /* consumed */ }
 }
     if(USE_TEST){
-        FILE *bf=fopen("results/TEST_BUDGET","r"); int used=0;
+        /* The counter used to live in results/TEST_BUDGET alongside the prose
+           audit note. fscanf("%d") cannot parse a file starting with text, so it
+           silently read 0, incremented to 1, and truncated the file — destroying
+           the annotation and resetting the count on EVERY use. A guard that
+           cannot count past one is not a guard. Counter and log are now split:
+           the count is machine-readable, the log is append-only. */
+        int used=0; FILE *bf=fopen("results/TEST_BUDGET_COUNT","r");
         if(bf){ if(fscanf(bf,"%d",&used)!=1) used=0; fclose(bf); }
         used++;
-        bf=fopen("results/TEST_BUDGET","w"); if(bf){ fprintf(bf,"%d\n",used); fclose(bf); }
+        bf=fopen("results/TEST_BUDGET_COUNT","w");
+        if(bf){ fprintf(bf,"%d\n",used); fclose(bf); }
+        bf=fopen("results/TEST_BUDGET","a");        /* append, never truncate */
+        if(bf){ time_t now=time(NULL); char ts[32];
+            strftime(ts,sizeof ts,"%Y-%m-%dT%H:%M:%SZ",gmtime(&now));
+            fprintf(bf,"evaluation %d: %s  argv:",used,ts);
+            for(int k=1;k<argc;k++) fprintf(bf," %s",argv[k]);
+            fprintf(bf,"\n"); fclose(bf); }
         fprintf(stderr,"  *** TEST SET TOUCHED (use #%d). Every touch is a chance to overfit. ***\n",used);
     } else fprintf(stderr,"  reporting on VALIDATION (pass --test to evaluate on test)\n");
     char line[8192],t[512],l[RNAMELEN];

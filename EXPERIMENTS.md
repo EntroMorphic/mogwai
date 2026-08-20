@@ -516,3 +516,44 @@ unchanged to test — `report()` verified to tune on `V_*` and tally on `T_*`.
 
 **Falsification:** if test accuracy lands below 80%, the dev-selected config does
 not generalise and the shipping recommendation is wrong. Recorded either way.
+
+## Test evaluation #2 — RESULT
+
+    representation        iot acc      wrong  missed  index KB
+    binary (1 bit)        75.5% +-2.9   17     40       328   th=138
+    twin-ternary (2b)     84.1% +-2.5   23     20       656   th=136
+
+**All four pre-registered predictions held.** Accuracy 84.1% against a predicted
+82-85% / point ~84%; wrong 23 against ~30 predicted; missed 20 against 14-20;
+twin beat binary. The <80% falsifier was not triggered.
+
+**The config generalises.** Dev 85.9% +-2.5 -> test 84.1% +-2.5. A 1.8-point
+drop, comfortably inside the error bars. The threshold was tuned on dev (136)
+and applied unchanged — verified in `report()` before running.
+
+**The false-actuation RATE improved on test**, which the raw count hides: dev
+14/~1307 negatives = 1.07%, test 23/~2754 = 0.84%. Test carries 2.1x the
+negatives, so comparing 23 against dev's 14 directly would be a units error —
+exactly the trap the pre-registration named in advance.
+
+**Nuance that matters for hardware control, and cuts against the headline.**
+Twin-ternary's 8.6-point win over binary is *entirely* in recall: misses fall
+40 -> 20, while wrong actuations RISE 17 -> 23 (McNemar on the wrong axis: fixed
+7, broke 13 — it breaks more than it fixes there). For a system that actuates
+physical devices, a false actuation (a light or lock operating unbidden) is
+generally worse than a miss (the user repeats themselves). **Twin-ternary buys
+recall and pays in precision.** That is the right trade for a demo and arguably
+the wrong one for a deployed actuator, and the operating curve is where that
+choice should be made — the threshold is the knob, and raising it trades back.
+
+**Standing:** this is the FIRST legitimate held-out number for this work.
+Evaluation #1 is VOID. Budget now: 2 used.
+
+### Bug found in the budget guard itself, while spending it
+
+`results/TEST_BUDGET` held both the prose audit note and the count.
+`fscanf("%d")` cannot parse a file starting with text: it silently read 0,
+incremented to 1, and truncated the file — **destroying the audit annotation and
+resetting the counter on every use.** A guard that cannot count past one is not
+a guard. Split: `TEST_BUDGET_COUNT` is machine-readable, `TEST_BUDGET` is
+append-only and now records timestamp and full argv per touch.
