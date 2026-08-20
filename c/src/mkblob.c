@@ -14,6 +14,7 @@ static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static int T_n;
 static router_t R; static tvec *TI;
 static prune_opt PRUNE = {0,0,0};
+static int THRESH = -1;   /* --threshold=N; required when pruning */
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
     const char*p=strstr(l,pat); if(!p)return 0; p+=strlen(pat);
@@ -33,7 +34,8 @@ static void push(char**ta,char la[][RNAMELEN],int*n,const char*t,const char*l){
 
 int main(int argc,char**argv){
     if(argc<6){fprintf(stderr,"usage: mkblob train val test nlu.csv out.bin [--prune-dup] [--prune-cnn] [--prune-neg=K]\n");return 1;}
-    for(int i=6;i<argc;i++) if(!prune_parse(argv[i],&PRUNE))
+    for(int i=6;i<argc;i++) if(!strncmp(argv[i],"--threshold=",12)) THRESH=atoi(argv[i]+12);
+        else if(!prune_parse(argv[i],&PRUNE))
         { fprintf(stderr,"  unknown flag %s\n",argv[i]); return 1; }
     char line[8192],t[512],l[RNAMELEN]; FILE*f;
     f=fopen(argv[3],"r");
@@ -79,7 +81,18 @@ int main(int argc,char**argv){
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){R.label[i]=c;break;} }
     /* same prune the harness measured — one implementation, see prune.h */
     U_n = prune_index(U_t,U_l,&R,TI,NULL,U_n,PRUNE,1);
-    R.threshold=136;   /* tuned threshold is 136 for both baseline and pruned */
+    /* The threshold is tuned on dev by `compare`, not here. It is NOT invariant
+       under pruning — baseline and --prune-cnn both tune to 136, but cnn+2 tunes
+       to 146 and --prune-neg=8 to 154. Shipping 136 with a pruned index puts the
+       device at an operating point the harness never measured, and PARITY still
+       passes because the host reference uses the same wrong value. Parity proves
+       host==device, not that either is right. So: refuse to guess. */
+    if(THRESH>=0) R.threshold=THRESH;
+    else if(PRUNE.dup||PRUNE.cnn||PRUNE.neg_k>1){
+        fprintf(stderr,"  ERROR: pruning changes the tuned threshold. Run\n"
+                       "    ./c/bin/compare <data> <prune flags>\n"
+                       "  and pass the reported th=N as --threshold=N\n"); return 1; }
+    else R.threshold=136;   /* tuned on dev for the unpruned index */
     /* host reference: first NREF dev queries, with the answer this host gives */
     FILE*o=fopen(argv[5],"wb");
     uint32_t hdr[5]={RMAGIC,RD,(uint32_t)U_n,R.n_class,(uint32_t)R.threshold};

@@ -168,7 +168,7 @@ static void isort(int64_t *v, int n) {
     for (int i = 1; i < n; i++) { int64_t k = v[i]; int j = i - 1;
         while (j >= 0 && v[j] > k) { v[j+1] = v[j]; j--; } v[j+1] = k; }
 }
-static void reps(const char *label, int cores, uint32_t n) {
+static int64_t reps(const char *label, int cores, uint32_t n) {
     int64_t t[NREP];
     for (int r = 0; r < NREP; r++) {
         const uint8_t *p = REFP; int64_t acc = 0;
@@ -185,6 +185,7 @@ static void reps(const char *label, int cores, uint32_t n) {
     isort(t, NREP);
     printf("    %-34s min %6lld  med %6lld  max %6lld us   (spread %lld)\n",
            label, t[0], t[NREP/2], t[NREP-1], t[NREP-1] - t[0]);
+    return t[NREP/2];
 }
 static void redteam(void) {
     uint32_t full = R.n_index, small = 400;   /* 400*64B = 25KB, fits 32KB cache */
@@ -197,6 +198,22 @@ static void redteam(void) {
            (unsigned long)small, (unsigned long)(small * sizeof(tvec) / 1024));
     reps("1 core", 1, small);
     reps("2 cores", 2, small);
+    /* CONFOUND: the three flashed indexes differed in CONTENT as well as size,
+     * so "time is proportional to bytes" could be a content effect (branch
+     * behaviour in the argmax update, say). Same blob, same vectors, only N
+     * varies — this isolates size completely. */
+    printf("  -- pure SIZE sweep: identical content, only N varies --\n");
+    {
+        uint32_t sz[] = { 1000, 2000, 4000, 6000, 8000, 10500 };
+        for (int i = 0; i < 6; i++) {
+            if (sz[i] > full) continue;
+            char lb[64];
+            snprintf(lb, sizeof lb, "N=%-6lu (%3lu KB)", (unsigned long)sz[i],
+                     (unsigned long)(sz[i] * sizeof(tvec) / 1024));
+            int64_t med = reps(lb, 1, sz[i]);
+            printf("        -> %lld ns/vector\n", med * 1000 / sz[i]);
+        }
+    }
     /* dispatch cost with zero work: is degraded scaling just sync overhead? */
     int64_t s[NREP]; tvec q; t_encode(&R, "x", &q); int aa = t_active(&q);
     for (int r = 0; r < NREP; r++) {

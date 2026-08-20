@@ -301,3 +301,43 @@ PARITY EXACT held at all three index sizes (64/64 class and score).
 **Shipping default stays the full 10500-vector index**, since it dominates the
 dev curve; the condensed index is one `mkblob --prune-dup --prune-cnn` away and
 buys 1.58x single-core (43.4 -> 27.6 ms) at a cost this dev set cannot resolve.
+
+### Red-team of lever 1
+
+**1. A real shipping bug: `mkblob` hardcoded `threshold=136`.** The threshold is
+tuned on dev by `compare` and is NOT invariant under pruning:
+
+    baseline                          th=136
+    --prune-cnn                       th=136
+    --prune-cnn --prune-neg=2         th=146
+    --prune-neg=8                     th=154
+
+The cnn+2 blob flashed in the previous section therefore ran at 136 instead of
+146 — an operating point the harness never measured. **PARITY EXACT still
+passed**, because the host reference queries were computed with the same wrong
+value. That is the blind spot worth naming: *parity proves host == device, it
+does not prove either is correct.* Fixed: `mkblob` now refuses to guess and
+errors out telling you to run `compare` and pass `--threshold=N`. Verified the
+unpruned blob is byte-identical to the shipped one.
+
+**2. Content/size confound.** The three flashed indexes differed in content as
+well as size, so byte-proportionality could have been a content effect (branch
+behaviour in the argmax update). Tested directly: same blob, same vectors, only
+N varies.
+
+    N=1000  ( 62 KB)  4153 ns/vector
+    N=2000  (125 KB)  4147
+    N=4000  (250 KB)  4143
+    N=6000  (375 KB)  4142
+    N=8000  (500 KB)  4142
+    N=10500 (656 KB)  4142
+
+Flat to 0.26% across a 10.5x range, converging upward as a ~11 us fixed
+per-query cost amortises. The three pruned blobs — completely different content —
+measured 4125-4138 ns/vector, the same line. **Confound eliminated: the law is
+about size, not content.**
+
+**3. What parity does not cover.** A prune that dropped the wrong vectors would
+still show PARITY EXACT, since host and device prune with the same shared code.
+Prune correctness is established by the host accuracy/curve runs, not by parity.
+Recorded so the two are not conflated later.
