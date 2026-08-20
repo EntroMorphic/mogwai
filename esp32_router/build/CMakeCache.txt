@@ -365,6 +365,9 @@ PYTHON:UNINITIALIZED=/Users/aaronjosserand-austin/.espressif/python_env/idf5.5_p
 PYTHON_DEPS_CHECKED:UNINITIALIZED=1
 
 //No help, variable specified on the command line.
+RD:UNINITIALIZED=256
+
+//No help, variable specified on the command line.
 TPOPCNT:UNINITIALIZED=1
 
 //Allow unsafe builds. These builds ARE NOT SECURE.

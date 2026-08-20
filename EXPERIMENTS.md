@@ -341,3 +341,64 @@ about size, not content.**
 still show PARITY EXACT, since host and device prune with the same shared code.
 Prune correctness is established by the host accuracy/curve runs, not by parity.
 Recorded so the two are not conflated later.
+
+## Lever 2: d=128 — REJECTED
+
+**The collision hypothesis was wrong.** I predicted d=128 might start colliding
+(distinct commands mapping to identical codes, a sharper failure than gradual
+degradation). Measured with `--prune-dup`: **zero collisions at d=64, 128, 256
+and 512.** Twin-ternary stays injective on this corpus even at 16 bytes/vector —
+128 bits is ample entropy for 10500 items. Hypothesis tested and refuted; the
+failure mode is something else.
+
+**d=128 is comprehensively dominated on the curve**, not merely worse at the
+tuned point:
+
+    min MISSED at wrong<=      8    12    16    20    24     KB
+      d=128                   80    50    36    27    19    328
+      d=256                   46    23    12     6     5    656
+      d=512                   46    25    15    12     4   1312
+
+    min WRONG at missed<=      8    12    16    20    24
+      d=128                   --    --    26    24    24
+      d=256                   18    16    14    13    11
+      d=512                   21    20    16    14    13
+
+At `wrong<=16` d=128 misses 36 against d=256's 12; at `missed<=12` it is
+unreachable at any threshold. Not a trade — a strict downgrade.
+
+**Two useful corollaries.**
+
+*d=256 dominates d=512* almost everywhere at half the bytes, re-deriving on a
+leak-free split one of the four decisions the dev leak had voided.
+
+*Condensation dominates dimension reduction on BOTH axes:*
+
+      d=256 + cnn      418 KB   14 missed @ wrong<=16
+      d=256 + cnn+2    245 KB   20 missed @ wrong<=16
+      d=128            328 KB   36 missed @ wrong<=16
+
+Fewer bytes AND better accuracy. **Cut vectors, not dimensions.**
+
+### What the failed lever bought: a resolved cost model
+
+d=128 halves bytes/vector while holding vector count fixed — a clean
+discriminator for whether the law scales with bytes or with vectors.
+
+    d=256   4142 ns/vector @ 64 B/vec
+    d=128   2274 ns/vector @ 32 B/vec
+
+Time fell 45%, not 50%, giving
+
+    cost per vector = 58.4 ns/byte * bytes + 406 ns
+
+At d=256 bytes are **90%** of the cost and the per-vector floor is **10%**. So
+byte-proportionality is very good but not exact, and any lever that cuts bytes
+without cutting vector count saturates at a 10% floor.
+
+The d=128 size sweep also **located the cache boundary directly**: N=1000 at
+d=128 is 31 KB — inside the 32 KB cache — and ran at 1282 ns/vector against the
+flash-resident 2274. The same N=1000 at d=256 is 62 KB, does not fit, and shows
+no such discount. The cliff is where the hardware says it is.
+
+PARITY EXACT held at d=128. Shipping config unchanged: d=256, full index.
