@@ -609,3 +609,67 @@ Both reported +-2.5 are correct.
 touched it and I saw the aggregate result before it was voided. Config decisions
 made afterwards were re-derived on dev, but "never observed" is a stronger claim
 than the history supports. Budget: 2 used.
+
+## Raising the threshold for precision — the knob does not do what I claimed
+
+Split `fa` (fires on a NON-command — unbidden actuation) from `wa` (acts wrongly
+on a genuine command). Collapsing them into "wrong" hid the safety-critical one.
+
+**At the shipped threshold, unbidden actuations = 1, not 14.** The "14 wrong" is
+`fa=1` + `wa=13`. One actuation on a non-command out of 1335 negatives (0.07%).
+
+    th    unbidden(fa)  wrong_act(wa)  missed  iot_acc
+    136        1             13          14     85.9%   <- shipped
+    148        1             10          25     81.8%
+    160        1             10          37     75.5%
+    172        1              5          63     64.6%
+    184        1              2          81     56.8%
+    190        0              1          91     52.1%
+
+**Raising the threshold does not buy precision.** `fa` is flat at 1 from 136 all
+the way to 184; it only reaches 0 at 190, where accuracy has collapsed to 52%.
+The threshold trades `wa` for `missed`, and `wa` is not the mode that endangers
+an actuator. **The knob is the wrong knob for this goal.**
+
+Going the other way is the better trade: th=126 gives **88.0%** at `fa=3`, th=122
+gives 89.6% at `fa=5` — still well under half a percent of negatives.
+
+### Correcting my own claim
+
+I wrote that twin-ternary "buys recall and pays in precision", from the combined
+test figure (binary 17 wrong, twin 23). The dev split says otherwise:
+
+    binary (1 bit)   th=138   fa=0   wa=13   ms=24   80.7%
+    twin-ternary     th=136   fa=1   wa=13   ms=14   85.9%
+
+**Identical `wa`; the entire precision difference is ONE unbidden actuation.**
+With fa=1 vs fa=0 on 1335 negatives the confidence intervals overlap almost
+entirely — there is no significant precision difference on dev. My warning
+overstated the case. The test fa/wa split is unknown and would cost a budget
+unit to obtain; the aggregate rise of 6 is NOT attributable without it.
+
+Binary also cannot reach 84% at any threshold ("unreachable"), so twin's
+advantage is not a threshold artefact.
+
+### What the residual errors actually are
+
+The single unbidden actuation: **"make me happy" -> iot_coffee** (score 188).
+
+**10 of the 13 `wa` errors are intra-Hue confusions** — right device family,
+wrong operation (lighton/off/up/dim/change). And the label quality caps what is
+reachable:
+
+    "turn out the lights"      labelled iot_hue_lightUP    <- clear label error;
+                                the router said lightoff, which is correct
+    "turn on kitchen light"    labelled iot_wemo_on, router said hue_lighton
+    "turn off smart lamp in den" labelled hue_lightoff, router said wemo_off
+                                <- which physical device a "kitchen light" or
+                                "smart lamp" is cannot be inferred from text at
+                                all; it depends on the user's installation
+    "lighter shade on the lights please" labelled lightdim <- genuinely ambiguous
+                                (brighter, or a paler colour?)
+
+So roughly 3-4 of 14 errors are not fixable from the utterance alone. **The
+ceiling on this corpus is around 98%, not 100%**, and a chunk of the remaining
+gap is annotation noise and device-assignment arbitrariness rather than model
+error. Chasing 100% here would be fitting the labeller, not the task.

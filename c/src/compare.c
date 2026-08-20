@@ -22,6 +22,7 @@ static int ATTEN   = 1;   /* prior yields: score >>= ATTEN on disagreement */
 static prior_t PR;
 static int FIXTH = 1<<30;  /* --fixth=N: skip tuning, force this threshold */
 static int CURVE = 0;
+static int DUMPERR = 0;   /* --errs: print the actual misclassified utterances */
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
 static prune_opt PRUNE = {0,0,0};
 
@@ -143,7 +144,11 @@ static void curve(const char *name, hit (*f)(const char *), int lo, int hi) {
     hit *H = precompute(f, V_t, V_n);
     for (int th = lo; th <= hi; th += 2) {
         TX z = tally(H, th, V_l, V_n);
-        printf("CURVE\t%s\t%d\t%d\t%d\n", name, th, z.fa + z.wa, z.ms);
+        /* fa and wa are different failures for an actuator: fa fires on a
+           NON-command (unbidden), wa acts wrongly on a real command. Emit
+           separately — collapsing them hides the safety-critical one. */
+        printf("CURVE\t%s\t%d\t%d\t%d\t%d\t%d\t%d\n", name, th,
+               z.fa + z.wa, z.ms, z.fa, z.wa, z.iok);
     }
     free(H);
 }
@@ -179,6 +184,22 @@ static void code_overlap(const char *tag, char **X, char lx[][RNAMELEN], int nx)
     fprintf(stderr, "  [diag] %-5s n=%-5d iot=%-4d | code-identical to an index entry: "
                     "%d (%.2f%%), of which iot %d\n", tag, nx, iot, coll, 100.0*coll/nx, coll_iot);
 }
+/* Dump the actual misclassifications at a given threshold. With fa down to a
+   single event, aggregate counts stop being informative — you have to look at
+   the utterance. */
+static void dump_errs(hit *H, int th, char la[][RNAMELEN], char **X, int n) {
+    fprintf(stderr, "\n  --- dev errors at th=%d ---\n", th);
+    for (int i = 0; i < n; i++) {
+        int c = (H[i].score > th) ? H[i].cls : -1;
+        const char *p = c < 0 ? "none" : R.names[c];
+        int gn = !strcmp(la[i], "none");
+        if (!strcmp(p, la[i])) continue;
+        const char *kind = gn ? "UNBIDDEN" : (!strcmp(p, "none") ? "missed" : "wrong-act");
+        if (gn || strcmp(p, "none"))       /* fa and wa only; misses are quiet */
+            fprintf(stderr, "  %-10s score=%-4d  said=%-16s truth=%-16s  \"%s\"\n",
+                    kind, H[i].score, p, la[i], X[i]);
+    }
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -186,6 +207,7 @@ static void report(const char *name, hit (*f)(const char *), int lo, int hi, dou
     char (*lab)[RNAMELEN] = USE_TEST ? T_l : V_l;
     int n = USE_TEST ? T_n : V_n;
     TX z = tally(hh, th, lab, n);
+    if(DUMPERR && !USE_TEST) dump_errs(hh, th, lab, V_t, n);
     double p = z.in ? (double)z.iok / z.in : 0.0;
     double se = 100.0 * sqrt(p * (1 - p) / (z.in ? z.in : 1));
     printf("  %-20s %6.1f%% +-%.1f  %-7d %-7d %7.0f  th=%d\n",
@@ -201,6 +223,7 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--leak")) LEAKTEST=1;
         else if(!strncmp(argv[i],"--fixth=",8)) FIXTH=atoi(argv[i]+8);
         else if(!strcmp(argv[i],"--curve")) CURVE=1;
+        else if(!strcmp(argv[i],"--errs")) DUMPERR=1;
         else if(prune_parse(argv[i],&PRUNE)) { /* consumed */ }
 }
     if(USE_TEST){
