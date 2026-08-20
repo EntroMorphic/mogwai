@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "router_validate",
-    "project_version":    "9e5b9fb-dirty",
+    "project_version":    "943e817-dirty",
     "project_path":       "/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router",
     "idf_path":           "/Users/aaronjosserand-austin/Projects/esp-idf",
     "build_dir":          "/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build",

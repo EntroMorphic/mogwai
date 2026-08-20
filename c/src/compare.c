@@ -21,6 +21,9 @@ static prior_t PR;
 static int FIXTH = 1<<30;  /* --fixth=N: skip tuning, force this threshold */
 static int CURVE = 0;
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
+static int PRUNE_DUP = 0;  /* --prune-dup: drop identical codes with identical labels */
+static int PRUNE_NEG = 0;  /* --prune-neg=K: keep 1-in-K negatives */
+static int PRUNE_CNN = 0;  /* --prune-cnn: drop negatives that are nobody's nearest neighbour */
 
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
@@ -43,7 +46,7 @@ static int hs_has(const char*s){ char b[512]; r_norm(s,b,sizeof b);
 typedef struct { int score, cls; } hit;
 static int veto(const tvec *q,int aa,int cls){
     if(NOVETO) return cls;
-    int sb=-1<<28,sc=-1;
+    int sb=-(1<<28),sc=-1;
     for(uint32_t c=0;c<R.n_class;c++){int s=t_score(q,&TSIG[c],aa); if(s>sb){sb=s;sc=(int)c;}}
     return r_family(&R,sc)!=r_family(&R,cls) ? -1 : cls;
 }
@@ -82,13 +85,13 @@ static hit score_cas(const char*txt){
     for(uint32_t i=0;i<R.n_index;i++){ ov[i]=c_mask_overlap(&q,&TI[i]); cnt[ov[i]]++; }
     int acc=0,cut=RD;
     for(; cut>=0; cut--){ acc+=cnt[cut]; if(acc>=CAS_K) break; }
-    int best=-1<<28,bi=-1;
+    int best=-(1<<28),bi=-1;
     for(uint32_t i=0;i<R.n_index;i++){
         if(ov[i]<cut) continue;   /* true cut, no index-order truncation */
         int s=t_score(&q,&TI[i],aa)+c_text_sim(txt,U_t[i]);
         if(s>best){best=s;bi=(int)i;}
     }
-    if(bi<0){ hit h={-1<<28,-1}; return h; }
+    if(bi<0){ hit h={-(1<<28),-1}; return h; }
     hit h={best, veto(&q,aa,r_apply_polarity(&R,R.label[bi],txt))}; return h;
 }
 typedef struct{int fa,wa,ms,iok,in;} TX;
@@ -165,7 +168,10 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--noveto")) NOVETO=1;
         else if(!strcmp(argv[i],"--leak")) LEAKTEST=1;
         else if(!strncmp(argv[i],"--fixth=",8)) FIXTH=atoi(argv[i]+8);
-        else if(!strcmp(argv[i],"--curve")) CURVE=1; }
+        else if(!strcmp(argv[i],"--curve")) CURVE=1;
+        else if(!strcmp(argv[i],"--prune-dup")) PRUNE_DUP=1;
+        else if(!strncmp(argv[i],"--prune-neg=",12)) PRUNE_NEG=atoi(argv[i]+12);
+        else if(!strcmp(argv[i],"--prune-cnn")) PRUNE_CNN=1; }
     if(USE_TEST){
         FILE *bf=fopen("results/TEST_BUDGET","r"); int used=0;
         if(bf){ if(fscanf(bf,"%d",&used)!=1) used=0; fclose(bf); }
@@ -225,6 +231,92 @@ int main(int argc,char**argv){
     R.index=calloc(U_n,sizeof(rvec)); R.label=calloc(U_n,1); TI=calloc(U_n,sizeof(tvec));
     for(int i=0;i<U_n;i++){ r_encode(&R,U_t[i],&R.index[i]); t_encode(&R,U_t[i],&TI[i]);
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){R.label[i]=c;break;} }
+    /* ---- index pruning ---------------------------------------------------
+     * The dual-core scan is flash-bandwidth-bound (red-team, EXPERIMENTS.md):
+     * two cores aggregate 588 cycles/vector against one core's 646 touch-only,
+     * so bytes scanned IS latency. A stored vector earns its 64 bytes only if
+     * it can ever be the argmax. Two kinds provably cannot.
+     *
+     * Pruning runs AFTER encoding with the full-index centre, so every surviving
+     * code is bit-identical to the unpruned run. This isolates "fewer stored
+     * vectors" from "different encoder" — otherwise the two confound. */
+    {
+        char *keep = malloc(U_n); memset(keep, 1, U_n);
+        int nonec = -1;
+        for (uint32_t c = 0; c < R.n_class; c++)
+            if (!strcmp(R.names[c], "none")) nonec = (int)c;
+        /* (a) exact-duplicate code with the same label. 256-dim hashing maps
+           distinct strings onto identical codes; a copy cannot change any
+           argmax except by tie-break order. Free to drop. */
+        int ndup = 0;
+        if (PRUNE_DUP) {
+            enum { HB = 1 << 15 };
+            int *head = malloc(HB * sizeof(int)), *nxt = malloc(U_n * sizeof(int));
+            for (int i = 0; i < HB; i++) head[i] = -1;
+            for (int i = 0; i < U_n; i++) {
+                const unsigned char *b = (const unsigned char *)&TI[i];
+                uint32_t h = 2166136261u;
+                for (size_t k = 0; k < sizeof(tvec); k++) { h ^= b[k]; h *= 16777619u; }
+                uint32_t s = h & (HB - 1); int hit = 0;
+                for (int j = head[s]; j >= 0; j = nxt[j])
+                    if (R.label[j] == R.label[i] &&
+                        !memcmp(&TI[j], &TI[i], sizeof(tvec))) { hit = 1; break; }
+                if (hit) { keep[i] = 0; ndup++; }
+                else { nxt[i] = head[s]; head[s] = i; }
+            }
+            free(head); free(nxt);
+        }
+        /* (b) negative subsample: keep 1-in-K of the "none" entries. Lossy —
+           negatives are what let the threshold reject non-commands, so this
+           must be judged on the (wrong, missed) frontier, not on latency. */
+        int nneg = 0;
+        if (PRUNE_NEG > 1) {
+            int seen = 0;
+            for (int i = 0; i < U_n; i++)
+                if (keep[i] && (int)R.label[i] == nonec && (seen++ % PRUNE_NEG))
+                    { keep[i] = 0; nneg++; }
+        }
+        /* (c) condensation. Random subsampling treats all negatives as
+           interchangeable, but a negative earns its 64 bytes only if it is the
+           nearest neighbour of something — i.e. it covers a region of the space
+           no other vector covers. Leave-one-out over the INDEX ONLY (never dev
+           or test: the index is train, so this leaks nothing). Any negative
+           that is nobody's nearest neighbour can be dropped. */
+        int ncnn = 0;
+        if (PRUNE_CNN) {
+            char *useful = calloc(U_n, 1);
+            int *act = malloc(U_n * sizeof(int));
+            for (int i = 0; i < U_n; i++) act[i] = t_active(&TI[i]);
+            for (int i = 0; i < U_n; i++) {
+                int best = -(1 << 28), bj = -1;
+                for (int j = 0; j < U_n; j++) {
+                    if (j == i) continue;
+                    int s = t_score_pre(&TI[i], &TI[j], act[i], act[j]);
+                    if (s > best) { best = s; bj = j; }
+                }
+                if (bj >= 0) useful[bj] = 1;
+            }
+            for (int i = 0; i < U_n; i++)
+                if (keep[i] && (int)R.label[i] == nonec && !useful[i])
+                    { keep[i] = 0; ncnn++; }
+            free(useful); free(act);
+        }
+        int kept = 0, iot_k = 0, neg_k = 0;
+        for (int i = 0; i < U_n; i++) {
+            if (!keep[i]) { continue; }
+            U_t[kept] = U_t[i]; memcpy(U_l[kept], U_l[i], RNAMELEN);
+            R.index[kept] = R.index[i]; TI[kept] = TI[i]; R.label[kept] = R.label[i];
+            if ((int)R.label[i] == nonec) neg_k++; else iot_k++;
+            kept++;
+        }
+        if (PRUNE_DUP || PRUNE_NEG > 1 || PRUNE_CNN)
+            fprintf(stderr, "  [prune] %d -> %d  (dup %d, neg-subsample %d, cnn %d)"
+                            "  iot %d / none %d  | %.0f KB\n",
+                    U_n, kept, ndup, nneg, ncnn, iot_k, neg_k,
+                    kept * sizeof(tvec) / 1024.0);
+        U_n = kept; R.n_index = kept;
+        free(keep);
+    }
     static int base[RD]; memset(base,0,sizeof base);
     for(int i=0;i<U_n;i++) for(int d=0;d<RD;d++)
         if(TI[i].m[d>>5]&(1u<<(d&31))) base[d]++;

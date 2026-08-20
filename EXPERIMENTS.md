@@ -216,3 +216,49 @@ as the exhaustive 2^32 proof requires.
 **Consequence for the remaining levers.** The bottleneck is now *bytes scanned*,
 not arithmetic. This re-ranks everything: index pruning and d=128 attack the
 real constraint; further arithmetic optimisation is worthless on two cores.
+
+## Lever 1: pruning the index
+
+Bytes scanned is latency (flash-bound, above), so the index is the target.
+10500 vectors, 656 KB, of which ~1155 are IoT and ~9345 are "none" negatives.
+
+**The free prune yields nothing.** Exact-duplicate twin-ternary codes with
+identical labels can never change an argmax, so dropping them is lossless.
+There are **zero** of them: twin-ternary at d=256 is injective across all 10500
+entries. Worth noting as a risk for lever 2 — d=128 may start colliding.
+
+**The naive comparison inverted the answer.** Subsampling negatives and reading
+the auto-tuned row suggests pruning *helps* wrong actuations (14 -> 11 at
+iot-only). It does not. The threshold is retuned per run, so those rows sit at
+different operating points. At MATCHED points the baseline strictly dominates
+every pruned variant on both axes:
+
+    min MISSED at wrong<=      8    12    16    20    24     KB
+      baseline                46    23    12     6     5    656
+      cnn                     50    27    14    12     5    418
+      cnn+2                   60    40    20    14    12    245
+      1-in-2                  60    40    20    14    12    364
+      1-in-8                  60    40    27    20    15    145
+      iot-only                60    40    29    25    20     72
+
+    min WRONG at missed<=      8    12    16    20    24
+      baseline                18    16    14    13    11
+      cnn                     22    19    16    15    13
+      iot-only                96    45    31    23    21
+
+This is the "curve dominance, not breaks-zero" rule doing exactly the work it
+was written for — and this time it overturned the single-point reading rather
+than merely confirming it.
+
+**Condensation beats random subsampling, and by a clean margin.** A negative
+earns its 64 bytes only if it is the nearest neighbour of something. Leave-one-
+out over the INDEX ONLY (the index is train, so this leaks nothing) marks 3816
+negatives as nobody's neighbour. Dropping them: 656 -> 418 KB, 36% fewer bytes.
+`cnn+2` at **245 KB** matches random `1-in-2` at **364 KB** on every cell — the
+same frontier for a third fewer bytes.
+
+**But nothing dominates the baseline, and the honest verdict is "not proven".**
+cnn costs +2 missed and +2 wrong at matched points. On 220 IoT dev items that is
+~0.9 points against a +-2.5% standard error (~5.5 items) — inside the noise. It
+is neither demonstrated harmful nor demonstrated free. Recorded as an available
+36% byte cut whose cost is below what this dev set can resolve, NOT as a win.
