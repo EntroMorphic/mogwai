@@ -490,3 +490,29 @@ silently reused the previous iteration's `SDKCONFIG_DEFAULTS`, producing a
 config sweep MUST pass the override explicitly on every invocation, or
 `rm -rf build`. Caught only because the number was slower than the slowest
 legitimate variant.
+
+## Test evaluation #2 — PRE-REGISTERED PREDICTION (written before running)
+
+Evaluation #1 is VOID (config chosen on a 75.6%-leaked dev set). This is the
+first legitimate test measurement. Committed BEFORE the run so the result cannot
+be rationalised afterwards.
+
+**Config, frozen:** twin-ternary, d=256, TSMOOTH=8, full 10500-vector index, no
+prune, no prior, no veto, no cascade. Threshold tuned on DEV (=136) and applied
+unchanged to test — `report()` verified to tune on `V_*` and tally on `T_*`.
+
+**Dev reference:** 85.9% +-2.5 iot acc, 14 wrong, 14 missed, threshold 136.
+
+**Predictions:**
+1. Test IoT accuracy **82-85%**, point estimate **~84%** — slightly below dev,
+   because dev supplied the threshold and (historically) config choices, so some
+   optimistic bias should regress out. A test result *above* dev would be
+   suspicious, not pleasing.
+2. Wrong actuations **~30**. Dev had 14 against ~1300 negatives; test carries
+   ~2754 negatives, ~2.1x more, so a constant false-actuation *rate* predicts
+   ~30. Judging the raw count against dev's 14 would be a units error.
+3. Missed **14-20** on ~220 test IoT, matching dev's rate.
+4. Twin-ternary still beats binary on iot accuracy.
+
+**Falsification:** if test accuracy lands below 80%, the dev-selected config does
+not generalise and the shipping recommendation is wrong. Recorded either way.
