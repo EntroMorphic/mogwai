@@ -262,3 +262,42 @@ cnn costs +2 missed and +2 wrong at matched points. On 220 IoT dev items that is
 ~0.9 points against a +-2.5% standard error (~5.5 items) — inside the noise. It
 is neither demonstrated harmful nor demonstrated free. Recorded as an available
 36% byte cut whose cost is below what this dev set can resolve, NOT as a win.
+
+### Lever 1 on hardware: the byte -> latency law
+
+`prune_index()` factored into `c/src/prune.{c,h}` and called by BOTH `compare`
+(which measures it) and `mkblob` (which ships it). One implementation on
+purpose: the two already keep separate copies of the index build, and the esp32
+tree had drifted from `c/src` once. If harness and exporter prune differently,
+on-device parity measures nothing. Refactor verified behaviour-preserving —
+baseline 85.9/14/14/656 unchanged, condensed identical to the inline version.
+
+Three index sizes flashed and measured, 15 repeats each:
+
+    vectors   KB    1-core ms   us/vector   2-core ms   speedup
+     10500   656      43.44       4.137       25.75      1.687
+      6684   418      27.57       4.125       17.63      1.564
+      3920   245      16.22       4.138        9.95      1.630
+
+**Single core: the law is exact.** Cost per vector is constant to +-0.3% across
+a 2.7x range of index sizes. Predicted 27.68 ms for the condensed index from
+the baseline alone; measured 27.57 (0.4% error). The flash-bound model is
+quantitative and predictive, and the intercept is zero — there is no meaningful
+fixed cost.
+
+**Two cores: NOT proportional, and a two-point fit lied.** From the first two
+points I fitted a ~3.4 ms fixed term. The third point refutes it: the implied
+slope is 2.128 us/vector between points 1-2 but 2.777 between 2-3, and speedup
+moves non-monotonically (1.687, 1.564, 1.630). Contention between the two cores'
+flash streams depends on working-set size in a way the simple model does not
+capture. Recorded as unexplained rather than rationalised.
+
+This matters less than it looks: **core 1 belongs to WiFi on any real device, so
+the single-core number is the production number — and that is the one that
+obeys the law.** Index size now predicts latency directly: ~4.13 us per vector.
+
+PARITY EXACT held at all three index sizes (64/64 class and score).
+
+**Shipping default stays the full 10500-vector index**, since it dominates the
+dev curve; the condensed index is one `mkblob --prune-dup --prune-cnn` away and
+buys 1.58x single-core (43.4 -> 27.6 ms) at a cost this dev set cannot resolve.
