@@ -147,6 +147,38 @@ static void curve(const char *name, hit (*f)(const char *), int lo, int hi) {
     }
     free(H);
 }
+/* Exact-string disjointness (inv_disjoint) is necessary but not sufficient:
+   two different strings that encode to the SAME twin-ternary code are
+   indistinguishable to the router, so a test item sharing a code with an index
+   entry is effectively leaked even though no assertion fires. Also reports the
+   IoT counts the error bars are computed from. */
+static void code_overlap(const char *tag, char **X, char lx[][RNAMELEN], int nx) {
+    enum { HB = 1 << 15 };
+    static int head[HB], nxt[40000]; static int built = 0;
+    if (!built) {
+        for (int i = 0; i < HB; i++) head[i] = -1;
+        for (int i = 0; i < U_n; i++) {
+            const unsigned char *b = (const unsigned char *)&TI[i];
+            uint32_t h = 2166136261u;
+            for (size_t k = 0; k < sizeof(tvec); k++) { h ^= b[k]; h *= 16777619u; }
+            uint32_t s = h & (HB - 1); nxt[i] = head[s]; head[s] = i;
+        }
+        built = 1;
+    }
+    int iot = 0, coll = 0, coll_iot = 0;
+    for (int i = 0; i < nx; i++) {
+        int is_iot = strcmp(lx[i], "none") != 0;
+        iot += is_iot;
+        tvec q; t_encode(&R, X[i], &q);
+        const unsigned char *b = (const unsigned char *)&q;
+        uint32_t h = 2166136261u;
+        for (size_t k = 0; k < sizeof(tvec); k++) { h ^= b[k]; h *= 16777619u; }
+        for (int j = head[h & (HB - 1)]; j >= 0; j = nxt[j])
+            if (!memcmp(&TI[j], &q, sizeof(tvec))) { coll++; coll_iot += is_iot; break; }
+    }
+    fprintf(stderr, "  [diag] %-5s n=%-5d iot=%-4d | code-identical to an index entry: "
+                    "%d (%.2f%%), of which iot %d\n", tag, nx, iot, coll, 100.0*coll/nx, coll_iot);
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -261,8 +293,11 @@ int main(int argc,char**argv){
                 if(ob[d]*2>=om[d]) TSIG[c].s[d>>5]|=1u<<(d&31); } } }
     pr_build(&PR, U_t, R.label, U_n, (int)R.n_class);
     long tb=0; for(int i=0;i<U_n;i++) tb+=strlen(U_t[i])+1;
+    code_overlap("DEV", V_t, V_l, V_n);
+    code_overlap("TEST", T_t, T_l, T_n);
     printf("\n  %-20s %8s %-8s %-8s %8s\n","representation","iot acc","wrong","missed","index KB");
-    if(CURVE){ curve("no-prior",score_ter,-512,512); curve("prior",score_ter_wp,-512,512); return 0; }
+    if(CURVE){ curve("binary",score_bin,-RD,RD);
+               curve("no-prior",score_ter,-512,512); curve("prior",score_ter_wp,-512,512); return 0; }
     report("binary (1 bit)",   score_bin,-RD,RD,          U_n*sizeof(rvec)/1024.0);
     report("twin-ternary (2b)",score_ter,-512,512,        U_n*sizeof(tvec)/1024.0);
     /* word prior CUT: passes breaks-zero but does not move the operating curve.

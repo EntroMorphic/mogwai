@@ -557,3 +557,55 @@ incremented to 1, and truncated the file — **destroying the audit annotation a
 resetting the counter on every use.** A guard that cannot count past one is not
 a guard. Split: `TEST_BUDGET_COUNT` is machine-readable, `TEST_BUDGET` is
 append-only and now records timestamp and full argv per touch.
+
+### Red-team of test evaluation #2
+
+**1. The headline comparison was NOT size-matched — and this was the real risk.**
+The reported table puts twin-ternary d=256 (656 KB) beside binary d=256
+(328 KB). Twin gets twice the bytes. The whole claim is "2 bits per dim beats
+1 bit per dim", so the fair control is **binary at d=512**, which is also
+64 B/vector — never run until now. If binary d=512 matched twin d=256, the
+advantage would be capacity, not structure.
+
+Curve, at matched bytes/vector:
+
+    min MISSED at wrong<=      8    12    16    20    24    B/vec
+      binary d=256            49    38    24    24    24     32
+      binary d=512            49    38    24    24    24     64
+      twin   d=256            46    23    12     6     5     64
+      twin   d=512            46    25    15    12     4    128
+
+**Twin dominates binary at every matched operating point at identical bytes** —
+12 vs 24 missed at `wrong<=16`, 6 vs 24 at `wrong<=20`. The claim survives.
+
+More telling: **binary d=256 and d=512 have identical curves.** Doubling
+binary's dimensions changes nothing at all. Binary saturates, which is direct
+evidence its limit is structural — forcing empty dims to -1 — and not capacity.
+That is the ternary.h rationale, now measured rather than asserted.
+
+**2. Leakage beyond exact strings: clean.** `inv_disjoint` compares normalised
+strings, which is necessary but not sufficient — two different strings encoding
+to the SAME twin-ternary code are indistinguishable to the router and
+effectively leaked with no assertion firing. Measured: **0 of 1527 dev and 0 of
+2974 test items share a code with any index entry.** Clean, but it was luck
+rather than design; the check is now permanent.
+
+**3. I graded my own predictions leniently. It was 3/4, not 4/4.** P2 predicted
+"~30 wrong" by assuming a constant false-actuation rate (1.05% x 2754 negatives
+= 29). Actual 23 — the rate did not hold constant, it improved. **That is a 22%
+miss, and it missed in the flattering direction**, which is exactly when
+self-grading should be strictest. Corrected: P1 hit (84.1% vs 82-85%/~84%),
+**P2 MISS**, P3 hit (20, at the range edge), P4 hit.
+
+**4. Error bars verified against true denominators**, which corrected an
+assumption I had been carrying: dev IoT is **192**, not 220 (test IoT is 220).
+
+    dev  iot=192 neg=1335   SE 2.5%   missed 14 (7.3%)  wrong 14 (1.05%)
+    test iot=220 neg=2754   SE 2.5%   missed 20 (9.1%)  wrong 23 (0.84%)
+
+Both reported +-2.5 are correct.
+
+**5. The test set is not pristine, and the record should say so.** Evaluation #1
+touched it and I saw the aggregate result before it was voided. Config decisions
+made afterwards were re-derived on dev, but "never observed" is a stronger claim
+than the history supports. Budget: 2 used.
