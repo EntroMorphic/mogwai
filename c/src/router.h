@@ -14,7 +14,8 @@
 #ifndef RD
 #define RD        256
 #endif
-#define RWORDS    (RD / 32)          /* 16 words = 64 bytes per vector */
+#define RWORDS    (RD / 32)          /* 8 words per bit-plane; a tvec holds two
+                                        (mask+sign) = 16 words = 64 bytes */
 #define RMAXCLS   16
 #define RNAMELEN  32
 #define RSCALE    16384              /* fixed-point scale for the centre */

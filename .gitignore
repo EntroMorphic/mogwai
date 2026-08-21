@@ -4,3 +4,5 @@ data/*.csv
 data/*.gz
 c/bin/
 *.o
+__pycache__/
+*.pyc

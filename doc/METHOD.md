@@ -1,0 +1,87 @@
+# Guardrails — why the numbers in this repo can be trusted, and where they can't
+
+This project has produced wrong results and caught them. The mechanisms below
+exist because something specific went wrong; each one names its incident.
+
+## 1. Assertions that abort, not warn
+
+`c/src/invariants.c` aborts the run (exit 2) rather than printing a warning.
+
+**Incident.** The dev split was **75.6% leaked**: dev was carved out of train but
+never added to the exclusion set, so NLU-Evaluation-Data (which MASSIVE derives
+from) reintroduced it. Four design decisions were made on that split and had to
+be voided. The assertions later caught two further leaks nobody suspected —
+MASSIVE's train repeats utterances, and train and test share utterances.
+
+Now enforced: `inv_disjoint` (index vs dev, index vs test), `inv_superset`,
+`inv_similar_rate`, `inv_bounded`. Test is loaded **first** so the index can
+exclude it.
+
+## 2. Exact-string disjointness is not sufficient
+
+Two different strings can encode to the **same** twin-ternary code, which makes
+them indistinguishable to the router — leaked, with no assertion firing.
+`code_overlap()` measures it directly. Currently 0 of 1527 dev and 0 of 2974
+test. Clean, but that was luck, and now it is checked.
+
+## 3. Test budget
+
+`make testset` (never `make test` — that is refused as a habit-typo) increments
+`results/TEST_BUDGET_COUNT` and appends timestamp + full argv to
+`results/TEST_BUDGET`. The threshold is tuned on **dev** and merely applied to
+test; `report()` tunes on `V_*` and tallies on `T_*`.
+
+**Incident.** Evaluation #1 is marked VOID — it measured a config chosen entirely
+on the leaked split. Budget was not reset: it was spent.
+
+**Incident.** The guard itself was broken. Counter and prose lived in one file,
+so `fscanf("%d")` read 0, incremented to 1, and truncated — destroying the audit
+note and resetting the count *every use*. A guard that cannot count past one is
+not a guard. Counter and log are now separate files.
+
+## 4. Curve dominance, not "breaks zero"
+
+A change is not accepted because it fixes some cases and breaks none. It must
+move the **(wrong, missed) frontier** at matched operating points.
+
+**Incident.** Naive auto-tuned rows suggested index pruning *improved* false
+actuations (14 → 11). It does not — each run retunes the threshold, so those
+rows sit at different operating points. At matched points the unpruned baseline
+strictly dominates. The rule overturned the single-point reading.
+
+## 5. Size-matched controls
+
+**Incident.** The headline table compared twin-ternary d=256 (656 KB) against
+binary d=256 (328 KB) — twin got twice the bytes, for a claim that is *about*
+bits per dimension. The missing control (binary d=512, same 64 B/vector) was run
+only when red-teaming the test evaluation. It confirmed the claim, but it should
+have been there from the start.
+
+## 6. Pre-registration
+
+Predictions for test evaluation #2 were committed **before** the run. Scored
+afterwards: **3 of 4**, not 4 — the false-actuation prediction missed by 22%, in
+the flattering direction, and was initially reported as a hit.
+
+## 7. Two-point fits are not fits
+
+**Incident, twice.** A dual-core cost model fitted on two points implied a 3.4 ms
+fixed term; the third point refuted it. Then, one section after writing that
+down, the byte/vector cost model was fitted on two dimensions and overstated the
+intercept by 25%; the third dimension corrected it to 59.8 ns/byte + 326 ns/vector.
+
+## 8. Config sweeps must not trust the build cache
+
+`idf.py` caches `-D` variables. "Restoring" a config by rebuilding without the
+override silently reuses the previous iteration's `SDKCONFIG_DEFAULTS` — this
+produced a bogus reading and a `PARITY FAILED` that looked like a real
+regression. Pass overrides explicitly every time, or `rm -rf build`.
+
+## Where the numbers still can't be trusted
+
+- **The held-out figure (84.1%) is at threshold 136, not the shipped 126.**
+- The test set is **not pristine** — evaluation #1 observed it before being voided.
+- `recall` is blind to false actuations; read the `fa` column.
+- The corpus ceiling is **~98%, not 100%** — some labels are wrong ("turn out the
+  lights" is labelled `lightup`) and some are unknowable from text (which physical
+  device a "kitchen light" is depends on the installation).
