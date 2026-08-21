@@ -17,6 +17,10 @@ static int cls_of(const char*l){
     for(int i=0;i<NC;i++) if(!strcmp(NAMES[i],l)) return i;
     snprintf(NAMES[NC],RNAMELEN,"%s",l); return NC++; }
 int main(int argc,char**argv){
+    if(argc<2){ fprintf(stderr,
+        "usage: prdiag <train.json>\n"
+        "  What does the word-lift prior actually say? The prior was measured\n"
+        "  inert and cut from the router; this is why.\n"); return 1; }
     char line[8192],t[512],l[RNAMELEN]; int ti=0;
     FILE*f=fopen(argv[1],"r");
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)){

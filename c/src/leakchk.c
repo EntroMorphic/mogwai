@@ -29,6 +29,13 @@ static void hist(const char *name,char **Q,int qn){
            "",100.0*(b[0]+b[1])/qn);
 }
 int main(int argc,char**argv){
+    if(argc<4){ fprintf(stderr,
+        "usage: leakchk <train.json> <validation.json> <test.json>\n"
+        "  Is the DEV split optimistically biased? Compares dev-vs-index\n"
+        "  similarity against test-vs-index.\n"
+        "  NOTE: reads test.json. It measures a similarity DISTRIBUTION, not\n"
+        "  accuracy, so it does not consume TEST_BUDGET - but do not extend it\n"
+        "  into anything that reports a test score.\n"); return 1; }
     char line[8192],t[512],l[RNAMELEN];
     FILE*f=fopen(argv[1],"r"); int ti=0;
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)){

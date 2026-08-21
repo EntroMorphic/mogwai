@@ -106,3 +106,40 @@ regression. Pass overrides explicitly every time, or `rm -rf build`.
 - The corpus ceiling is **~98%, not 100%** — some labels are wrong ("turn out the
   lights" is labelled `lightup`) and some are unknowable from text (which physical
   device a "kitchen light" is depends on the installation).
+
+## 9. Dev is not an easier split than test — measured, not assumed
+
+`c/bin/leakchk data/train.json data/validation.json data/test.json` compares how
+close each split sits to the index by word-overlap Dice:
+
+    DEV    n=193   >=95%: 7    80-95%: 63   near-duplicate rate 36.3%
+    TEST   n=220   >=95%: 12   80-95%: 70   near-duplicate rate 37.3%
+
+**36% and 37% — the same.** So tuning on dev and applying to test is not
+flattering itself, which is the independent explanation for why the dev-selected
+config generalised (85.9 → 84.1, inside the error bars).
+
+It also sets a caveat: **both splits are ~37% near-duplicates of index entries**,
+because MASSIVE contains many closely-related utterances. Absolute accuracy is
+therefore easier here than on genuinely novel phrasing. Relative comparisons
+between representations are unaffected — both see the same corpus — but do not
+read 88% as "88% on whatever a user says".
+
+`c/bin/leaktest data/train.json data/nlu_home.csv` still reproduces the original
+75.6% leak on demand. It is kept as a **regression test for a fixed bug**: it
+demonstrates the old behaviour deliberately.
+
+## 10. My own verification harnesses were wrong four times
+
+Worth its own entry, because it nearly created false findings:
+
+- `cmd | grep x | head -2 && echo FAIL` — `head` exits 0 with no input, so the
+  failure branch always fired. Reported a working build command as broken.
+- `cmd | grep x; rc=$?` — captures **grep's** status, not the command's.
+- `echo "$(basename $b): rc=$?"` — the command substitution runs first and
+  **resets `$?`**. Reported rc=0 for tools that correctly returned 2.
+- `cmd | head -1` on tools whose output starts with a blank line — concluded
+  three working diagnostics produced nothing.
+
+Each looked like a defect in the thing being tested. The rule: when a check says
+something is broken, **verify the check before fixing the target.**

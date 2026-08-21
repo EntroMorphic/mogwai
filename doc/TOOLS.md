@@ -22,7 +22,7 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 |---|---|
 | `compare.c` | the main experiment. `--test` `--curve` `--ship` `--errs` `--fixth=N` `--prune-*` |
 | `mkblob.c` | emits `router.bin`. Refuses to guess a threshold when pruning |
-| `eval.c` | loads a blob and tunes on held-out validation |
+| `eval.c` | **verifies a built blob** before flashing: reference-query parity + index integrity. `c/bin/eval router.bin data/validation.json`. Cannot touch test by construction |
 
 ## Diagnostics (kept, not on the shipping path)
 
@@ -30,8 +30,8 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 |---|---|
 | `prior.c` / `prdiag.c` | word-derived lift prior. **Measured inert; cut from the router.** Reachable via `--curve` |
 | `cascade.c` | signature cascade. Measured identical on every axis; cut |
-| `leakchk.c` | is the dev split optimistically biased? |
-| `leaktest.c` | do dev utterances leak back via NLU-Eval? (the 75.6% incident) |
+| `leakchk.c` | is the dev split optimistically biased? `... train.json validation.json test.json` — answer: no, 36.3% vs 37.3% |
+| `leaktest.c` | reproduces the 75.6% leak on demand — a regression test for a fixed bug. `... train.json nlu_home.csv` |
 | `build.c` | older blob builder, superseded by `mkblob.c` |
 
 `probe.c` was archived to `archive/superseded_tools/` — it compared `t_score`

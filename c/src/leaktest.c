@@ -15,6 +15,10 @@ static int js(const char*l,const char*k,char*o,int cap){
     int n=0; while(*p&&*p!='"'&&n<cap-1){if(*p=='\\'&&p[1])p++;o[n++]=*p++;} o[n]=0; return 1; }
 static int isiot(const char*l){return !strncmp(l,"iot_",4);}
 int main(int argc,char**argv){
+    if(argc<3){ fprintf(stderr,
+        "usage: leaktest <train.json> <nlu_home.csv>\n"
+        "  Do DEV utterances leak back into the index via NLU-Eval?\n"
+        "  This is the 75.6%% incident (see doc/METHOD.md).\n"); return 1; }
     char line[8192],t[512],l[RNAMELEN]; int ti=0;
     FILE*f=fopen(argv[1],"r");
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)){
