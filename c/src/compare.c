@@ -5,6 +5,7 @@
 #include "invariants.h"
 #include "prior.h"
 #include "prune.h"
+#include "cue.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +27,9 @@ static int DUMPERR = 0;   /* --errs: print the actual misclassified utterances *
 static int DIRDUMP = 0;   /* --dirdump: per-item score/pred/truth, for direction analysis */
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
 static prune_opt PRUNE = {0,0,0};
+static cue_t CUE; static int USECUE = 0;   /* --cue: index-derived hard word cues */
+static int CHANNELS = 0;   /* --channels: word vs n-gram error overlap */
+static int PRIORCLS = 0;  /* --priorcls: router accepts/rejects, prior picks the class */
 
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
@@ -66,6 +70,20 @@ static hit score_ter_impl(const char*txt,int use_prior){
     int best=-(1<<28); uint32_t bi=0;
     for(uint32_t i=0;i<R.n_index;i++){int s=t_score(&q,&TI[i],aa); if(s>best){best=s;bi=i;}}
     int cls0=r_apply_polarity(&R,R.label[bi],txt);
+    if(USECUE) cls0=cue_apply(&CUE,&R,txt,cls0);
+    /* Channel split: the router is the EVIDENCE READER and decides accept vs
+       reject (fa=1 of 1335 — it is good at that). The word prior is a separate
+       channel that is better at WHICH IoT class (89.6%% vs 85.9%% on dev IoT,
+       with 16 items the router gets wrong that it gets right). Let each do the
+       job it is better at, rather than blending scores as the earlier prior
+       work did. */
+    if(PRIORCLS){ int mg; int pv=pr_vote(&PR,txt,&mg);
+        /* The router must have already decided this is a command: never let the
+           prior turn a "none" into an actuation. Without this guard fa went
+           1 -> 824, because every above-threshold negative got reassigned. */
+        if(pv>=0 && cls0>=0 && strcmp(R.names[cls0],"none")
+            && strcmp(R.names[pv],"none")
+            && (PRIORCLS>=2 || r_family(&R,pv)==r_family(&R,cls0))) cls0=pv; }
     if(use_prior){
         int mg=0, pc=pr_vote(&PR,txt,&mg);
         /* The prior abstains when no word carries evidence (pc<0), and it never
@@ -211,6 +229,35 @@ static void dirdump(hit *H, char la[][RNAMELEN], int n) {
         printf("DD\t%d\t%s\t%s\n", H[i].score,
                H[i].cls < 0 ? "none" : R.names[H[i].cls], la[i]);
 }
+/* --channels: are the word channel and the n-gram channel complementary?
+ * Three separate attempts to add word information have now failed (signature
+ * prior inert, word prior inert, hard cue harmful) even though the word prior
+ * ALONE scores 82.9% against the router's 85.9%. If the two channels fail on
+ * the SAME items, that explains all three results at once: the second channel
+ * carries no information the first lacks, so no combination rule can help. */
+static void channels(void) {
+    int both=0, only_r=0, only_p=0, neither=0, n=0;
+    for (int i = 0; i < V_n; i++) {
+        if (!strcmp(V_l[i], "none")) continue;
+        n++;
+        hit h = score_ter(V_t[i]);
+        int rc = (h.score > 136) ? h.cls : -1;
+        int rok = rc >= 0 && !strcmp(R.names[rc], V_l[i]);
+        int mg; int pv = pr_vote(&PR, V_t[i], &mg);
+        int pok = pv >= 0 && !strcmp(R.names[pv], V_l[i]);
+        if (rok && pok) both++; else if (rok) only_r++;
+        else if (pok) only_p++; else neither++;
+    }
+    printf("\n  === channel overlap on %d dev IoT items ===\n", n);
+    printf("    both correct        %4d  (%.1f%%)\n", both, 100.0*both/n);
+    printf("    router only         %4d\n", only_r);
+    printf("    word-prior only     %4d   <- what a second channel could ADD\n", only_p);
+    printf("    neither             %4d   <- the irreducible floor\n", neither);
+    printf("    router  total %d (%.1f%%)   prior total %d (%.1f%%)\n",
+           both+only_r, 100.0*(both+only_r)/n, both+only_p, 100.0*(both+only_p)/n);
+    printf("    an ORACLE picking the right channel per item: %d (%.1f%%)\n",
+           both+only_r+only_p, 100.0*(both+only_r+only_p)/n);
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -245,6 +292,10 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--curve")) CURVE=1;
         else if(!strcmp(argv[i],"--errs")) DUMPERR=1;
         else if(!strcmp(argv[i],"--dirdump")) DIRDUMP=1;
+        else if(!strcmp(argv[i],"--cue")) USECUE=1;
+        else if(!strcmp(argv[i],"--channels")) CHANNELS=1;
+        else if(!strcmp(argv[i],"--priorcls")) PRIORCLS=1;
+        else if(!strcmp(argv[i],"--priorcls2")) PRIORCLS=2;
         else if(!strcmp(argv[i],"--ship")) FIXTH=RSHIP_TH;
         else if(prune_parse(argv[i],&PRUNE)) { /* consumed */ }
 }
@@ -337,12 +388,14 @@ int main(int argc,char**argv){
             if(cnt&&om[d]*4>=cnt){ TSIG[c].m[d>>5]|=1u<<(d&31);
                 if(ob[d]*2>=om[d]) TSIG[c].s[d>>5]|=1u<<(d&31); } } }
     pr_build(&PR, U_t, R.label, U_n, (int)R.n_class);
+    cue_build(&CUE, U_t, R.label, U_n, (int)R.n_class);   /* index only — never dev */
     long tb=0; for(int i=0;i<U_n;i++) tb+=strlen(U_t[i])+1;
     code_overlap("DEV", V_t, V_l, V_n);
     code_overlap("TEST", T_t, T_l, T_n);
     printf("\n  %-20s %8s %-8s %-8s %8s\n","representation","iot acc","wrong","missed","index KB");
     if(CURVE){ curve("binary",score_bin,-RD,RD);
                curve("no-prior",score_ter,-512,512); curve("prior",score_ter_wp,-512,512); return 0; }
+    if(CHANNELS){ channels(); return 0; }
     report("binary (1 bit)",   score_bin,-RD,RD,          U_n*sizeof(rvec)/1024.0);
     report("twin-ternary (2b)",score_ter,-512,512,        U_n*sizeof(tvec)/1024.0);
     /* word prior CUT: passes breaks-zero but does not move the operating curve.

@@ -921,3 +921,103 @@ single-parameter version already failed to transfer.
 Not shipped. No test budget spent. `--dirdump` is retained: it emits per-item
 score/prediction/truth so any future threshold policy can be simulated offline
 without a second parameter ever entering the router.
+
+## Red-team of the asymmetric-threshold rejection
+
+**Self-check first:** the offline simulator reproduces the harness exactly —
+`sim(136,136,136)` → fa=1 wa=13 missed=14, recall 85.9%. That validates both the
+dump slice and the simulation before any conclusion rests on them.
+
+**The attack:** my domination test required *all three* error columns to improve,
+which could hide a real `wa` reduction available as a trade. Checked the
+wa-focused frontier:
+
+    fa<=1, missed<=14  ->  min wa = 13   (baseline; nothing better exists)
+    fa<=1, missed=16   ->  wa = 11       (costs +2 missed)
+    fa<=1, missed=20   ->  wa =  9       (costs +6 missed)
+
+`wa` falls only by rejecting more commands — converting wrong actions into
+misses. That is not fixing the confusion, it is declining to answer. **The
+rejection stands, and it establishes that `wa` is threshold-immune: a floor set
+by the representation, not the operating point.**
+
+## The wa floor: complementary information exists, but nothing extracts it
+
+The 13 dev wrong-actions at th=136 sort into:
+
+    4  colour commands routed away from lightchange ("warm", "lavender", "red", "blue")
+    3  off-commands using "shut"/"close" landing on lightdim/lightup
+    2  up/on distinctions
+    2  arbitrary device assignment (hue vs wemo — unknowable from text)
+    1  ambiguous ("lighter shade" — brighter, or paler?)
+    1  LABEL ERROR ("turn out the lights" is labelled lightUP; the router is right)
+
+So ~6 of 13 are not fixable from the utterance at all.
+
+### Cues must be mined, not hand-written
+
+The tempting fix is to read those failures and write a colour lexicon. That is
+exactly the archived failure (+4.5 points fitted to test failures; the
+leakage-free version gained nothing). So `c/src/cuemine.c` mines discriminative
+words **from the index only**, replicating compare.c's DEV carve so dev never
+contributes. Colour emerges from training data unprompted:
+
+    colors 96x   color 93x   yellow 89x   blue 87x   green 75x   red 71x
+
+Note "lavender" and "warm" — the words in the dev failures — do NOT appear.
+The mining is independent of the errors, as intended.
+
+**But `lightoff`'s top cues are room names**: lamp 67x, bedroom 63x, kitchen 54x,
+bathroom 52x, with "off" only sixth. That is corpus bias, not semantics. And
+"close" never appears, so adding it would be fitting the error list.
+
+### Hard cues are strictly harmful
+
+`cue.c` builds the word list at index-build time (lift >= CUE_LIFT, count >=
+CUE_MIN) and overrides within a device family. Swept:
+
+    CUE_LIFT   20    40    60    80   120   200   400   baseline
+    wa         24    23    24    16    16    13    13     13
+
+**Monotone harm, converging to baseline only when it stops firing.** Even at
+lift>=80 — admitting only genuine colour terms — it costs 3 wrong actions.
+
+### The channels ARE complementary — which refutes my explanation
+
+Three word-channel attempts had now failed (signature prior inert, word prior
+inert, hard cue harmful). I hypothesised the channels were redundant. Measured:
+
+    both correct        156 (81.2%)
+    router only           9
+    word-prior only      16     <- information the router does NOT have
+    neither              11     <- irreducible floor
+    router 165 (85.9%)   word prior 172 (89.6%)
+    ORACLE picking the right channel per item: 181 (94.3%)
+
+**Hypothesis refuted.** The word prior alone *beats* the router on IoT
+classification, and there are 16 items it gets right that the router gets wrong.
+An oracle would reach 94.3% against the shipped 85.9% — **8.4 points on the table.**
+
+### But no rule extracts it
+
+Tried the clean architectural split — router (evidence reader) decides
+accept/reject, word prior decides which class:
+
+    baseline                 recall 85.9%   fa=1    wa=13
+    prior picks class        recall 85.4%   fa=1    wa=14
+    ... unconstrained        recall 84.9%   fa=1    wa=15
+
+Worse both ways. One guard is worth recording: the first unconstrained version
+produced **fa=824**, because every above-threshold *negative* had its "none"
+reassigned to an IoT class. The router must decide command-vs-not before the
+prior is allowed to refine anything.
+
+**Conclusion.** 8.4 points of genuinely complementary information exists and
+**no combination rule tried can reach it** — soft bias (inert), hard cue
+(harmful), class delegation (harmful). What is missing is not a better blend but
+a *selector*: a signal for when to trust which channel. Nothing measured so far
+provides one. Recorded as the largest known headroom in the system, and as an
+open problem rather than a solved one.
+
+Shipped config unchanged. `cuemine.c`, `cue.c`, `--channels` and `--priorcls`
+retained as tracked diagnostics.

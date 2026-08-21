@@ -3,7 +3,7 @@ CC      := cc
 CFLAGS  := -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter
 SRC     := c/src
 BIN     := c/bin
-CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c $(SRC)/prior.c $(SRC)/prune.c
+CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c $(SRC)/prior.c $(SRC)/prune.c $(SRC)/cue.c
 DATA    := data/train.json data/validation.json data/test.json data/nlu_home.csv
 LOG     := results/RESULTS.tsv
 
