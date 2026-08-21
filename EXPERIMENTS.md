@@ -7,6 +7,61 @@ not a discipline anyone has to remember.
     make fetch     # curl the corpora, record SHA256
     make compare   # build, run, append one row per variant
 
+## Look up a fact
+
+| question | answer | where |
+|---|---|---|
+| What ships? | twin-ternary, d=256, 10500 vectors, 656 KB, threshold 126 | [Shipped threshold](#shipped-threshold-moved-136---126) |
+| How fast on device? | 43.5 ms 1-core / 26.7 ms 2-core, PARITY EXACT | [Popcount table](#popcount-table-killing-the-47) |
+| What predicts latency? | 59.8 ns/byte + 326 ns/vector; bytes are 92% | [Cost model](#what-the-failed-lever-bought-a-resolved-cost-model) |
+| Is 2-bit really better than 1-bit? | Yes, at **matched bytes**, on the whole curve | [Red-team of test eval](#red-team-of-test-evaluation-2) |
+| What is the held-out number? | 84.1% ±2.5 — **at threshold 136, not the shipped 126** | [Test eval #2 result](#test-evaluation-2--result) |
+| Why isn't accuracy the headline? | It is recall; it cannot see false actuations | [Metric is blind](#the-accuracy-metric-is-blind-to-false-actuations--read-every-number-above-with-this-in-mind) |
+| How good could this ever get? | ~98%; some labels are wrong, some are unknowable | [Residual errors](#what-the-residual-errors-actually-are) |
+| What did we get wrong? | [Invalidated](#invalidated-kept-as-negative-results), and every `Red-team of…` section |
+
+## Contents
+
+**Ground rules**
+- [Protocol (non-negotiable, learned the hard way)](#protocol-non-negotiable-learned-the-hard-way)
+- [Findings that survived red-teaming](#findings-that-survived-red-teaming)
+- [Invalidated (kept as negative results)](#invalidated-kept-as-negative-results)
+- [Open](#open)
+- [The acceptance test was wrong](#the-acceptance-test-was-wrong-2026-08-19) — why "breaks zero" is not acceptance
+- [Prior-signal separation (the-reflex, EntroMorphic)](#prior-signal-separation-the-reflex-entromorphic)
+
+**Making it fast on the ESP32** — 200.4 → 43.5 ms, parity held at every step
+- [What the silicon can actually take off the CPU](#what-the-esp32s-silicon-can-actually-take-off-the-cpu) — second core yes; peripheral popcount priced and rejected
+- [Popcount table: killing the 47%](#popcount-table-killing-the-47) — 256 B in DRAM, verified over all 2³² words
+  - [Red-team](#red-team-of-the-popcount-result) — the dual-core scan is flash-bound, tested not inferred
+
+**Three levers, and what each actually cost**
+- [Lever 1: pruning the index](#lever-1-pruning-the-index) — condensation beats random; nothing beats the baseline
+  - [On hardware: the byte → latency law](#lever-1-on-hardware-the-byte---latency-law) — predicted to 0.4% on one core
+  - [Red-team](#red-team-of-lever-1) — found a real shipping bug: `mkblob` guessed the threshold
+- [Lever 2: d=128 — REJECTED](#lever-2-d128--rejected) — dominated at every operating point
+  - [What the failed lever bought](#what-the-failed-lever-bought-a-resolved-cost-model) — the cost model
+  - [Red-team](#red-team-of-lever-2) — the smoothing confound was real, and my fix was backwards
+- [Lever 3: QIO flash — ALREADY TAKEN](#lever-3-qio-flash--already-taken-my-earlier-note-was-wrong) — it was on the whole time
+
+**The held-out evaluation**
+- [Pre-registered prediction](#test-evaluation-2--pre-registered-prediction-written-before-running) — committed before the run
+- [Result](#test-evaluation-2--result) — 84.1% ±2.5
+  - [Bug found in the budget guard while spending it](#bug-found-in-the-budget-guard-itself-while-spending-it)
+  - [Red-team](#red-team-of-test-evaluation-2) — the missing size-matched control; scoring corrected to 3/4
+
+**Choosing the operating point**
+- [Raising the threshold does not buy precision](#raising-the-threshold-for-precision--the-knob-does-not-do-what-i-claimed)
+  - [Correcting my own claim](#correcting-my-own-claim)
+  - [What the residual errors actually are](#what-the-residual-errors-actually-are) — the corpus ceiling
+- [Shipped threshold moved 136 → 126](#shipped-threshold-moved-136---126)
+- [The accuracy metric is blind to false actuations](#the-accuracy-metric-is-blind-to-false-actuations--read-every-number-above-with-this-in-mind) — read this before quoting any number above
+
+> Sections are chronological, so later ones sometimes **overturn** earlier ones.
+> Where that happens the earlier text is left standing with the correction
+> recorded beneath it — the reversal is the finding. Nothing here is retracted
+> silently.
+
 ## Protocol (non-negotiable, learned the hard way)
 
 - **Tune on validation. Touch test once.** Three results this session were
