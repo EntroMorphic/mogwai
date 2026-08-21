@@ -88,6 +88,7 @@ are 92% of the cost, so index size predicts latency directly.
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
+    make regress        # full host regression (29 checks) — run after any structural change
 
 Build and flash the device:
 
