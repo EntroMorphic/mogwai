@@ -793,3 +793,37 @@ including the held-out 84.1% — is a recall number. It is not a safety number.
 The fa column is the safety number, and it was collapsed into "wrong" until this
 section. Nothing above is retracted, but accuracy alone should never have been
 the headline for an actuator.
+
+## Test evaluation #3 — PRE-REGISTERED PREDICTION (written before running)
+
+**Purpose.** Every held-out figure so far is at threshold 136. The shipped config
+is 126, chosen on dev. This measures the config that actually ships, and answers
+one question: **was 136 -> 126 a real gain, or dev-overfitting?**
+
+**Config, frozen:** twin-ternary, d=256, TSMOOTH=8, full 10500-vector index, no
+prune/prior/veto. Threshold forced to `RSHIP_TH`=126 via `--ship`, NOT tuned on
+test. `report()` verified to apply FIXTH and tally on `T_*`.
+
+**Reference points**
+
+    dev  @126   88.0% +-2.3   fa=3  wa=15  missed=8    (192 iot, 1335 neg)
+    dev  @136   85.9% +-2.5   fa=1  wa=13  missed=14
+    TEST @136   84.1% +-2.5   fa+wa=23     missed=20   (220 iot, 2754 neg)
+
+**Predictions**
+
+1. **Test recall 83–88%, point ~86%.** Dev gained +2.1 going 136->126; test at
+   136 sat 1.8 points under dev, so 84.1 + 2.1 - drift ≈ 86.
+2. **Missed 10–14, point 12.** Dev missed fell 14->8 (-43%); test was 20 at 136.
+3. **fa 3–7, point 5.** Dev fa rate at 126 is 0.22%; 0.22% x 2754 ≈ 6, discounted
+   because last time the rate *improved* on test rather than holding (that was
+   prediction P2 of eval #2, and it missed by 22% in the flattering direction).
+4. **fa+wa total 24–32, point 28.** Higher than the 23 at th=136 — a lower
+   threshold necessarily actuates more. **A drop here would be suspicious, not
+   good news.**
+
+**Falsifier, stated in advance.** If test recall at 126 is **not** meaningfully
+above the 84.1% measured at 136, then the +2.1 seen on dev did not transfer, the
+threshold move was fitting the dev curve, and **126 should be reverted to 136**.
+Recorded either way. A result inside noise of 84.1% counts as failure to
+transfer, not as a tie.
