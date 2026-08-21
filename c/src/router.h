@@ -20,6 +20,17 @@
 #define RSCALE    16384              /* fixed-point scale for the centre */
 #define RMAGIC    0x52545231u        /* 'RTR1' */
 
+/* Shipped operating point. Deliberately NOT what tune() returns (136): tune
+   minimises 3*(fa+wa)+ms, which encodes a different preference from the one
+   chosen here. At 126 the router is +2.1 points more accurate on dev
+   (85.9 -> 88.0) and misses 6 fewer commands, costing 2 additional unbidden
+   actuations (1 -> 3 of 1335 negatives, 0.07%% -> 0.22%%). Raising the threshold
+   was measured NOT to buy precision: fa is flat at 1 from th=136 to 184.
+   Chosen on DEV; the test fa/wa split at this threshold is unmeasured.
+   mkblob and compare --ship both read this, so exporter and harness cannot
+   disagree the way they did when the threshold was hardcoded in mkblob. */
+#define RSHIP_TH  126
+
 typedef struct { uint32_t w[RWORDS]; } rvec;
 
 typedef struct {

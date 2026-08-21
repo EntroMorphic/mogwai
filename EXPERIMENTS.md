@@ -673,3 +673,29 @@ So roughly 3-4 of 14 errors are not fixable from the utterance alone. **The
 ceiling on this corpus is around 98%, not 100%**, and a chunk of the remaining
 gap is annotation noise and device-assignment arbitrariness rather than model
 error. Chasing 100% here would be fitting the labeller, not the task.
+
+## Shipped threshold moved 136 -> 126
+
+    th=136 (tune's choice)   85.9% +-2.5   fa=1  wa=13  missed=14
+    th=126 (shipped)         88.0% +-2.3   fa=3  wa=15  missed= 8
+
++2.1 points accuracy and 6 fewer missed commands, for 2 additional unbidden
+actuations — 1 -> 3 of 1335 negatives, 0.07% -> 0.22%.
+
+This is a **deliberate override of `tune()`, not a re-derivation.** `tune`
+minimises `3*(fa+wa)+ms`, which encodes a 3:1 error preference that was never
+argued for; 126 encodes a different one. Recorded as a human decision so nobody
+later "fixes" the discrepancy by re-tuning.
+
+**Single source of truth:** `RSHIP_TH` in `router.h`, read by both `mkblob` (the
+exporter) and `compare --ship` (the harness). Previously the threshold was
+hardcoded in `mkblob` alone, which is exactly how the cnn+2 blob shipped at the
+wrong operating point with PARITY still passing.
+
+**Hardware verified:** blob header `threshold=126`, PARITY EXACT (64/64 class and
+score), 1-core 43498 us / 2-core 26670 us — latency unchanged, as expected, since
+the threshold is a comparison applied after the scan.
+
+**Scope, stated plainly: 126 was chosen on DEV.** The held-out test number at
+this threshold is unmeasured, as is the test fa/wa split. The last measured test
+figure (84.1% +-2.5) is at th=136 and does NOT describe the shipped config.

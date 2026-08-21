@@ -2988,8 +2988,8 @@ CMakeFiles/gen_project_binary.dir/clean:
 # Target rules for target CMakeFiles/app.dir
 
 # All Build rule for target.
-CMakeFiles/app.dir/all: CMakeFiles/gen_project_binary.dir/all
 CMakeFiles/app.dir/all: esp-idf/esptool_py/CMakeFiles/app_check_size.dir/all
+CMakeFiles/app.dir/all: CMakeFiles/gen_project_binary.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/app.dir/build.make CMakeFiles/app.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/app.dir/build.make CMakeFiles/app.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Built target app"
@@ -3007,8 +3007,8 @@ app: CMakeFiles/app.dir/rule
 .PHONY : app
 
 # codegen rule for target.
-CMakeFiles/app.dir/codegen: CMakeFiles/gen_project_binary.dir/all
 CMakeFiles/app.dir/codegen: esp-idf/esptool_py/CMakeFiles/app_check_size.dir/all
+CMakeFiles/app.dir/codegen: CMakeFiles/gen_project_binary.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/app.dir/build.make CMakeFiles/app.dir/codegen
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Finished codegen for target app"
 .PHONY : CMakeFiles/app.dir/codegen
@@ -3120,9 +3120,9 @@ CMakeFiles/monitor.dir/clean:
 # Target rules for target CMakeFiles/flash.dir
 
 # All Build rule for target.
+CMakeFiles/flash.dir/all: esp-idf/partition_table/CMakeFiles/partition_table_bin.dir/all
 CMakeFiles/flash.dir/all: CMakeFiles/bootloader.dir/all
 CMakeFiles/flash.dir/all: CMakeFiles/app.dir/all
-CMakeFiles/flash.dir/all: esp-idf/partition_table/CMakeFiles/partition_table_bin.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/flash.dir/build.make CMakeFiles/flash.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/flash.dir/build.make CMakeFiles/flash.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Built target flash"
@@ -3140,9 +3140,9 @@ flash: CMakeFiles/flash.dir/rule
 .PHONY : flash
 
 # codegen rule for target.
+CMakeFiles/flash.dir/codegen: esp-idf/partition_table/CMakeFiles/partition_table_bin.dir/all
 CMakeFiles/flash.dir/codegen: CMakeFiles/bootloader.dir/all
 CMakeFiles/flash.dir/codegen: CMakeFiles/app.dir/all
-CMakeFiles/flash.dir/codegen: esp-idf/partition_table/CMakeFiles/partition_table_bin.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/flash.dir/build.make CMakeFiles/flash.dir/codegen
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Finished codegen for target flash"
 .PHONY : CMakeFiles/flash.dir/codegen
@@ -3220,9 +3220,6 @@ CMakeFiles/_project_elf_src.dir/clean:
 # Target rules for target CMakeFiles/router_validate.elf.dir
 
 # All Build rule for target.
-CMakeFiles/router_validate.elf.dir/all: CMakeFiles/_project_elf_src.dir/all
-CMakeFiles/router_validate.elf.dir/all: CMakeFiles/__ldgen_output_sections.ld.dir/all
-CMakeFiles/router_validate.elf.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 CMakeFiles/router_validate.elf.dir/all: esp-idf/app_trace/CMakeFiles/__idf_app_trace.dir/all
 CMakeFiles/router_validate.elf.dir/all: esp-idf/unity/CMakeFiles/__idf_unity.dir/all
 CMakeFiles/router_validate.elf.dir/all: esp-idf/cmock/CMakeFiles/__idf_cmock.dir/all
@@ -3247,6 +3244,9 @@ CMakeFiles/router_validate.elf.dir/all: esp-idf/rt/CMakeFiles/__idf_rt.dir/all
 CMakeFiles/router_validate.elf.dir/all: esp-idf/spiffs/CMakeFiles/__idf_spiffs.dir/all
 CMakeFiles/router_validate.elf.dir/all: esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all
 CMakeFiles/router_validate.elf.dir/all: esp-idf/main/CMakeFiles/__idf_main.dir/all
+CMakeFiles/router_validate.elf.dir/all: CMakeFiles/_project_elf_src.dir/all
+CMakeFiles/router_validate.elf.dir/all: CMakeFiles/__ldgen_output_sections.ld.dir/all
+CMakeFiles/router_validate.elf.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/router_validate.elf.dir/build.make CMakeFiles/router_validate.elf.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/router_validate.elf.dir/build.make CMakeFiles/router_validate.elf.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Built target router_validate.elf"
@@ -3439,7 +3439,6 @@ CMakeFiles/uf2-app.dir/clean:
 # Target rules for target CMakeFiles/__ldgen_output_sections.ld.dir
 
 # All Build rule for target.
-CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/app_trace/CMakeFiles/__idf_app_trace.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/unity/CMakeFiles/__idf_unity.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/cmock/CMakeFiles/__idf_cmock.dir/all
@@ -3464,6 +3463,7 @@ CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/rt/CMakeFiles/__idf_rt.di
 CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/spiffs/CMakeFiles/__idf_spiffs.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/main/CMakeFiles/__idf_main.dir/all
+CMakeFiles/__ldgen_output_sections.ld.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/__ldgen_output_sections.ld.dir/build.make CMakeFiles/__ldgen_output_sections.ld.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/__ldgen_output_sections.ld.dir/build.make CMakeFiles/__ldgen_output_sections.ld.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Built target __ldgen_output_sections.ld"
@@ -3481,7 +3481,6 @@ __ldgen_output_sections.ld: CMakeFiles/__ldgen_output_sections.ld.dir/rule
 .PHONY : __ldgen_output_sections.ld
 
 # codegen rule for target.
-CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/unity/CMakeFiles/__idf_unity.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/console/CMakeFiles/__idf_console.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/esp_https_server/CMakeFiles/__idf_esp_https_server.dir/all
@@ -3489,6 +3488,7 @@ CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/protobuf-c/CMakeFiles
 CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/wear_levelling/CMakeFiles/__idf_wear_levelling.dir/all
 CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/json/CMakeFiles/__idf_json.dir/all
+CMakeFiles/__ldgen_output_sections.ld.dir/codegen: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/__ldgen_output_sections.ld.dir/build.make CMakeFiles/__ldgen_output_sections.ld.dir/codegen
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Finished codegen for target __ldgen_output_sections.ld"
 .PHONY : CMakeFiles/__ldgen_output_sections.ld.dir/codegen
@@ -4014,8 +4014,8 @@ esp-idf/esptool_py/CMakeFiles/encrypted-app-flash.dir/clean:
 # Target rules for target esp-idf/esptool_py/CMakeFiles/app_check_size.dir
 
 # All Build rule for target.
-esp-idf/esptool_py/CMakeFiles/app_check_size.dir/all: CMakeFiles/gen_project_binary.dir/all
 esp-idf/esptool_py/CMakeFiles/app_check_size.dir/all: esp-idf/partition_table/CMakeFiles/partition_table_bin.dir/all
+esp-idf/esptool_py/CMakeFiles/app_check_size.dir/all: CMakeFiles/gen_project_binary.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/esptool_py/CMakeFiles/app_check_size.dir/build.make esp-idf/esptool_py/CMakeFiles/app_check_size.dir/depend
 	$(MAKE) $(MAKESILENT) -f esp-idf/esptool_py/CMakeFiles/app_check_size.dir/build.make esp-idf/esptool_py/CMakeFiles/app_check_size.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Built target app_check_size"
@@ -4033,8 +4033,8 @@ app_check_size: esp-idf/esptool_py/CMakeFiles/app_check_size.dir/rule
 .PHONY : app_check_size
 
 # codegen rule for target.
-esp-idf/esptool_py/CMakeFiles/app_check_size.dir/codegen: CMakeFiles/gen_project_binary.dir/all
 esp-idf/esptool_py/CMakeFiles/app_check_size.dir/codegen: esp-idf/partition_table/CMakeFiles/partition_table_bin.dir/all
+esp-idf/esptool_py/CMakeFiles/app_check_size.dir/codegen: CMakeFiles/gen_project_binary.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/esptool_py/CMakeFiles/app_check_size.dir/build.make esp-idf/esptool_py/CMakeFiles/app_check_size.dir/codegen
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Finished codegen for target app_check_size"
 .PHONY : esp-idf/esptool_py/CMakeFiles/app_check_size.dir/codegen
@@ -5776,8 +5776,8 @@ esp-idf/unity/CMakeFiles/__idf_unity.dir/clean:
 # Target rules for target esp-idf/cmock/CMakeFiles/__idf_cmock.dir
 
 # All Build rule for target.
-esp-idf/cmock/CMakeFiles/__idf_cmock.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 esp-idf/cmock/CMakeFiles/__idf_cmock.dir/all: esp-idf/unity/CMakeFiles/__idf_unity.dir/all
+esp-idf/cmock/CMakeFiles/__idf_cmock.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/cmock/CMakeFiles/__idf_cmock.dir/build.make esp-idf/cmock/CMakeFiles/__idf_cmock.dir/depend
 	$(MAKE) $(MAKESILENT) -f esp-idf/cmock/CMakeFiles/__idf_cmock.dir/build.make esp-idf/cmock/CMakeFiles/__idf_cmock.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Built target __idf_cmock"
@@ -6609,9 +6609,9 @@ esp-idf/esp_http_server/CMakeFiles/__idf_esp_http_server.dir/clean:
 # Target rules for target esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir
 
 # All Build rule for target.
-esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir/all: esp-idf/mbedtls/CMakeFiles/custom_bundle.dir/all
 esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir/all: esp-idf/esp_system/CMakeFiles/memory.ld.dir/all
 esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir/all: esp-idf/esp_system/CMakeFiles/sections.ld.in.dir/all
+esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir/all: esp-idf/mbedtls/CMakeFiles/custom_bundle.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir/build.make esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir/depend
 	$(MAKE) $(MAKESILENT) -f esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir/build.make esp-idf/esp_https_ota/CMakeFiles/__idf_esp_https_ota.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num= "Built target __idf_esp_https_ota"
@@ -6739,9 +6739,9 @@ esp-idf/protobuf-c/CMakeFiles/__idf_protobuf-c.dir/clean:
 # Target rules for target esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir
 
 # All Build rule for target.
-esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/all: esp-idf/console/CMakeFiles/__idf_console.dir/all
 esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/all: esp-idf/protobuf-c/CMakeFiles/__idf_protobuf-c.dir/all
+esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/build.make esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/depend
 	$(MAKE) $(MAKESILENT) -f esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/build.make esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num=64 "Built target __idf_protocomm"
@@ -6773,11 +6773,11 @@ esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/clean:
 # Target rules for target esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir
 
 # All Build rule for target.
-esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/all: esp-idf/console/CMakeFiles/__idf_console.dir/all
 esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/all: esp-idf/esp_https_server/CMakeFiles/__idf_esp_https_server.dir/all
 esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/all: esp-idf/protobuf-c/CMakeFiles/__idf_protobuf-c.dir/all
 esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/all: esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/all
+esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/build.make esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/depend
 	$(MAKE) $(MAKESILENT) -f esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/build.make esp-idf/esp_local_ctrl/CMakeFiles/__idf_esp_local_ctrl.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num=27 "Built target __idf_esp_local_ctrl"
@@ -6873,8 +6873,8 @@ esp-idf/wear_levelling/CMakeFiles/__idf_wear_levelling.dir/clean:
 # Target rules for target esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir
 
 # All Build rule for target.
-esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/all: esp-idf/wear_levelling/CMakeFiles/__idf_wear_levelling.dir/all
+esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/build.make esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/depend
 	$(MAKE) $(MAKESILENT) -f esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/build.make esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num=39 "Built target __idf_fatfs"
@@ -7098,11 +7098,11 @@ esp-idf/spiffs/CMakeFiles/__idf_spiffs.dir/clean:
 # Target rules for target esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir
 
 # All Build rule for target.
-esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all: esp-idf/console/CMakeFiles/__idf_console.dir/all
 esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all: esp-idf/protobuf-c/CMakeFiles/__idf_protobuf-c.dir/all
 esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all: esp-idf/protocomm/CMakeFiles/__idf_protocomm.dir/all
 esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all: esp-idf/json/CMakeFiles/__idf_json.dir/all
+esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/build.make esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/depend
 	$(MAKE) $(MAKESILENT) -f esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/build.make esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num=75 "Built target __idf_wifi_provisioning"
@@ -7134,7 +7134,6 @@ esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/clean:
 # Target rules for target esp-idf/main/CMakeFiles/__idf_main.dir
 
 # All Build rule for target.
-esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/app_trace/CMakeFiles/__idf_app_trace.dir/all
 esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/unity/CMakeFiles/__idf_unity.dir/all
 esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/cmock/CMakeFiles/__idf_cmock.dir/all
@@ -7158,6 +7157,7 @@ esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/perfmon/CMakeFiles/__idf_per
 esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/rt/CMakeFiles/__idf_rt.dir/all
 esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/spiffs/CMakeFiles/__idf_spiffs.dir/all
 esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/wifi_provisioning/CMakeFiles/__idf_wifi_provisioning.dir/all
+esp-idf/main/CMakeFiles/__idf_main.dir/all: esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/all
 	$(MAKE) $(MAKESILENT) -f esp-idf/main/CMakeFiles/__idf_main.dir/build.make esp-idf/main/CMakeFiles/__idf_main.dir/depend
 	$(MAKE) $(MAKESILENT) -f esp-idf/main/CMakeFiles/__idf_main.dir/build.make esp-idf/main/CMakeFiles/__idf_main.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aaronjosserand-austin/Projects/tinyenc/esp32_router/build/CMakeFiles --progress-num=58 "Built target __idf_main"

@@ -224,6 +224,7 @@ int main(int argc,char**argv){
         else if(!strncmp(argv[i],"--fixth=",8)) FIXTH=atoi(argv[i]+8);
         else if(!strcmp(argv[i],"--curve")) CURVE=1;
         else if(!strcmp(argv[i],"--errs")) DUMPERR=1;
+        else if(!strcmp(argv[i],"--ship")) FIXTH=RSHIP_TH;
         else if(prune_parse(argv[i],&PRUNE)) { /* consumed */ }
 }
     if(USE_TEST){

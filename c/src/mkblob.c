@@ -92,7 +92,7 @@ int main(int argc,char**argv){
         fprintf(stderr,"  ERROR: pruning changes the tuned threshold. Run\n"
                        "    ./c/bin/compare <data> <prune flags>\n"
                        "  and pass the reported th=N as --threshold=N\n"); return 1; }
-    else R.threshold=136;   /* tuned on dev for the unpruned index */
+    else R.threshold=RSHIP_TH;   /* single source of truth, see router.h */
     /* host reference: first NREF dev queries, with the answer this host gives */
     FILE*o=fopen(argv[5],"wb");
     uint32_t hdr[5]={RMAGIC,RD,(uint32_t)U_n,R.n_class,(uint32_t)R.threshold};
