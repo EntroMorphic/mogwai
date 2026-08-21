@@ -827,3 +827,53 @@ above the 84.1% measured at 136, then the +2.1 seen on dev did not transfer, the
 threshold move was fitting the dev curve, and **126 should be reverted to 136**.
 Recorded either way. A result inside noise of 84.1% counts as failure to
 transfer, not as a tie.
+
+## Test evaluation #3 — RESULT: the dev gain did not transfer, 126 reverted to 136
+
+    th=136   recall 84.1% ±2.5   fa= 8*  wa=15*  missed=20   (eval #2)
+    th=126   recall 85.5% ±2.4   fa=13   wa=16   missed=16   (eval #3)
+
+`*` The th=136 split was derived, not logged — eval #2 predates the `fa`/`wa`
+split in the run log. Lowering a threshold can only move items OUT of "none", so
+the 4 that left `missed` split 3-correct / 1-wrong-act, which forces fa=8, wa=15;
+8+15=23 reconciles with the recorded total exactly.
+
+**What the move bought and cost, paired:**
+
+    +3 commands recognised    (185 -> 188 of 220)
+    +1 wrong action           (15 -> 16)
+    +5 unbidden actuations    (8 -> 13;  0.29% -> 0.47% of 2754 negatives)
+
+**The recall gain is not significant.** The comparison is paired *and
+one-directional*: an item correct at 136 has score>136>126, so it cannot get
+worse at 126. Discordant pairs are therefore b=3, c=0 — exact two-sided
+binomial **p=0.25**.
+
+So: an unbidden-actuation rate that nearly doubled, bought a recall gain
+indistinguishable from zero. For something that actuates physical hardware that
+is the wrong trade. **Reverted to 136 per the falsifier pre-registered before the
+run.** Rebuilt, reflashed, PARITY EXACT, 43498 us.
+
+### Predictions scored strictly: 2 of 4
+
+| # | predicted | actual | |
+|---|---|---|---|
+| 1 | recall 83–88%, point 86 | 85.5% | **hit** |
+| 2 | missed 10–14, point 12 | 16 | **miss** — outside the range |
+| 3 | fa 3–7, point 5 | 13 | **miss** — 2.6× the point estimate |
+| 4 | fa+wa 24–32, point 28 | 29 | **hit** |
+
+Both misses are on the error columns, and both in the same direction: **I
+under-predicted false actuations from dev again.** In eval #2 the fa rate
+*improved* on test (1.05% → 0.84%) and I recorded that as the lesson. Here it
+*worsened* (dev 0.22% → test 0.47%). The real lesson is not "the rate improves"
+but that **the fa rate does not transfer from dev in a predictable direction at
+all** — it moved one way at th=136 and the other at th=126. Any threshold choice
+justified by a projected dev fa rate is built on sand.
+
+### What this says about the dev curve
+
+The entire "lower the threshold" exploration (136 → 126 → 111 → 96) was run on
+dev. The one point of it that was checked against held-out data did not survive.
+The dev curve was not lying — 88.0% on dev is real — it simply does not predict
+the held-out frontier closely enough to justify a 10-point threshold move.

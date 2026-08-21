@@ -3,3 +3,4 @@ evaluation 1: VOID — measured d=256/mask=none/veto=off, a config selected
   Cause found and fixed; assertions added. Budget not reset: it was spent.
 1
 evaluation 2: 2026-08-20T02:56:35Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test
+evaluation 3: 2026-08-21T13:57:45Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test --ship

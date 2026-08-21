@@ -21,16 +21,29 @@
 #define RSCALE    16384              /* fixed-point scale for the centre */
 #define RMAGIC    0x52545231u        /* 'RTR1' */
 
-/* Shipped operating point. Deliberately NOT what tune() returns (136): tune
-   minimises 3*(fa+wa)+ms, which encodes a different preference from the one
-   chosen here. At 126 the router is +2.1 points more accurate on dev
-   (85.9 -> 88.0) and misses 6 fewer commands, costing 2 additional unbidden
-   actuations (1 -> 3 of 1335 negatives, 0.07%% -> 0.22%%). Raising the threshold
-   was measured NOT to buy precision: fa is flat at 1 from th=136 to 184.
-   Chosen on DEV; the test fa/wa split at this threshold is unmeasured.
-   mkblob and compare --ship both read this, so exporter and harness cannot
-   disagree the way they did when the threshold was hardcoded in mkblob. */
-#define RSHIP_TH  126
+/* Shipped operating point. This is what tune() returns, but that is not why it
+   is here — it was moved to 126 on dev evidence and moved BACK by a held-out
+   measurement, which is the more useful record.
+
+   On dev, 126 looked clearly better: recall 85.9 -> 88.0, missed 14 -> 8, for
+   1 -> 3 unbidden actuations. On the held-out set (test eval #3) the gain did
+   not transfer:
+
+     th=136   recall 84.1%   fa= 8  wa=15  missed=20
+     th=126   recall 85.5%   fa=13  wa=16  missed=16
+
+   +3 commands recognised, and +5 unbidden actuations to get them. The recall
+   comparison is paired and one-directional — an item correct at 136 has
+   score>136>126 and cannot get worse — so b=3, c=0, exact p=0.25. Not
+   significant. Meanwhile the unbidden rate nearly doubled, 0.29% -> 0.47%.
+
+   Paying a measurable safety cost for a recall gain indistinguishable from zero
+   is the wrong trade for something that actuates hardware. Reverted per the
+   falsifier pre-registered before the run.
+
+   Read with doc/METHOD.md: recall cannot see false actuations; fa is the number
+   that matters here. mkblob and compare --ship both read this constant. */
+#define RSHIP_TH  136
 
 typedef struct { uint32_t w[RWORDS]; } rvec;
 

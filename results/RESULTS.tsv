@@ -7,3 +7,7 @@ utc	git_sha	tree	split	variant	iot_acc	se	fa	wa	missed	index_kb	th	n
 2026-08-21T13:43:41Z	e011948	DIRTY	dev	twin-ternary (2b)	88.0	2.3	3	15	8	656	126	1527
 2026-08-21T13:46:13Z	fd162cf	DIRTY	dev	binary (1 bit)	80.7	2.8	1	13	24	328	126	1527
 2026-08-21T13:46:13Z	fd162cf	DIRTY	dev	twin-ternary (2b)	88.0	2.3	3	15	8	656	126	1527
+2026-08-21T13:57:45Z	7ea3228	DIRTY	TEST	binary (1 bit)	75.5	2.9	5	14	40	328	126	2974
+2026-08-21T13:57:45Z	7ea3228	DIRTY	TEST	twin-ternary (2b)	85.5	2.4	13	16	16	656	126	2974
+2026-08-21T14:04:28Z	7ea3228	DIRTY	dev	binary (1 bit)	80.7	2.8	1	13	24	328	136	1527
+2026-08-21T14:04:28Z	7ea3228	DIRTY	dev	twin-ternary (2b)	85.9	2.5	1	13	14	656	136	1527

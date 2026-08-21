@@ -14,35 +14,52 @@ parameters; it needs a good representation and an honest threshold.
 
 ## Result
 
-| | recall | unbidden (fa) | wrong action (wa) | missed | size |
+**Held-out test set, at the shipped threshold** — 220 IoT commands, 2754 negatives:
+
+| | recall | unbidden (fa) | wrong action (wa) | missed |
+|---|---|---|---|---|
+| **twin-ternary, d=256, th=136** | **84.1% ±2.5** | **8** (0.29%) | **15** | **20** |
+
+Dev split (192 IoT, 1335 negatives), same threshold, with the size-matched control:
+
+| | recall | fa | wa | missed | size |
 |---|---|---|---|---|---|
 | binary, 1 bit/dim, d=256 | 80.7% ±2.8 | 1 | 13 | 24 | 328 KB |
 | binary, 1 bit/dim, d=512 | 79.7% ±2.9 | 0 | 15 | 24 | 656 KB |
-| **twin-ternary, 2 bit/dim, d=256** | **88.0% ±2.3** | **3** | **15** | **8** | **656 KB** |
+| **twin-ternary, 2 bit/dim, d=256** | **85.9% ±2.5** | **1** | **13** | **14** | **656 KB** |
 
-Dev split, 192 IoT commands and 1335 negatives, at the shipped threshold 126.
 The d=512 binary row is the **size-matched** control — the honest comparison,
 since twin-ternary spends two bits per dimension. At identical bytes per vector
-twin recalls 8.3 points more and misses a third as many commands (8 vs 24), and
-binary's operating curve is *identical* at d=256 and d=512: it saturates, so the
-gain is structural rather than capacity.
+twin recalls 6.2 points more and misses 10 fewer commands, and binary's operating
+curve is *identical* at d=256 and d=512: it saturates, so the gain is structural
+rather than capacity.
 
-**But binary is the more conservative router**, and the table should not be read
-as a clean sweep: at matched bytes it fires on **zero** non-commands where twin
-fires on three. Twin buys recall and pays in unbidden actuations. Which side of
-that you want is a deployment decision, not a benchmark result — see
-[EXPERIMENTS.md](EXPERIMENTS.md).
+**But binary is the more conservative router** and the table is not a clean
+sweep: at matched bytes it fires on **zero** non-commands where twin fires on
+one. Twin buys recall and pays in unbidden actuations. Which side you want is a
+deployment decision — see [EXPERIMENTS.md](EXPERIMENTS.md).
 
-**Held-out test: 84.1% ±2.5** — but measured at threshold 136, **not** the
-shipped 126. It does not describe the current config. Test budget is deliberately
-scarce; see [doc/METHOD.md](doc/METHOD.md).
+### Why 136 and not 126
+
+126 was chosen on dev, where it looked clearly better (85.9 → 88.0% recall,
+missed 14 → 8). A held-out measurement then showed the gain did not transfer:
+**+3 commands recognised for +5 unbidden actuations**, and the recall comparison
+is paired and one-directional, so b=3 / c=0, **exact p=0.25 — not significant**.
+An unbidden rate that nearly doubles (0.29% → 0.47%) to buy a recall gain
+indistinguishable from zero is the wrong trade for hardware that actuates.
+Reverted per a falsifier pre-registered before the run.
 
 ### Read the error columns, not the recall column
 
 `recall` is `correct_IoT / total_IoT`. **It cannot see false actuations at all** —
 firing on a non-command costs it nothing, so it is maximised by never rejecting.
 For a system that actuates physical devices, `fa` (fired on something that was
-not a command) is the number that matters. It is 3 in 1335 negatives, 0.22%.
+not a command) is the number that matters. On the held-out set it is **8 in 2754
+negatives, 0.29%**.
+
+That distinction is not academic here. Moving the threshold from 136 to 126 gains
+2.1 points of dev recall and nearly doubles the unbidden rate — and the recall
+gain does not survive a held-out check. Recall alone would have endorsed it.
 
 ## On hardware
 
