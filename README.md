@@ -93,7 +93,8 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
 
     c/src/          the entire shipping system (see doc/TOOLS.md for each tool)
     c/test/         exhaustive popcount proof, blob-format validator
-    esp32_router/   ESP-IDF firmware; router.c/ternary.c are SYMLINKS into c/src
+    esp32_router/   VALIDATION firmware (see its README) — parity + benchmarks,
+                    not a product build; sources are SYMLINKS into c/src
     doc/            blob format, method/guardrails, tool reference
     EXPERIMENTS.md  the full experimental record, including invalidated results
     FRAME.md        what these numbers do and do not mean — read before quoting any
