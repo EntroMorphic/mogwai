@@ -1,0 +1,27 @@
+# Run log
+
+`RESULTS.tsv` gets one row per variant per run, stamped with UTC, the git SHA,
+and whether the tree was clean. Appended automatically by `make compare` /
+`make testset`.
+
+    utc  git_sha  tree  split  variant  iot_acc  se  fa  wa  missed  index_kb  th  n
+
+`fa` = fired on a non-command (unbidden actuation). `wa` = acted wrongly on a
+real command. `iot_acc` is recall over IoT items and **cannot see `fa`** — see
+`../doc/METHOD.md`.
+
+## `RESULTS.v1-corrupt.tsv` — kept as evidence, do not use
+
+The v1 log was written by scraping the formatted console output with awk on
+whitespace fields. `binary (1 bit)` is **three** fields, so every binary row
+logged its variant as `binary (1`, shifted each later column by one, and dropped
+`index_kb` entirely. The schema also changed silently mid-project when error
+bars were added, so early rows and late rows do not mean the same thing.
+
+Not repairable from the file itself — the lost columns were never written.
+Retained because the timestamps and SHAs are still a true record of *when* runs
+happened, and because deleting the evidence of a tracking failure would be the
+wrong lesson.
+
+`compare` now emits its own `ROW\t...` line and the Makefile only stamps and
+appends it. Nothing parses formatted output.

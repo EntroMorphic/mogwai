@@ -20,7 +20,8 @@ int main(int argc,char**argv){
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)){
         if(!isiot(l)) continue;
         if((ti++ % 4)==0) DEV[D_n++]=strdup(t);          /* dev, excluded from index */
-    } fclose(f);
+    }
+    fclose(f);
     /* the index also receives NLU-Eval iot rows */
     f=fopen(argv[2],"r");
     while(fgets(line,sizeof line,f)){
@@ -32,7 +33,8 @@ int main(int argc,char**argv){
             if(L>=2&&s[0]=='"'&&s[L-1]=='"'){s[L-1]=0;fl[i]=s+1;} }
         if(strcmp(fl[2],"iot"))continue;
         IDX[I_n++]=strdup(fl[9]);
-    } fclose(f);
+    }
+    fclose(f);
     int leak=0;
     for(int i=0;i<D_n;i++){
         char a[512]; r_norm(DEV[i],a,sizeof a);

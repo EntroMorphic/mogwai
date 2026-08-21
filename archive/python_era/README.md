@@ -36,3 +36,10 @@ experiments": experiments become products.
 ## Do not run any of this
 
 It is not maintained and does not reflect the current system. Read `../../README.md`.
+
+## `tinyenc_test_firmware.bin`
+
+The encoder-era firmware image that actually ran on the board, lifted out of
+`esp32_encoder_firmware/build/` before that build tree was untracked (it was
+~4400 regenerable files). SHA256 alongside. The build tree itself remains on
+disk, just not in git.

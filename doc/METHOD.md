@@ -39,6 +39,27 @@ so `fscanf("%d")` read 0, incremented to 1, and truncated — destroying the aud
 note and resetting the count *every use*. A guard that cannot count past one is
 not a guard. Counter and log are now separate files.
 
+## 3b. The run log was silently corrupt for the whole project
+
+`results/RESULTS.tsv` exists so that tracking is structural rather than a
+discipline anyone has to remember. It was written by scraping the formatted
+console output with `awk` on whitespace fields.
+
+**Incident.** `binary (1 bit)` is **three** whitespace fields. Every binary row
+therefore logged its variant as `binary (1`, shifted each later column by one,
+and dropped `index_kb` entirely. The schema also changed silently mid-project
+when error bars were added, so early and late rows do not mean the same thing.
+Nothing ever read the file closely enough to notice.
+
+**Fixed structurally:** `compare` now emits its own `ROW\t...` line with the
+`fa`/`wa` split included, and the Makefile only stamps and appends it. Nothing
+parses formatted output. The corrupt log is kept as `RESULTS.v1-corrupt.tsv` —
+deleting the evidence of a tracking failure would be the wrong lesson.
+
+**Also added `make ship`**, because nothing in the Makefile reproduced the
+README table: `make compare` auto-tunes and lands on 136/138, not the shipped
+126. The two now differ by design and are labelled as such.
+
 ## 4. Curve dominance, not "breaks zero"
 
 A change is not accepted because it fixes some cases and breaks none. It must

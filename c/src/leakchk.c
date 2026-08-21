@@ -35,7 +35,8 @@ int main(int argc,char**argv){
         if(!isiot(l)) continue;
         if((ti++ % 4)==0){ D_t[D_n++]=strdup(t); continue; }
         U_t[U_n]=strdup(t); snprintf(U_l[U_n],RNAMELEN,"%s",l); U_n++;
-    } fclose(f);
+    }
+    fclose(f);
     f=fopen(argv[2],"r");
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l))
         if(isiot(l)){ U_t[U_n]=strdup(t); snprintf(U_l[U_n],RNAMELEN,"%s",l); U_n++; }

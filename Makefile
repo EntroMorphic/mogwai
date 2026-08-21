@@ -7,7 +7,7 @@ CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c
 DATA    := data/train.json data/validation.json data/test.json data/nlu_home.csv
 LOG     := results/RESULTS.tsv
 
-.PHONY: all fetch compare testset test clean log-header
+.PHONY: all fetch compare ship testset test tools clean log-header
 all: $(BIN)/compare
 
 $(BIN)/%: $(SRC)/%.c $(CORE) $(SRC)/router.h $(SRC)/ternary.h
@@ -29,18 +29,24 @@ define RUNCOMPARE
 @mkdir -p results
 @sha=$$(git rev-parse --short HEAD 2>/dev/null || echo nogit); \
  dirty=$$(git diff --quiet 2>/dev/null && echo clean || echo DIRTY); \
+ ts=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
  out=$$($(BIN)/compare $(DATA) $(1) 2>&1); \
- echo "$$out"; \
- echo "$$out" | awk -v s="$$sha" -v d="$$dirty" -v ts="$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-   '/^  (binary|twin)/ {gsub(/%/,"",$$0); \
-     printf "%s\t%s\t%s\t$(2)\t%s %s\t%s\t%s\t%s\t%s\n", ts, s, d, $$1, $$2, $$3, $$4, $$5, $$6}' \
+ echo "$$out" | grep -v '^ROW'; \
+ echo "$$out" | awk -F'\t' -v s="$$sha" -v d="$$dirty" -v ts="$$ts" \
+   'BEGIN{OFS="\t"} $$1=="ROW"{ r=$$2; for(i=3;i<=NF;i++) r=r OFS $$i; print ts,s,d,r }' \
    >> $(LOG); \
- echo "  -> logged to $(LOG)"
+ n=$$(echo "$$out" | grep -c '^ROW'); \
+ echo "  -> $$n row(s) appended to $(LOG)"
 endef
 
 # dev/validation split — safe to run as often as you like
 compare: $(BIN)/compare $(DATA) log-header
 	$(call RUNCOMPARE,,compare)
+
+# the SHIPPED operating point (threshold RSHIP_TH, not tune()'s choice).
+# Reproduces the table in README.md. `compare` auto-tunes and will NOT match it.
+ship: $(BIN)/compare $(DATA) log-header
+	$(call RUNCOMPARE,--ship,ship)
 
 # TEST SET. Burns one unit of results/TEST_BUDGET. Deliberately not `make test`.
 testset: $(BIN)/compare $(DATA) log-header
@@ -53,7 +59,7 @@ test:
 
 log-header:
 	@mkdir -p results
-	@[ -s $(LOG) ] || printf "utc\tgit_sha\ttree\texperiment\tvariant\tiot_acc\twrong\tmissed\tindex_kb\n" > $(LOG)
+	@[ -s $(LOG) ] || printf "utc\tgit_sha\ttree\tsplit\tvariant\tiot_acc\tse\tfa\twa\tmissed\tindex_kb\tth\tn\n" > $(LOG)
 
 clean:
 	rm -rf $(BIN)

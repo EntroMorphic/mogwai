@@ -212,6 +212,14 @@ static void report(const char *name, hit (*f)(const char *), int lo, int hi, dou
     double se = 100.0 * sqrt(p * (1 - p) / (z.in ? z.in : 1));
     printf("  %-20s %6.1f%% +-%.1f  %-7d %-7d %7.0f  th=%d\n",
            name, 100.0 * p, se, z.fa + z.wa, z.ms, kb, th);
+    /* Machine-readable row. The Makefile used to scrape the line above with
+       awk on whitespace fields, which silently corrupted every log entry:
+       "binary (1 bit)" is THREE fields, so the variant logged as "binary (1"
+       and every later column shifted. index_kb was lost entirely. The writer
+       emits its own row now; nothing parses formatted output. */
+    printf("ROW\t%s\t%s\t%.1f\t%.1f\t%d\t%d\t%d\t%.0f\t%d\t%d\n",
+           USE_TEST ? "TEST" : "dev", name, 100.0 * p, se,
+           z.fa, z.wa, z.ms, kb, th, n);
     if (LAST) mcnemar(LAST, LAST_TH, hh, th, lab, n);
     LAST = hh; LAST_TH = th; LAST_NAME = name;
 }

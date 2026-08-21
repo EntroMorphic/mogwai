@@ -24,7 +24,8 @@ int main(int argc,char**argv){
         const char *lab = io ? l : "none";
         if(io && (ti++ % 4)==0){ D_t[D_n]=strdup(t); snprintf(D_l[D_n],RNAMELEN,"%s",lab); D_n++; continue; }
         U_t[U_n]=strdup(t); U_y[U_n]=(uint8_t)cls_of(lab); U_n++;
-    } fclose(f);
+    }
+    fclose(f);
     static prior_t P; pr_build(&P,U_t,U_y,U_n,NC);
     printf("\n  index %d utterances, %d classes\n",U_n,NC);
     int none_id=cls_of("none");

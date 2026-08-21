@@ -6,3 +6,10 @@ c/bin/
 *.o
 __pycache__/
 *.pyc
+
+# ESP-IDF build output: regenerable, ~4400 files and >100 MB per tree.
+# Both firmware build dirs were tracked, which is most of .git's size.
+# The one artifact worth keeping — the encoder-era firmware that actually ran on
+# the board — is preserved standalone at archive/python_era/tinyenc_test_firmware.bin
+build/
+esp32_router/build/

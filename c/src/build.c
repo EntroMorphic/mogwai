@@ -49,7 +49,7 @@ static void load_jsonl(const char *path) {
 static void load_nlu(const char *path, const char *massive_test) {
     /* build a set of normalised test strings to exclude (MASSIVE derives from this) */
     static char *excl[8000]; int nx = 0;
-    FILE *e = fopen(massive_test, "r"); char line[4096], t[512], l[RNAMELEN];
+    FILE *e = fopen(massive_test, "r"); char line[4096], t[512];
     while (e && fgets(line, sizeof line, e))
         if (json_str(line, "text", t, sizeof t)) {
             char nb[512]; r_norm(t, nb, sizeof nb);

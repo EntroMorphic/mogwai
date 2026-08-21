@@ -49,7 +49,8 @@ int main(int argc,char**argv){
         if(io&&(ti++%4)==0){ push(V_t,V_l,&V_n,t,l); hs_add(t); continue; }
         if(!io&&(tn++%8)==0){ push(V_t,V_l,&V_n,t,"none"); hs_add(t); continue; }
         push(U_t,U_l,&U_n,t,io?l:"none"); hs_add(t);
-    } fclose(f);
+    }
+    fclose(f);
     f=fopen(argv[2],"r");
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l))
         if(isiot(l)&&!hs_has(t)){ push(U_t,U_l,&U_n,t,l); hs_add(t); }
@@ -65,7 +66,8 @@ int main(int argc,char**argv){
         if(strcmp(fl[2],"iot")||hs_has(fl[9]))continue;
         char lb[RNAMELEN]; snprintf(lb,sizeof lb,"iot_%s",fl[3]);
         push(U_t,U_l,&U_n,fl[9],lb); hs_add(fl[9]); added++;
-    } fclose(f);
+    }
+    fclose(f);
     inv_disjoint("index vs DEV",  U_t,U_n,V_t,V_n);
     inv_disjoint("index vs TEST", U_t,U_n,T_t,T_n);
     memset(&R,0,sizeof R); R.magic=RMAGIC; R.dim=RD; R.n_index=U_n;
@@ -116,7 +118,7 @@ int main(int argc,char**argv){
         fwrite(&sc,4,1,o); fwrite(&c8,1,1,o);
     }
     long bytes=ftell(o); fclose(o);
-    fprintf(stderr,"  index %d  classes %u  refs %u\n",U_n,R.n_class,nref);
+    fprintf(stderr,"  index %d (+NLU %d)  classes %u  refs %u\n",U_n,added,R.n_class,nref);
     fprintf(stderr,"  wrote %s: %ld bytes (%.0f KB)\n",argv[5],bytes,bytes/1024.0);
     return 0;
 }

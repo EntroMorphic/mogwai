@@ -1,0 +1,11 @@
+utc	git_sha	tree	experiment	variant	iot_acc	wrong	missed	index_kb
+2026-08-19T19:48:31Z	1805441	DIRTY	compare	binary (1	bit)	74.1	12	47
+2026-08-19T19:48:31Z	1805441	DIRTY	compare	twin-ternary (2b)	80.5	14	32	1510
+2026-08-19T19:53:36Z	9dbffb8	DIRTY	compare	binary (1	bit)	74.1	12	47
+2026-08-19T19:53:36Z	9dbffb8	DIRTY	compare	twin-ternary (2b)	83.2	12	27	1510
+2026-08-19T20:05:20Z	9dbffb8	DIRTY	compare	binary (1	bit)	74.1	12	47
+2026-08-19T20:05:20Z	9dbffb8	DIRTY	compare	twin-ternary (2b)	83.2	12	27	1510
+2026-08-19T23:36:41Z	9e5b9fb	DIRTY	compare	binary (1	bit)	80.7	+-2.8	13
+2026-08-19T23:36:41Z	9e5b9fb	DIRTY	compare	twin-ternary (2b)	85.9	+-2.5	14	14
+2026-08-20T02:56:36Z	ceb5983	DIRTY	TESTSET	binary (1	bit)	75.5	+-2.9	17
+2026-08-20T02:56:36Z	ceb5983	DIRTY	TESTSET	twin-ternary (2b)	84.1	+-2.5	23	20
