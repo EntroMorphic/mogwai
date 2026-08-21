@@ -1,4 +1,4 @@
-# Twin-ternary intent router for ESP32
+# mogwai — twin-ternary intent router for ESP32
 
 A natural-language interface for controlling ESP32-class hardware, built as an
 **integer-only nearest-neighbour router** rather than a language model.
@@ -130,7 +130,17 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
 
 ## Standing constraints
 
-- **No Python** anywhere in the pipeline. Corpora are fetched with `curl`.
-- **No float** on the hot path; `int32_t` is the widest type.
-- **Nothing is deleted**, only archived.
-- Every run is logged and stamped with the git SHA and clean/dirty tree state.
+Small, capable, and governed by three absolute prohibitions. Break them and you
+get something much worse — which is the whole reason for the name.
+
+1. **No Python** anywhere in the pipeline. Corpora are fetched with `curl`.
+   Not in the product, not on the hot path, not as glue, not as a "quick"
+   experiment harness that quietly becomes the deliverable.
+2. **No float** on the hot path. `int32_t` is the widest type. No `sqrt`, no
+   division that is not integer, no learned parameters anywhere.
+3. **Nothing is deleted, only archived.** Superseded work, negative results and
+   the autopsies of both are kept — see [doc/ARCHIVE.md](doc/ARCHIVE.md).
+
+Every run is logged and stamped with the git SHA and clean/dirty tree state.
+Run `make regress` after any structural change: 29 checks, including that the
+negative results still reproduce.
