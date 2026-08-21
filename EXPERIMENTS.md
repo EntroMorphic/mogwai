@@ -1021,3 +1021,53 @@ open problem rather than a solved one.
 
 Shipped config unchanged. `cuemine.c`, `cue.c`, `--channels` and `--priorcls`
 retained as tracked diagnostics.
+
+## Shrinking the prior for the device: 2.13 MB -> 74 KB, bit-exact
+
+The selector needs the word prior on the ESP32. `prior_t` is **2.13 MB** — it
+stores what is needed to BUILD the prior (32768 x 16 int32 counts plus totals),
+not what is needed to USE it.
+
+**My first reduction claim was wrong.** The synthesis said "store argmax +
+margin per bucket, 96 KB". That cannot work: `pr_vote` sums clamped per-class
+lift deltas across the words of an utterance and takes the margin of the
+**aggregate**, so per-bucket argmax cannot reconstruct it. Corrected before
+implementing.
+
+Measured the real structure instead (`--gatesize`):
+
+    live buckets (w_tot >= 2)   2512 of 32768   (7.7%)
+    nonzero deltas              3487 total, 1.39 per live bucket
+    82% of live buckets hold exactly ONE nonzero delta
+    delta range                 [-256, 1024]  -> int16
+
+So the table is **sparse**, and a CSR layout collapses it:
+
+    off[PR_HASH+1]  uint16   64.0 KB
+    cls[3487]       uint8     3.4 KB
+    del[3487]       int16     6.8 KB
+                             74.2 KB     vs 2.13 MB = **29x**
+
+**Verified bit-exact, not "close enough":** `gate_vote` matches `pr_vote` on
+class AND margin across **12027 utterances** (1527 dev + 10500 index) — 0
+mismatches of either kind. `words_of` is shared rather than reimplemented, so
+the gate buckets words identically; a different hash would make it a different
+model, not a smaller one.
+
+One assumption is asserted rather than trusted: `gate_vote` treats "no pairs" as
+"w_tot < 2", which holds only if every live bucket produced a nonzero delta.
+Measured true, but data-dependent, so `gate_build` checks every bucket and
+refuses to produce a table if it ever fails.
+
+End to end, the compact table changes nothing:
+
+    baseline                      recall 85.9%  fa=1  wa=13  missed=14
+    selector via prior (2.13 MB)  recall 87.5%  fa=1  wa=10  missed=14
+    selector via gate  (74 KB)    recall 87.5%  fa=1  wa=10  missed=14
+
+**Device budget: 656 KB index + 74 KB gate = 730 KB of 4096 KB flash (17.8%).**
+The blocker identified in the LMM synthesis is closed.
+
+Still NOT shipped: the selector remains opt-in and the blob is byte-identical.
+It has no held-out measurement, and the 126 threshold looked this good on dev
+too. Next step is a pre-registered test evaluation, per selector_synth.md.

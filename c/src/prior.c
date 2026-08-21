@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-static int words_of(const char *t, uint32_t *out, int cap) {
+int words_of(const char *t, uint32_t *out, int cap) {
     char b[512]; int n = r_norm(t, b, sizeof b), k = 0, s = -1;
     for (int i = 0; i <= n; i++) {
         int sp = (b[i] == ' ' || b[i] == 0);

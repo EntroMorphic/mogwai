@@ -26,6 +26,8 @@ typedef struct {
     int32_t  n_total;                   /* index size, for lift          */
 } prior_t;
 
+int  words_of(const char *t, uint32_t *out, int cap);   /* shared with gate.c: the
+     gate MUST bucket words identically or it is a different model, not a smaller one */
 void pr_build(prior_t *p, char **texts, uint8_t *labels, int n, int n_class);
 /* returns best class and fills margin (top - second), both scaled by PR_SCALE */
 int  pr_vote(const prior_t *p, const char *text, int *margin);

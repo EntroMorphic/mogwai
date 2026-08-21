@@ -6,6 +6,7 @@
 #include "prior.h"
 #include "prune.h"
 #include "cue.h"
+#include "gate.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,9 @@ static cue_t CUE; static int USECUE = 0;   /* --cue: index-derived hard word cue
 static int CHANNELS = 0;   /* --channels: word vs n-gram error overlap */
 static int SELDUMP = 0;   /* --seldump: per-item signals a selector could use */
 static int XVAL = 0;      /* --xval: 2-fold CV inside the index */
+static int GATESZ = 0;    /* --gatesize: what a compact prior table needs */
+static int GATECHK = 0;   /* --gatecheck: gate must equal prior bit-exactly */
+static gate_t GATE; static int USEGATE = 0;  /* --gatesel: selector reads the compact table */
 static int PRIORCLS = 0;  /* --priorcls: router accepts/rejects, prior picks the class */
 static int SELMARG = 0;   /* --selmargin=N: prior votes only when its margin >= N */
 
@@ -87,6 +91,7 @@ static hit score_ter_impl(const char*txt,int use_prior){
         /* SELECTOR: the prior votes only when it has a margin. prmarg==0 means it
            matched no discriminating word — an abstention, not a weak opinion.
            Gate cross-validated inside the index on 183 disagreement items. */
+        if(USEGATE) pv = gate_vote(&GATE, txt, &mg);
         if(pv>=0 && cls0>=0 && mg>=SELMARG && strcmp(R.names[cls0],"none")
             && strcmp(R.names[pv],"none")
             && (PRIORCLS>=2 || r_family(&R,pv)==r_family(&R,cls0))) cls0=pv; }
@@ -336,6 +341,73 @@ static void xval(void) {
         free(TS);
     }
 }
+/* Measure what a compact gate table actually needs. My synthesis claimed 96 KB
+   from storing argmax+margin per bucket; that was WRONG — pr_vote sums clamped
+   per-class lift deltas across words, so the per-class deltas are required. */
+static void gatesize(void) {
+    long live = 0, nz = 0, maxnz = 0;
+    int dmin = 1 << 30, dmax = -(1 << 30);
+    long hist[9] = {0};
+    for (int h = 0; h < PR_HASH; h++) {
+        int64_t tot = PR.w_tot[h];
+        if (tot < 2) continue;                 /* pr_vote skips these entirely */
+        live++;
+        int k = 0;
+        for (uint32_t c = 0; c < R.n_class; c++) {
+            int64_t cnt = PR.w_cls[h][c];
+            if (!cnt || !PR.cls_n[c]) continue;
+            int64_t lift = (cnt * PR.n_total * PR_SCALE) / ((int64_t)PR.cls_n[c] * tot);
+            int64_t d = lift - PR_SCALE;
+            if (d >  4 * PR_SCALE) d =  4 * PR_SCALE;
+            if (d < -PR_SCALE)     d = -PR_SCALE;
+            if (d) { k++; if (d < dmin) dmin = (int)d; if (d > dmax) dmax = (int)d; }
+        }
+        nz += k; if (k > maxnz) maxnz = k;
+        hist[k > 8 ? 8 : k]++;
+    }
+    printf("  buckets total          %d\n", PR_HASH);
+    printf("  live (w_tot >= 2)      %ld  (%.1f%%)\n", live, 100.0*live/PR_HASH);
+    printf("  nonzero deltas         %ld  (avg %.2f per live bucket, max %ld)\n",
+           nz, (double)nz/live, maxnz);
+    printf("  delta range            [%d, %d]  -> fits int16\n", dmin, dmax);
+    printf("  nonzero-count histogram:");
+    for (int i = 0; i <= 8; i++) printf(" %d:%ld", i, hist[i]);
+    printf("\n\n  candidate encodings:\n");
+    printf("    full prior_t                     %8.2f MB\n", sizeof(prior_t)/1048576.0);
+    printf("    dense int16 deltas, all buckets   %8.2f MB\n", (double)PR_HASH*RMAXCLS*2/1048576.0);
+    printf("    dense int16, live buckets only    %8.2f KB\n", (double)live*RMAXCLS*2/1024.0);
+    printf("    sparse (cls:u8 + delta:i16) pairs %8.2f KB  + %.2f KB index\n",
+           (double)nz*3/1024.0, (double)PR_HASH*4/1024.0);
+}
+/* --gatecheck: the compact table must be BIT-IDENTICAL to the full prior.
+   Not "close enough" — every class and every margin, on every dev item. */
+static void gatecheck(void) {
+    static gate_t G;
+    gate_build(&G, &PR);
+    printf("  full prior_t   %8.2f MB\n", sizeof(prior_t)/1048576.0);
+    printf("  gate table     %8.2f KB   (%u pairs)  -> %.0fx smaller\n",
+           gate_bytes(&G)/1024.0, G.npair, (double)sizeof(prior_t)/gate_bytes(&G));
+    int bad_c = 0, bad_m = 0, n = 0, abst = 0;
+    for (int i = 0; i < V_n; i++) {
+        int m1, m2;
+        int a = pr_vote(&PR, V_t[i], &m1);
+        int b = gate_vote(&G, V_t[i], &m2);
+        n++; if (a < 0) abst++;
+        if (a != b) bad_c++;
+        if (m1 != m2) bad_m++;
+    }
+    for (int i = 0; i < U_n; i++) {          /* and every index utterance too */
+        int m1, m2;
+        int a = pr_vote(&PR, U_t[i], &m1);
+        int b = gate_vote(&G, U_t[i], &m2);
+        n++;
+        if (a != b) bad_c++;
+        if (m1 != m2) bad_m++;
+    }
+    printf("  checked %d utterances (%d dev + %d index), %d abstentions\n", n, V_n, U_n, abst);
+    printf("  class mismatches %d   margin mismatches %d   %s\n",
+           bad_c, bad_m, (!bad_c && !bad_m) ? "EXACT" : "*** DIVERGENT ***");
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -374,6 +446,9 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--channels")) CHANNELS=1;
         else if(!strcmp(argv[i],"--seldump")) SELDUMP=1;
         else if(!strcmp(argv[i],"--xval")) XVAL=1;
+        else if(!strcmp(argv[i],"--gatesize")) GATESZ=1;
+        else if(!strcmp(argv[i],"--gatecheck")) GATECHK=1;
+        else if(!strcmp(argv[i],"--gatesel")) { USEGATE=1; PRIORCLS=1; }
         else if(!strcmp(argv[i],"--priorcls")) PRIORCLS=1;
         else if(!strcmp(argv[i],"--priorcls2")) PRIORCLS=2;
         else if(!strncmp(argv[i],"--selmargin=",12)) SELMARG=atoi(argv[i]+12);
@@ -470,6 +545,7 @@ int main(int argc,char**argv){
                 if(ob[d]*2>=om[d]) TSIG[c].s[d>>5]|=1u<<(d&31); } } }
     pr_build(&PR, U_t, R.label, U_n, (int)R.n_class);
     cue_build(&CUE, U_t, R.label, U_n, (int)R.n_class);   /* index only — never dev */
+    gate_build(&GATE, &PR);   /* compact form of PR, verified bit-exact */
     long tb=0; for(int i=0;i<U_n;i++) tb+=strlen(U_t[i])+1;
     code_overlap("DEV", V_t, V_l, V_n);
     code_overlap("TEST", T_t, T_l, T_n);
@@ -479,6 +555,8 @@ int main(int argc,char**argv){
     if(CHANNELS){ channels(); return 0; }
     if(SELDUMP){ seldump(); return 0; }
     if(XVAL){ xval(); return 0; }
+    if(GATESZ){ gatesize(); return 0; }
+    if(GATECHK){ gatecheck(); return 0; }
     report("binary (1 bit)",   score_bin,-RD,RD,          U_n*sizeof(rvec)/1024.0);
     report("twin-ternary (2b)",score_ter,-512,512,        U_n*sizeof(tvec)/1024.0);
     /* word prior CUT: passes breaks-zero but does not move the operating curve.
