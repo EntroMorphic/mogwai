@@ -57,3 +57,12 @@ log-header:
 
 clean:
 	rm -rf $(BIN)
+
+# Build every tool and test. Catches bit-rot in diagnostics that nothing else
+# compiles — probe.c sat broken behind a changed t_score signature until this
+# target existed.
+.PHONY: tools
+tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c)))
+	@cc $(CFLAGS) -DTPOPCNT=1 -o $(BIN)/t_popcnt c/test/t_popcnt.c c/test/probe.c $(SRC)/router.c
+	@cc $(CFLAGS) -o $(BIN)/blobfmt c/test/blobfmt.c $(SRC)/router.c $(SRC)/ternary.c
+	@echo "  all tools + tests built: $$(ls $(BIN) | tr '\n' ' ')"

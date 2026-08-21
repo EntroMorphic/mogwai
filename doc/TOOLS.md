@@ -1,8 +1,10 @@
 # C tools in `c/src/`
 
-Everything builds with the Makefile pattern rule: `make c/bin/<name>`.
-`CORE` (linked into all of them) is `router.c ternary.c cascade.c invariants.c
-prior.c prune.c`.
+    make tools      # builds every tool AND both tests — run this after any
+                    # signature change; it is what catches bit-rot
+
+Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
+`router.c ternary.c cascade.c invariants.c prior.c prune.c`.
 
 ## Shipping path
 
@@ -19,7 +21,7 @@ prior.c prune.c`.
 | file | role |
 |---|---|
 | `compare.c` | the main experiment. `--test` `--curve` `--ship` `--errs` `--fixth=N` `--prune-*` |
-| `mkblob.c` | emits `router.bin` for the ESP32. Refuses to guess a threshold when pruning |
+| `mkblob.c` | emits `router.bin`. Refuses to guess a threshold when pruning |
 | `eval.c` | loads a blob and tunes on held-out validation |
 
 ## Diagnostics (kept, not on the shipping path)
@@ -30,16 +32,19 @@ prior.c prune.c`.
 | `cascade.c` | signature cascade. Measured identical on every axis; cut |
 | `leakchk.c` | is the dev split optimistically biased? |
 | `leaktest.c` | do dev utterances leak back via NLU-Eval? (the 75.6% incident) |
-| `probe.c` | diagnoses the 10-point gap |
 | `build.c` | older blob builder, superseded by `mkblob.c` |
 
-## Tests
+`probe.c` was archived to `archive/superseded_tools/` — it compared `t_score`
+against a candidate `dice()`, and Dice was then adopted *as* `t_score`, so it
+compared a function to itself. It had also bit-rotted behind a changed
+signature, which is why `make tools` now exists.
 
-`c/test/t_popcnt.c` — verifies the popcount table against `__builtin_popcount`
-**exhaustively, on all 2³² words**, plus the `t_dot` algebraic rewrite over 2M
-random vector pairs. Build:
+## Tests in `c/test/`
 
-    cc -std=c11 -O2 -DTPOPCNT=1 -o /tmp/tpc c/test/t_popcnt.c c/test/probe.c c/src/router.c
+| file | what it proves |
+|---|---|
+| `t_popcnt.c` | the popcount table equals `__builtin_popcount` on **all 2³² words**, exhaustively — not sampled. Plus the `t_dot` algebraic rewrite over 2M random vector pairs |
+| `blobfmt.c` | `router.bin` parses **exactly** per [BLOB_FORMAT.md](BLOB_FORMAT.md), last record ending precisely at EOF. Run `c/bin/blobfmt esp32_router/main/router.bin` — doc drift shows up as unaccounted bytes |
 
 ## Compile-time switches
 
@@ -48,3 +53,7 @@ random vector pairs. Build:
 | `-DRD=N` | 256 | router dimension. Blob and firmware **must** agree |
 | `-DTPOPCNT=N` | 1 | 0 = builtin SWAR, 1 = 8-bit table (DRAM), 2 = 16-bit table (64 KB) |
 | `-DTSMOOTH=N` | 8 | Dice denominator smoothing. Flat over 2–16 at d=256 |
+
+ESP-IDF takes `RD` and `TPOPCNT` the same way: `idf.py -DRD=256 -DTPOPCNT=1 build`.
+**Pass them on every invocation** — `idf.py` caches `-D` variables, and a rebuild
+without them silently reuses the previous config.

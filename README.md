@@ -16,15 +16,22 @@ parameters; it needs a good representation and an honest threshold.
 
 | | recall | unbidden (fa) | wrong action (wa) | missed | size |
 |---|---|---|---|---|---|
-| binary, 1 bit/dim, d=256 | 80.7% ±2.8 | 0 | 13 | 24 | 328 KB |
-| binary, 1 bit/dim, d=512 | 79.7% ±2.9 | — | — | — | 656 KB |
+| binary, 1 bit/dim, d=256 | 80.7% ±2.8 | 1 | 13 | 24 | 328 KB |
+| binary, 1 bit/dim, d=512 | 79.7% ±2.9 | 0 | 15 | 24 | 656 KB |
 | **twin-ternary, 2 bit/dim, d=256** | **88.0% ±2.3** | **3** | **15** | **8** | **656 KB** |
 
 Dev split, 192 IoT commands and 1335 negatives, at the shipped threshold 126.
-The d=512 binary row is the **size-matched** control: at identical bytes per
-vector, one bit per dimension is 8.3 points worse, and binary's curve is
-*identical* at d=256 and d=512 — it saturates. The gain is structural, not
-capacity. See [EXPERIMENTS.md](EXPERIMENTS.md).
+The d=512 binary row is the **size-matched** control — the honest comparison,
+since twin-ternary spends two bits per dimension. At identical bytes per vector
+twin recalls 8.3 points more and misses a third as many commands (8 vs 24), and
+binary's operating curve is *identical* at d=256 and d=512: it saturates, so the
+gain is structural rather than capacity.
+
+**But binary is the more conservative router**, and the table should not be read
+as a clean sweep: at matched bytes it fires on **zero** non-commands where twin
+fires on three. Twin buys recall and pays in unbidden actuations. Which side of
+that you want is a deployment decision, not a benchmark result — see
+[EXPERIMENTS.md](EXPERIMENTS.md).
 
 **Held-out test: 84.1% ±2.5** — but measured at threshold 136, **not** the
 shipped 126. It does not describe the current config. Test budget is deliberately
@@ -57,6 +64,7 @@ are 92% of the cost, so index size predicts latency directly.
     make fetch          # curl the corpora (MASSIVE + NLU-Evaluation-Data), records SHA256
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
+    make tools          # build every tool and test — run after any signature change
 
 Build and flash the device:
 
@@ -84,6 +92,7 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
 ## Repo map
 
     c/src/          the entire shipping system (see doc/TOOLS.md for each tool)
+    c/test/         exhaustive popcount proof, blob-format validator
     esp32_router/   ESP-IDF firmware; router.c/ternary.c are SYMLINKS into c/src
     doc/            blob format, method/guardrails, tool reference
     EXPERIMENTS.md  the full experimental record, including invalidated results
