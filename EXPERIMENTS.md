@@ -699,3 +699,42 @@ the threshold is a comparison applied after the scan.
 **Scope, stated plainly: 126 was chosen on DEV.** The held-out test number at
 this threshold is unmeasured, as is the test fa/wa split. The last measured test
 figure (84.1% +-2.5) is at th=136 and does NOT describe the shipped config.
+
+## The accuracy metric is blind to false actuations — read every number above with this in mind
+
+Probing thresholds downward (126 -> 111 -> 96) kept "improving" iot accuracy to
+a plateau of 89.6%. Mapping the whole curve shows what the plateau actually is:
+
+    th      unbidden(fa)  wrong_act(wa)  missed  iot_acc
+    -512        11             15           5     89.6%   <- reject NOTHING
+      40        11             15           5     89.6%
+      96        10             15           5     89.6%
+     120         7             15           5     89.6%
+     126         3             15           8     88.0%   <- shipped
+     136         1             13          14     85.9%
+
+**Peak dev accuracy occurs at th=-512 — the threshold disabled entirely.** The
+plateau is not a sweet spot; it is the bare argmax classifier, and the threshold
+is **inert below ~120**.
+
+The cause: `iot_acc = iok / n_iot` is pure recall over IoT items. **It cannot see
+false actuations at all** — firing on a non-command costs it nothing. So the
+metric is maximised by never rejecting, and every step down from 136 was partly
+walking toward a degenerate always-act config. For an actuator that is exactly
+backwards: at th=96 the device fires on 10 non-commands instead of 3 for zero
+accuracy gain.
+
+**Two floors the threshold can never touch**, visible at th=-512:
+`wa=15` (the intra-Hue operation confusions — identical across the ENTIRE range
+-512..126) and `missed=5` (IoT commands whose nearest neighbour is a negative
+index entry). The threshold only ever trades `fa` against `missed`.
+
+**Consequence: 126 is better than 111 and 96, not worse.** It is the cheapest
+point at which the threshold has begun doing real work (0.22% vs 0.75% unbidden),
+paying 1.6 points of a metric that does not count the failure that matters.
+
+**Consequence for the whole record:** every "iot acc" figure in this file —
+including the held-out 84.1% — is a recall number. It is not a safety number.
+The fa column is the safety number, and it was collapsed into "wrong" until this
+section. Nothing above is retracted, but accuracy alone should never have been
+the headline for an actuator.
