@@ -1071,3 +1071,46 @@ The blocker identified in the LMM synthesis is closed.
 Still NOT shipped: the selector remains opt-in and the blob is byte-identical.
 It has no held-out measurement, and the 126 threshold looked this good on dev
 too. Next step is a pre-registered test evaluation, per selector_synth.md.
+
+## Test evaluation #4 — PRE-REGISTERED (written before running)
+
+**Deviation from selector_synth.md, stated up front.** The synthesis put device
+integration before the budget spend, reasoning that validating an undeployable
+thing is waste. That blocker is now closed (74 KB, 17.8% of flash), and
+host-device parity means the held-out number is identical either way. So:
+validate first, integrate only if it survives. Building firmware support for
+something that may be cut is the actual waste.
+
+**Config:** twin-ternary d=256, index 10500, threshold `RSHIP_TH`=136, plus the
+selector — word prior consulted ONLY when its margin >= 8, and only to reassign
+a class the router has already accepted as a command.
+
+**Reference points**
+
+    dev  baseline    recall 85.9%   fa=1  wa=13  missed=14
+    dev  selector    recall 87.5%   fa=1  wa=10  missed=14
+    TEST baseline    recall 84.1%   fa=8  wa=15  missed=20   (eval #3, th=136)
+    index CV         net +48 of 183 disagreement items at prmarg>=8
+
+**Predictions**
+
+1. **`fa` EXACTLY 8 — unchanged.** Not "about 8". The selector fires only after
+   the router accepts, so it cannot create an actuation. If `fa` moves at all,
+   my account of the mechanism is wrong, regardless of what happens to `wa`.
+2. **`missed` EXACTLY 20 — unchanged.** The selector never touches the
+   accept/reject decision.
+3. **`wa` 11–13, point 12.** Dev fell 13 → 10 (−23%); the same relative
+   reduction on 15 gives ~12.
+4. **Recall 85–87%, point 85.9%.** Follows from 3 if 1 and 2 hold.
+
+**Falsifier.** If `wa` does not improve on held-out data, the gate is
+dev-specific and **the selector is cut** — not re-tuned. A `wa` inside noise of
+15 counts as failure to transfer, not a tie. Separately, if predictions 1 or 2
+fail, the mechanism is not what I claim and the result is void even if `wa`
+improves, because I would not know why.
+
+**Note on prior transfer failures.** Eval #2's fa prediction missed by 22%
+(flattering), eval #3's by 2.6x (unflattering). I have no reliable model of how
+error rates transfer. Predictions 1 and 2 are exempt from that doubt only
+because they are STRUCTURAL — they follow from where the code fires, not from a
+rate extrapolated off dev.
