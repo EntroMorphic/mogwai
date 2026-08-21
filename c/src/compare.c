@@ -29,7 +29,10 @@ static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify th
 static prune_opt PRUNE = {0,0,0};
 static cue_t CUE; static int USECUE = 0;   /* --cue: index-derived hard word cues */
 static int CHANNELS = 0;   /* --channels: word vs n-gram error overlap */
+static int SELDUMP = 0;   /* --seldump: per-item signals a selector could use */
+static int XVAL = 0;      /* --xval: 2-fold CV inside the index */
 static int PRIORCLS = 0;  /* --priorcls: router accepts/rejects, prior picks the class */
+static int SELMARG = 0;   /* --selmargin=N: prior votes only when its margin >= N */
 
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
@@ -81,7 +84,10 @@ static hit score_ter_impl(const char*txt,int use_prior){
         /* The router must have already decided this is a command: never let the
            prior turn a "none" into an actuation. Without this guard fa went
            1 -> 824, because every above-threshold negative got reassigned. */
-        if(pv>=0 && cls0>=0 && strcmp(R.names[cls0],"none")
+        /* SELECTOR: the prior votes only when it has a margin. prmarg==0 means it
+           matched no discriminating word — an abstention, not a weak opinion.
+           Gate cross-validated inside the index on 183 disagreement items. */
+        if(pv>=0 && cls0>=0 && mg>=SELMARG && strcmp(R.names[cls0],"none")
             && strcmp(R.names[pv],"none")
             && (PRIORCLS>=2 || r_family(&R,pv)==r_family(&R,cls0))) cls0=pv; }
     if(use_prior){
@@ -258,6 +264,78 @@ static void channels(void) {
     printf("    an ORACLE picking the right channel per item: %d (%.1f%%)\n",
            both+only_r+only_p, 100.0*(both+only_r+only_p)/n);
 }
+/* --seldump: everything a SELECTOR could possibly condition on, per dev IoT
+ * item, with which channel was actually right. A selector must use signals
+ * available at inference time — so: router top score, router margin (top minus
+ * best-scoring-different-class), prior margin, whether the channels agree,
+ * whether a polarity cue fired, and utterance length. */
+static void seldump(void) {
+    printf("SEL\ttop\tmargin\tprmarg\tagree\tpol\twords\trok\tpok\ttruth\n");
+    for (int i = 0; i < V_n; i++) {
+        if (!strcmp(V_l[i], "none")) continue;
+        tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+        int b1 = -(1<<28), b2 = -(1<<28); uint32_t bi = 0;
+        for (uint32_t k = 0; k < R.n_index; k++) {
+            int s = t_score(&q, &TI[k], aa);
+            if (s > b1) { b2 = b1; b1 = s; bi = k; }
+            else if (s > b2 && R.label[k] != R.label[bi]) b2 = s;
+        }
+        int rc = r_apply_polarity(&R, R.label[bi], V_t[i]);
+        int pol = r_polarity(V_t[i]);
+        int mg; int pv = pr_vote(&PR, V_t[i], &mg);
+        int rok = rc >= 0 && !strcmp(R.names[rc], V_l[i]);
+        int pok = pv >= 0 && !strcmp(R.names[pv], V_l[i]);
+        int agree = (rc >= 0 && pv >= 0 && rc == pv);
+        int w = 1; for (const char *p = V_t[i]; *p; p++) if (*p == ' ') w++;
+        printf("SEL\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n",
+               b1, b1 - b2, mg, agree, pol, w, rok, pok, V_l[i]);
+    }
+}
+/* --xval: 2-fold cross-validation INSIDE the index, to test whether the
+ * prior-margin signal is real or fitted to 20 dev items.
+ *
+ * For each fold: rebuild the centre, the index vectors and the word prior from
+ * the OTHER half only, then evaluate this half's IoT items. Nothing from the
+ * evaluated half informs the model. Yields ~10x more disagreement items than
+ * the dev slice the threshold was chosen on. */
+static void xval(void) {
+    int n = U_n;
+    static uint8_t fold[40000];
+    for (int i = 0; i < n; i++) fold[i] = i & 1;          /* deterministic */
+    printf("XV\tprmarg\ttop\trok\tpok\n");
+    static char *tr[40000]; static uint8_t trl[40000];
+    for (int f = 0; f < 2; f++) {
+        int m = 0;
+        for (int i = 0; i < n; i++) if (fold[i] != f) { tr[m] = U_t[i]; trl[m] = R.label[i]; m++; }
+        /* centre from the training half only */
+        router_t S; memset(&S, 0, sizeof S);
+        S.magic = RMAGIC; S.dim = RD; S.n_class = R.n_class;
+        memcpy(S.names, R.names, sizeof R.names);
+        int64_t sum[RD]; memset(sum, 0, sizeof sum);
+        int16_t acc[RD]; int32_t tot;
+        for (int i = 0; i < m; i++) { r_counts(tr[i], acc, &tot);
+            for (int d = 0; d < RD; d++) sum[d] += ((int64_t)acc[d] * RSCALE) / tot; }
+        for (int d = 0; d < RD; d++) S.centre[d] = (int32_t)(sum[d] / m);
+        S.n_index = m; S.label = trl;
+        tvec *TS = malloc((size_t)m * sizeof(tvec));
+        for (int i = 0; i < m; i++) t_encode(&S, tr[i], &TS[i]);
+        static prior_t P2; pr_build(&P2, tr, trl, m, (int)R.n_class);
+        for (int i = 0; i < n; i++) {
+            if (fold[i] != f) continue;
+            if (!strcmp(R.names[R.label[i]], "none")) continue;   /* IoT only */
+            tvec q; t_encode(&S, U_t[i], &q); int aa = t_active(&q);
+            int best = -(1 << 28); uint32_t bi = 0;
+            for (int k = 0; k < m; k++) { int s = t_score(&q, &TS[k], aa);
+                if (s > best) { best = s; bi = k; } }
+            int rc = r_apply_polarity(&S, trl[bi], U_t[i]);
+            int mg; int pv = pr_vote(&P2, U_t[i], &mg);
+            int rok = rc >= 0 && rc == (int)R.label[i];
+            int pok = pv >= 0 && pv == (int)R.label[i];
+            printf("XV\t%d\t%d\t%d\t%d\n", mg, best, rok, pok);
+        }
+        free(TS);
+    }
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -294,8 +372,11 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--dirdump")) DIRDUMP=1;
         else if(!strcmp(argv[i],"--cue")) USECUE=1;
         else if(!strcmp(argv[i],"--channels")) CHANNELS=1;
+        else if(!strcmp(argv[i],"--seldump")) SELDUMP=1;
+        else if(!strcmp(argv[i],"--xval")) XVAL=1;
         else if(!strcmp(argv[i],"--priorcls")) PRIORCLS=1;
         else if(!strcmp(argv[i],"--priorcls2")) PRIORCLS=2;
+        else if(!strncmp(argv[i],"--selmargin=",12)) SELMARG=atoi(argv[i]+12);
         else if(!strcmp(argv[i],"--ship")) FIXTH=RSHIP_TH;
         else if(prune_parse(argv[i],&PRUNE)) { /* consumed */ }
 }
@@ -396,6 +477,8 @@ int main(int argc,char**argv){
     if(CURVE){ curve("binary",score_bin,-RD,RD);
                curve("no-prior",score_ter,-512,512); curve("prior",score_ter_wp,-512,512); return 0; }
     if(CHANNELS){ channels(); return 0; }
+    if(SELDUMP){ seldump(); return 0; }
+    if(XVAL){ xval(); return 0; }
     report("binary (1 bit)",   score_bin,-RD,RD,          U_n*sizeof(rvec)/1024.0);
     report("twin-ternary (2b)",score_ter,-512,512,        U_n*sizeof(tvec)/1024.0);
     /* word prior CUT: passes breaks-zero but does not move the operating curve.

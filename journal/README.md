@@ -1,4 +1,4 @@
-# LMM journal — 6 cycles, 24 artifacts
+# LMM journal — 7 cycles, 28 artifacts
 
 Applications of the **Lincoln Manifold Method** ([github.com/anjaustin/lmm](https://github.com/anjaustin/lmm)),
 run at decision points where the next step was genuinely unclear. Four phases
@@ -20,6 +20,7 @@ because the reasoning is the point.
 | `gap` | How do we close the accuracy gap without fooling ourselves again? | Curve dominance over "breaks zero"; the acceptance test was wrong |
 | `leak` | The dev split was 75.6% leaked. Why, and how is it made impossible? | Assertions that abort, not warn. `c/src/invariants.c` |
 | `tt` | Twin-ternary underperformed base-3 expectations — what is off? | The leak was masking it; the representation was fine |
+| `selector` | Three attempts to use the word channel failed, yet an oracle shows 8.4 points of complementary information. What is missing? | A **gate**, not a blend: consult the prior only when its margin says it has an opinion. First intervention to dominate the operating curve |
 
 ## Two of these produced things still in the shipping system
 
