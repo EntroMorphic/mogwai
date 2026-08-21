@@ -23,6 +23,7 @@ static prior_t PR;
 static int FIXTH = 1<<30;  /* --fixth=N: skip tuning, force this threshold */
 static int CURVE = 0;
 static int DUMPERR = 0;   /* --errs: print the actual misclassified utterances */
+static int DIRDUMP = 0;   /* --dirdump: per-item score/pred/truth, for direction analysis */
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
 static prune_opt PRUNE = {0,0,0};
 
@@ -200,6 +201,16 @@ static void dump_errs(hit *H, int th, char la[][RNAMELEN], char **X, int n) {
                     kind, H[i].score, p, la[i], X[i]);
     }
 }
+/* --dirdump: one TSV line per dev item — score, predicted class, true label.
+ * Lets per-direction operating curves be computed without a second threshold
+ * ever entering the router. If up-commands and down-commands do NOT have
+ * materially different score distributions, an asymmetric threshold is not
+ * structure, it is a second parameter fitted to 192 dev items. */
+static void dirdump(hit *H, char la[][RNAMELEN], int n) {
+    for (int i = 0; i < n; i++)
+        printf("DD\t%d\t%s\t%s\n", H[i].score,
+               H[i].cls < 0 ? "none" : R.names[H[i].cls], la[i]);
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -208,6 +219,7 @@ static void report(const char *name, hit (*f)(const char *), int lo, int hi, dou
     int n = USE_TEST ? T_n : V_n;
     TX z = tally(hh, th, lab, n);
     if(DUMPERR && !USE_TEST) dump_errs(hh, th, lab, V_t, n);
+    if(DIRDUMP && !USE_TEST) dirdump(hh, lab, n);
     double p = z.in ? (double)z.iok / z.in : 0.0;
     double se = 100.0 * sqrt(p * (1 - p) / (z.in ? z.in : 1));
     printf("  %-20s %6.1f%% +-%.1f  %-7d %-7d %7.0f  th=%d\n",
@@ -232,6 +244,7 @@ int main(int argc,char**argv){
         else if(!strncmp(argv[i],"--fixth=",8)) FIXTH=atoi(argv[i]+8);
         else if(!strcmp(argv[i],"--curve")) CURVE=1;
         else if(!strcmp(argv[i],"--errs")) DUMPERR=1;
+        else if(!strcmp(argv[i],"--dirdump")) DIRDUMP=1;
         else if(!strcmp(argv[i],"--ship")) FIXTH=RSHIP_TH;
         else if(prune_parse(argv[i],&PRUNE)) { /* consumed */ }
 }

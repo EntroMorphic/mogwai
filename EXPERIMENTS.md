@@ -877,3 +877,47 @@ The entire "lower the threshold" exploration (136 → 126 → 111 → 96) was ru
 dev. The one point of it that was checked against held-out data did not survive.
 The dev curve was not lying — 88.0% on dev is real — it simply does not predict
 the held-out frontier closely enough to justify a 10-point threshold move.
+
+## Asymmetric threshold ("126 up, 136 down") — REJECTED, but it found real structure
+
+The router already knows direction: `up` = {lighton, wemo_on, lightup},
+`down` = {lightoff, wemo_off, lightdim}, neutral = {lightchange, cleaning,
+coffee}. And it is implementable — `route()` takes the argmax *before*
+thresholding, so the class is known when the threshold is applied.
+
+**There IS a real asymmetry in the scores** (dev, twin, by true direction):
+
+    down     n=75   mean 189.8
+    neutral  n=85   mean 187.7
+    up       n=32   mean 174.4
+
+Up-commands score ~15 points lower — genuinely harder to match. So the intuition
+behind the proposal was sound.
+
+**Two structural findings fell out.**
+
+*The proposed policy moves one item.* `126 up / 136 down+neutral`: recall
+85.9 → 86.5%, missed 14 → 13, fa 1 → 2. One item each way.
+
+*The whole 136 → 126 effect lives in up and neutral, not down.* `126 up+neutral /
+136 down` is **identical** to uniform 126 — down-commands have no scores in the
+126–136 band at all. And neutral supplies 5 of the 6 recovered items, not up.
+Which matters, because uniform 126 is the policy test eval #3 showed does not
+transfer.
+
+**The sweep found nothing real.** Full 3-D search, up/down/neutral each 100–180:
+
+    combinations swept          : 68921
+    "dominating" uniform 136    : 24  (0.03%)
+    best missed at fa<=1,wa<=13 : 13 (baseline 14), at up/down/neu = 136/126/132
+    largest total error gain    : 1 item out of 192 iot + 1335 negatives
+
+**A one-item gain discovered by searching 68,921 combinations is what noise looks
+like.** The best combinations also point the *opposite* way to the proposal —
+they hold `up` at 136 and lower `down` — which is the signature of fitting, not
+structure. A 192-item dev IoT set cannot resolve a 3-parameter policy; the
+single-parameter version already failed to transfer.
+
+Not shipped. No test budget spent. `--dirdump` is retained: it emits per-item
+score/prediction/truth so any future threshold policy can be simulated offline
+without a second parameter ever entering the router.
