@@ -13,3 +13,7 @@ __pycache__/
 # the board — is preserved standalone at archive/python_era/tinyenc_test_firmware.bin
 build/
 esp32_router/build/
+
+# Superseded work, provenance, and a second git repo — ~880 MB, read maybe once.
+# NOT deleted, just not tracked. Inventory: doc/ARCHIVE.md
+archive/

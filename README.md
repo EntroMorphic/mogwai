@@ -118,11 +118,12 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
     c/test/         exhaustive popcount proof, blob-format validator
     esp32_router/   VALIDATION firmware (see its README) — parity + benchmarks,
                     not a product build; sources are SYMLINKS into c/src
-    doc/            blob format, method/guardrails, tool reference
+    doc/            blob format, method/guardrails, tool reference, archive inventory
     EXPERIMENTS.md  the full experimental record, including invalidated results
     FRAME.md        what these numbers do and do not mean — read before quoting any
     journal/        Lincoln Manifold Method artifacts, 5 cycles
-    archive/        nothing is deleted; superseded work lives here with autopsies
+    archive/        superseded work + provenance. LOCAL ONLY (gitignored);
+                    inventory in doc/ARCHIVE.md — nothing is ever deleted
     results/        every run appends a stamped row; TEST_BUDGET is the audit log
     board_backup/   original ESP-AT image + verified restore procedure
 
