@@ -50,6 +50,10 @@ ship: $(BIN)/compare $(DATA) log-header
 
 # TEST SET. Burns one unit of results/TEST_BUDGET. Deliberately not `make test`.
 # TEST SET at the SHIPPED threshold. Burns one budget unit.
+# TEST SET with the selector. Burns one budget unit.
+testset-sel: $(BIN)/compare $(DATA) log-header
+	$(call RUNCOMPARE,--test --ship --gatesel --selmargin=8,TESTSEL)
+
 testset-ship: $(BIN)/compare $(DATA) log-header
 	$(call RUNCOMPARE,--test --ship,TESTSET)
 

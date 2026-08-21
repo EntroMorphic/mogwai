@@ -143,3 +143,35 @@ Worth its own entry, because it nearly created false findings:
 
 Each looked like a defect in the thing being tested. The rule: when a check says
 something is broken, **verify the check before fixing the target.**
+
+## 11. Curve dominance is necessary but NOT sufficient — add significance
+
+**Incident.** The selector dominated the dev operating curve at every point and
+was accepted on that basis. Paired McNemar afterwards: **fixed 6, broke 3,
+p = 0.508.** It then failed on held-out data, making `wa` worse.
+
+A noise-level change can dominate a curve by helping marginally at every
+threshold. The frontier test catches changes that trade one error for another;
+it does not catch changes that are simply too small to be real.
+
+**Required from now on:** a change must move the (wrong, missed) frontier AND
+survive a paired significance test on the items that actually changed. Use
+`--selsig` as the pattern: count discordant pairs, exact two-sided binomial.
+
+Applied retroactively, twin-ternary vs binary is **p = 0.0931 on dev** — not
+significant at n=192. The claim rests on the held-out gap (19 net items on 220)
+and on binary's saturation at d=256 vs d=512, not on dev significance.
+
+## 12. Index cross-validation does not predict held-out here
+
+`--xval` (2-fold inside the index, rebuilding centre, vectors and prior per
+fold) gave the selector +48 net of 183 disagreement items. Held-out, it was −3.
+
+The obvious explanation — near-duplicate memorisation across folds, given the
+36–37% near-duplicate rate — was tested and **refuted**: the prior's advantage
+is in items *without* near-duplicates (+12) and absent in items with them (−1).
+No confirmed explanation exists.
+
+**Treat index CV as a filter for obviously-bad ideas, never as evidence a change
+works.** It was the strongest pre-test evidence available for the selector and
+it pointed the wrong way.

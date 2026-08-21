@@ -39,6 +39,12 @@ sweep: at matched bytes it fires on **zero** non-commands where twin fires on
 one. Twin buys recall and pays in unbidden actuations. Which side you want is a
 deployment decision — see [EXPERIMENTS.md](EXPERIMENTS.md).
 
+**Where the claim rests, stated precisely.** On dev the paired test is
+`fixed 16, broke 7, p=0.0931` — **not significant at n=192**. The claim rests on
+the held-out gap (84.1% vs 75.5%, 19 net items on 220) and on binary saturating
+— its curve is identical at d=256 and d=512 — not on dev significance, which it
+does not have.
+
 ### Why 136 and not 126
 
 126 was chosen on dev, where it looked clearly better (85.9 → 88.0% recall,

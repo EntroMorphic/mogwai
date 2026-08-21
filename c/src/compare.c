@@ -35,6 +35,7 @@ static int XVAL = 0;      /* --xval: 2-fold CV inside the index */
 static int GATESZ = 0;    /* --gatesize: what a compact prior table needs */
 static int GATECHK = 0;   /* --gatecheck: gate must equal prior bit-exactly */
 static gate_t GATE; static int USEGATE = 0;  /* --gatesel: selector reads the compact table */
+static int SELSIG = 0;    /* --selsig: paired significance of the dev selector gain */
 static int PRIORCLS = 0;  /* --priorcls: router accepts/rejects, prior picks the class */
 static int SELMARG = 0;   /* --selmargin=N: prior votes only when its margin >= N */
 
@@ -336,7 +337,25 @@ static void xval(void) {
             int mg; int pv = pr_vote(&P2, U_t[i], &mg);
             int rok = rc >= 0 && rc == (int)R.label[i];
             int pok = pv >= 0 && pv == (int)R.label[i];
-            printf("XV\t%d\t%d\t%d\t%d\n", mg, best, rok, pok);
+            /* Does this eval item have a NEAR-DUPLICATE in its own training fold?
+               The corpus is 36-37%% near-duplicates (leakchk), so a random split
+               puts paraphrases across folds - and the WORD prior can memorise a
+               paraphrase where the n-gram router cannot. If the prior advantage
+               lives entirely in these items, index CV is invalid here. */
+            int dup = 0;
+            { char a[512]; r_norm(U_t[i], a, sizeof a);
+              for (int k = 0; k < m && !dup; k++) {
+                char b2[512]; r_norm(tr[k], b2, sizeof b2);
+                /* word-overlap Dice, same measure leakchk uses */
+                int inter = 0, na = 0, nb = 0;
+                char *sa[48]; int cnta = 0; char ca[512]; strcpy(ca, a);
+                for (char *t2 = strtok(ca, " "); t2 && cnta < 48; t2 = strtok(NULL, " ")) sa[cnta++] = t2;
+                char cb[512]; strcpy(cb, b2); na = cnta;
+                for (char *t2 = strtok(cb, " "); t2; t2 = strtok(NULL, " ")) {
+                  nb++; for (int z = 0; z < cnta; z++) if (!strcmp(sa[z], t2)) { inter++; break; } }
+                if (na + nb && 200 * inter / (na + nb) >= 80) dup = 1;
+              } }
+            printf("XV\t%d\t%d\t%d\t%d\t%d\n", mg, best, rok, pok, dup);
         }
         free(TS);
     }
@@ -408,6 +427,61 @@ static void gatecheck(void) {
     printf("  class mismatches %d   margin mismatches %d   %s\n",
            bad_c, bad_m, (!bad_c && !bad_m) ? "EXACT" : "*** DIVERGENT ***");
 }
+/* --selsig: was the DEV selector gain ever significant? Paired McNemar between
+   baseline and selector on the same dev items. wa fell 13->10, three items.
+   Three items was also the size of the held-out REGRESSION. */
+static void pairsig(const char *name, hit (*fa)(const char *), hit (*fb)(const char *), int tha, int thb) {
+    int b = 0, c = 0;
+    for (int i = 0; i < V_n; i++) {
+        hit h0 = fa(V_t[i]), h1 = fb(V_t[i]);
+        int c0 = (h0.score > tha) ? h0.cls : -1, c1 = (h1.score > thb) ? h1.cls : -1;
+        int ok0 = !strcmp(c0 < 0 ? "none" : R.names[c0], V_l[i]);
+        int ok1 = !strcmp(c1 < 0 ? "none" : R.names[c1], V_l[i]);
+        if (ok0 != ok1) { if (ok1) b++; else c++; }
+    }
+    int n = b + c; double s = 0, tot = 0;
+    int lo = b < c ? b : c, hi = b > c ? b : c;
+    for (int k = 0; k <= n; k++) {
+        double ways = 1; for (int j = 0; j < k; j++) ways = ways * (n - j) / (j + 1);
+        tot += ways; if (k <= lo || k >= hi) s += ways;
+    }
+    double p = n ? s / tot : 1.0;
+    printf("  %-34s fixed %-4d broke %-4d  p=%.4f  %s\n", name, b, c, p,
+           p < 0.05 ? "SIGNIFICANT" : "not significant");
+}
+static void selsig(void) {
+    int b = 0, c = 0, n = 0;
+    for (int i = 0; i < V_n; i++) {
+        int save = PRIORCLS, sg = USEGATE;
+        PRIORCLS = 0; USEGATE = 0;
+        hit h0 = score_ter(V_t[i]);
+        PRIORCLS = 1; USEGATE = 1;
+        hit h1 = score_ter(V_t[i]);
+        PRIORCLS = save; USEGATE = sg;
+        int c0 = (h0.score > 136) ? h0.cls : -1;
+        int c1 = (h1.score > 136) ? h1.cls : -1;
+        const char *p0 = c0 < 0 ? "none" : R.names[c0];
+        const char *p1 = c1 < 0 ? "none" : R.names[c1];
+        int ok0 = !strcmp(p0, V_l[i]), ok1 = !strcmp(p1, V_l[i]);
+        if (ok0 != ok1) { n++; if (ok1) b++; else c++; }
+    }
+    printf("\n  === dev: paired baseline vs selector ===\n");
+    printf("    selector fixed   %d\n", b);
+    printf("    selector broke   %d\n", c);
+    printf("    discordant       %d\n", n);
+    double p = 1.0; if (n > 0) {              /* exact two-sided binomial */
+        double s = 0, tot = 0;
+        for (int k = 0; k <= n; k++) {
+            double ways = 1; for (int j = 0; j < k; j++) ways = ways * (n - j) / (j + 1);
+            tot += ways; if (k <= (b < c ? b : c) || k >= (b > c ? b : c)) s += ways;
+        }
+        p = s / tot;
+    }
+    printf("    exact two-sided p = %.3f   %s\n", p,
+           p < 0.05 ? "significant" : "NOT significant");
+    printf("\n  === retroactive: apply the same test to accepted claims ===\n");
+    pairsig("twin-ternary vs binary (d=256)", score_bin, score_ter, 138, 136);
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -449,6 +523,7 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--gatesize")) GATESZ=1;
         else if(!strcmp(argv[i],"--gatecheck")) GATECHK=1;
         else if(!strcmp(argv[i],"--gatesel")) { USEGATE=1; PRIORCLS=1; }
+        else if(!strcmp(argv[i],"--selsig")) { SELSIG=1; SELMARG=8; }
         else if(!strcmp(argv[i],"--priorcls")) PRIORCLS=1;
         else if(!strcmp(argv[i],"--priorcls2")) PRIORCLS=2;
         else if(!strncmp(argv[i],"--selmargin=",12)) SELMARG=atoi(argv[i]+12);
@@ -557,6 +632,7 @@ int main(int argc,char**argv){
     if(XVAL){ xval(); return 0; }
     if(GATESZ){ gatesize(); return 0; }
     if(GATECHK){ gatecheck(); return 0; }
+    if(SELSIG){ selsig(); return 0; }
     report("binary (1 bit)",   score_bin,-RD,RD,          U_n*sizeof(rvec)/1024.0);
     report("twin-ternary (2b)",score_ter,-512,512,        U_n*sizeof(tvec)/1024.0);
     /* word prior CUT: passes breaks-zero but does not move the operating curve.

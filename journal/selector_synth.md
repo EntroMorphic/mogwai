@@ -57,3 +57,41 @@ available points.** The remaining gap is still real, still unreached, and now
 has a demonstrated method for attacking it: find a signal that predicts which
 channel is right, gate on it, and never let the second channel manufacture an
 actuation.
+
+---
+
+## OUTCOME (appended after test evaluation #4)
+
+**The selector failed on held-out data and was cut.**
+
+    baseline   recall 84.1%   fa=8   wa=15   missed=20
+    selector   recall 82.7%   fa=8   wa=18   missed=20
+
+`wa` got worse. The falsifier written above fired, and the selector was cut
+rather than re-tuned.
+
+**Both structural predictions held exactly** — `fa` 8 and `missed` 20, unchanged.
+So the mechanism was precisely as described in this document: the gate fires only
+after the router accepts, and cannot manufacture an actuation. It was right about
+*what it does* and wrong about *whether that helps*.
+
+**What this synthesis got wrong, and why it is worth keeping:**
+
+1. It called the dev result dominant without testing significance. Paired
+   McNemar afterwards: fixed 6, broke 3, **p = 0.508**. The "first intervention
+   to dominate the curve" was noise that happened to dominate.
+2. It treated index cross-validation (+48 of 183) as evidence the signal was
+   real. It was the strongest pre-test evidence available and it was wrong. The
+   near-duplicate explanation was tested and refuted; no confirmed cause exists.
+3. It was right that only one channel emits a usable confidence, right that
+   ungated delegation reproduces the earlier failure, and right that the device
+   blocker was solvable (2.13 MB → 74 KB, bit-exact).
+
+**The reasoning was sound and the conclusion was wrong.** That is the value of
+keeping the artifact: the method reached a plausible, well-argued, testable
+claim, and the test killed it. A cycle that produces a falsifiable claim which
+then falsifies is working, not failing.
+
+**Still open:** the 8.4-point oracle gap is untouched. What is now known is that
+a margin-gated selector does not reach it, and that dev + index CV cannot tell
+you whether a selector works.

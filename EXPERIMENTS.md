@@ -1114,3 +1114,80 @@ improves, because I would not know why.
 error rates transfer. Predictions 1 and 2 are exempt from that doubt only
 because they are STRUCTURAL — they follow from where the code fires, not from a
 rate extrapolated off dev.
+
+## Test evaluation #4 — RESULT: the selector FAILED and is CUT
+
+    baseline   recall 84.1%   fa=8   wa=15   missed=20
+    selector   recall 82.7%   fa=8   wa=18   missed=20
+
+**The falsifier fires.** `wa` did not improve — it got worse, 15 → 18. Per the
+pre-registration the selector is **cut, not re-tuned**. Re-tuning the gate on
+test would be exactly the contamination the discipline exists to prevent.
+
+**Predictions: 2 of 4, and the two hits are the structural ones.**
+
+| # | predicted | actual | |
+|---|---|---|---|
+| 1 | `fa` **exactly 8** | 8 | **hit** |
+| 2 | `missed` **exactly 20** | 20 | **hit** |
+| 3 | `wa` 11–13 | 18 | miss — wrong direction |
+| 4 | recall 85–87% | 82.7% | miss — below baseline |
+
+The mechanism is exactly what I claimed: the selector fires only after the
+router accepts, so it cannot create an actuation or change a rejection. Both
+structural predictions held precisely. **It simply makes worse decisions on
+unseen data.** Knowing the mechanism was right makes the failure more
+informative, not less.
+
+### Red-team: the dev result was never significant
+
+Paired McNemar, baseline vs selector on dev: **fixed 6, broke 3, p = 0.508.**
+
+The selector "dominated the operating curve" — and that was a 6-vs-3 split at
+p=0.51. **Curve dominance is necessary but NOT sufficient**, because a
+noise-level change can dominate a curve by helping marginally at every
+threshold. My acceptance criteria had a hole in them, and this is the case that
+found it. Added to doc/METHOD.md as a required test.
+
+### The index cross-validation did not predict held-out — cause unknown
+
+`--xval` gave +48 net of 183 disagreement items, which is what convinced me the
+signal was real. It did not transfer.
+
+Tested the most likely explanation — that the 36–37% near-duplicate rate lets
+the *word* prior memorise paraphrases across folds. **Refuted:**
+
+    eval items              n     router_only  prior_only  prior net
+    WITH near-dup in train  513       22           21          -1
+    WITHOUT near-dup        642       64           76         +12
+
+The prior's advantage lives in items *without* near-duplicates. So CV inflation
+is not memorisation, and **I do not have a confirmed explanation.** Recorded as
+an open discrepancy rather than a mechanism invented after the fact.
+
+Practical consequence: **index cross-validation is not a substitute for held-out
+measurement in this project.** It was the strongest pre-test evidence available
+and it was wrong.
+
+### Retroactive: the same test applied to the core claim
+
+    twin-ternary vs binary (d=256), dev:  fixed 16  broke 7  p = 0.0931
+
+**Not significant on dev at n=192.** Stated plainly rather than buried. Two
+things keep this from overturning the claim, and both are caveats not defences:
+
+- The held-out gap is much larger — 84.1% vs 75.5%, **19 net items on 220** —
+  and very likely significant, but the paired test was not computed and would
+  cost a budget unit.
+- The size-matched curve comparison (binary d=512, same 64 B/vector) shows twin
+  dominating at *every* operating point, and binary's curve is identical at
+  d=256 and d=512. That is a structural argument, not a per-item one.
+
+The honest position: the representation claim rests on the held-out gap and the
+saturation evidence, **not** on dev significance, which it does not have.
+
+### What survives
+
+The selector is cut. `gate.c` (74 KB, bit-exact) and `cue.c` are retained as
+tracked negative results. Shipped config unchanged and blob byte-identical:
+**d=256, threshold 136, 84.1% ±2.5 held-out, fa 0.29%.** Test budget: 4.
