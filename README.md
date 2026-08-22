@@ -57,7 +57,7 @@ enough". See [esp32_router/README.md](esp32_router/README.md).
     make repl                                    # interactively
 
 Build is about a second, a full evaluation about a second, and the whole
-63-check regression suite runs in 19 s - most of which is an exhaustive 2^32
+64-check regression suite runs in 19 s - most of which is an exhaustive 2^32
 popcount proof. Full path in [doc/QUICKSTART.md](doc/QUICKSTART.md).
 
 ```
@@ -194,7 +194,7 @@ as one above.
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (63 checks) — run after any structural change
+    make regress        # full host regression (64 checks) — run after any structural change
 
 Then the device:
 
@@ -224,7 +224,7 @@ The layout, and what parity does *not* cover:
                        (host-parity harness). Sources are SYMLINKS into c/src
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 8 cycles
-    scripts/           fetch.sh (curl only), regress.sh (63 checks), mutate.sh
+    scripts/           fetch.sh (curl only), regress.sh (64 checks), mutate.sh
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
     board_backup/      how to restore the board's original ESP-AT firmware
@@ -249,10 +249,10 @@ get something much worse — which is the whole reason for the name.
 The held-out split is a budgeted resource: every read is logged in
 `results/TEST_BUDGET`, and configurations are pre-registered with falsifiers
 before it is touched. Every run is stamped with the git SHA and the clean/dirty
-state of the tree. Run `make regress` after any structural change: 63 checks,
+state of the tree. Run `make regress` after any structural change: 64 checks,
 19 seconds.
 
-CI runs the same 63 checks on Linux/GCC and builds both ESP32 firmwares from
+CI runs the same 64 checks on Linux/GCC and builds both ESP32 firmwares from
 `sdkconfig.defaults`, asserting the blob and the firmware agree on `RD`. That
 job exists because the code had never left macOS/clang, and three portability
 bugs were found the first time it did.

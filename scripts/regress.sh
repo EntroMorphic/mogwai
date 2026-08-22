@@ -42,28 +42,27 @@ chk "popcount table exact over all 2^32 words" "$(echo "$o" | grep -c '429496729
 chk "t_dot algebraic rewrite exact" "$(echo "$o" | grep -c 'exact (2M random')" "1"
 
 echo "=== BLOB ==="
-# NEGATIVE CONTROL: prove blobfmt can REJECT. Mutation testing showed that
-# rigging it to skip its size check left it printing "OK" and the suite green —
-# a validator that always passes validates nothing.
-# Truncate RELATIVE to the real blob. This was a hardcoded 700000, which stopped
-# truncating anything the moment the shipped index shrank below that - the
-# negative control silently became a copy of a valid blob, so blobfmt accepted
-# it and the check could only ever fail-open.
-head -c "20 20 12 61 79 80 81 701 702 33 98 100 204 250 395 398 399 400( 20 20 12 61 79 80 81 701 702 33 98 100 204 250 395 398 399 400wc -c < esp32_router/main/router.bin) - 1 ))" \
-     esp32_router/main/router.bin > /tmp/_trunc.bin 2>/dev/null
-c/bin/blobfmt /tmp/_trunc.bin >/dev/null 2>&1
-chk "blobfmt REJECTS a truncated blob" "$?" "1"
-# A blob with TRAILING bytes is the only input that reaches blobfmt's
-# size-accounting guard (o != size). Truncation is caught earlier by the
-# record-bounds guard, so the truncated case above proves nothing about it -
-# mutation testing showed "blobfmt stops rejecting bad blobs" firing NOTHING
-# once the truncation became size-1. Verified: with that guard disabled this
-# input returns 0 and the truncated one still returns 1.
+# NEGATIVE CONTROLS: prove blobfmt can REJECT. A validator that always passes
+# validates nothing. These controls have now failed open TWICE:
+#   1. a hardcoded `head -c 700000` stopped truncating anything once the shipped
+#      index shrank below that, so the "truncated" blob was a whole valid one;
+#   2. a mangled shell expansion made `head` fail, leaving an EMPTY file, which
+#      blobfmt rejects for entirely the wrong reason.
+# Both times the check still PASSED. So assert the INPUT, not just the verdict.
+BLOBSZ=$(wc -c < esp32_router/main/router.bin | tr -d ' ')
+head -c "$((BLOBSZ - 1))" esp32_router/main/router.bin > /tmp/_trunc.bin
 cat esp32_router/main/router.bin > /tmp/_trail.bin; printf 'X' >> /tmp/_trail.bin
+chk "blob controls are really -1/+1 byte" \
+    "$(wc -c < /tmp/_trunc.bin | tr -d ' '),$(wc -c < /tmp/_trail.bin | tr -d ' ')" \
+    "$((BLOBSZ - 1)),$((BLOBSZ + 1))"
+
+c/bin/blobfmt /tmp/_trunc.bin >/dev/null 2>&1; TRUNC_RC=$?
 c/bin/blobfmt /tmp/_trail.bin >/dev/null 2>&1; TRAIL_RC=$?
-rm -f /tmp/_trail.bin
+rm -f /tmp/_trunc.bin /tmp/_trail.bin
+chk "blobfmt REJECTS a truncated blob" "$TRUNC_RC" "1"
+# Truncation is caught by three layered guards; trailing bytes reach only the
+# size-accounting one (o != size), so this is the input that isolates it.
 chk "blobfmt REJECTS a blob with trailing bytes" "$TRAIL_RC" "1"
-rm -f /tmp/_trunc.bin
 chk "layout matches doc/BLOB_FORMAT.md" "$(c/bin/blobfmt esp32_router/main/router.bin | grep -c 'OK: layout matches')" "1"
 c/bin/eval esp32_router/main/router.bin data/validation.json >/dev/null 2>&1
 chk "blob verifier (parity + index integrity)" "$?" "0"

@@ -49,6 +49,14 @@ run_mut "corpus checksum altered"            "sed -i '' '1s/^0/1/' data/SHA256"
 run_mut "popcount table corrupted"           "sed -i '' 's/P8(0), P8(1), P8(1), P8(2)/P8(0), P8(1), P8(1), P8(3)/' c/src/ternary.c"
 run_mut "t_dot rewrite broken"               "sed -i '' 's/return agree - 2 \* disagree;/return agree - disagree;/' c/src/ternary.c"
 run_mut "blobfmt stops rejecting bad blobs"  "sed -i '' 's|if (o != size) { printf(\"  FAIL: %ld bytes unaccounted|if (0) { printf(\"  FAIL: %ld bytes unaccounted|' c/test/blobfmt.c"
+# A truncated blob is caught by THREE layered guards, so disabling any one of
+# them leaves it rejected and the check unmoved. Only removing all three shows
+# the check can fail. Trailing bytes reach just the size-accounting guard, which
+# is why that separate control exists.
+run_mut "blobfmt stops validating at all"    "sed -i '' -e 's|if (o + 1 > size) { printf(\"  FAIL: ran off the end|if (0) { printf(\"  FAIL: ran off the end|' -e 's|if (o + len + 5 > size) { printf(\"  FAIL: record %u overruns EOF|if (0) { printf(\"  FAIL: record %u overruns EOF|' -e 's|if (o != size) { printf(\"  FAIL: %ld bytes unaccounted|if (0) { printf(\"  FAIL: %ld bytes unaccounted|' c/test/blobfmt.c"
+# The negative control failing OPEN is the failure that actually happened, twice.
+# This reproduces it: the "truncated" file becomes a whole valid blob.
+run_mut "truncated control stops truncating" "sed -i '' 's|BLOBSZ - 1|BLOBSZ - 0|' scripts/regress.sh"
 run_mut "blob bytes corrupted"               "dd if=/dev/zero of=esp32_router/main/router.bin bs=1 seek=40000 count=3000 conv=notrunc"
 run_mut "RD changed, blob left alone"        "sed -i '' 's/^#define RD        256/#define RD        128/' c/src/router.h"
 run_mut "shipped threshold changed"          "sed -i '' 's/#define RSHIP_TH  136/#define RSHIP_TH  130/' c/src/router.h"

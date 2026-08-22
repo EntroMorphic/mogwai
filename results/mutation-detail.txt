@@ -163,6 +163,5 @@
     product refuses to actuate the none class
     no remote points at the upstream clone
 === product loses a rejection cause
-    product refuses to actuate the none class
     product reports both rejection causes
     no remote points at the upstream clone
