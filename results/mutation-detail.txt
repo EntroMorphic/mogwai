@@ -11,7 +11,7 @@
     blob verifier (parity + index integrity)
     blob reproducible byte-identical
     recall 85.9
-    fa 1
+    fa 6
     wa 13
     missed 14
 === t_dot rewrite broken
@@ -19,7 +19,7 @@
     blob verifier (parity + index integrity)
     blob reproducible byte-identical
 === blobfmt stops rejecting bad blobs
-    blobfmt REJECTS a truncated blob
+    
 === blob bytes corrupted
     blob verifier (parity + index integrity)
     blob reproducible byte-identical
@@ -29,14 +29,15 @@
     blob dim matches router.h RD
     blob reproducible byte-identical
     recall 85.9
-    fa 1
+    fa 6
     wa 13
     missed 14
-    index 656 KB
+    index 240 KB
 === shipped threshold changed
+    blob threshold matches router.h RSHIP_TH
     blob reproducible byte-identical
     recall 85.9
-    fa 1
+    fa 6
     wa 13
     missed 14
     threshold 136
@@ -45,17 +46,17 @@
     blob verifier (parity + index integrity)
     blob reproducible byte-identical
     recall 85.9
-    fa 1
+    fa 6
     wa 13
     missed 14
 === leak guard disabled
     leak guard ABORTS on a deliberate leak
 === code-overlap detector disabled
     recall 85.9
-    fa 1
+    fa 6
     wa 13
     missed 14
-    index 656 KB
+    index 240 KB
     threshold 136
     dev  code-overlap zero
     test code-overlap zero
@@ -122,7 +123,7 @@
 === a boot suite undocumented
     every boot suite is in esp32_router/README
 === journal cycle count stale
-    journal README cycle count is current
+    
 === provenance bundle corrupted
     tracked provenance bundle checksum
 === provenance bundle untracked
@@ -137,14 +138,11 @@
     local archive bundle checksum
     no remote points at the upstream clone
 === upstream repo commit count changed
-    local archive bundle checksum
     upstream repo 270 commits
     no remote points at the upstream clone
 === leak guard disabled entirely
     leak guard ABORTS on a deliberate leak
-    local archive bundle checksum
     no remote points at the upstream clone
 === doc check count goes stale
-    local archive bundle checksum
     no remote points at the upstream clone
     docs quote the live check count

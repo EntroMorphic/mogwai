@@ -17,7 +17,8 @@ restore(){ rm -rf "$1"; cp -R "$SNAP/$1" "$1" 2>/dev/null; }
 
 for f in c/src c/test doc README.md LICENSE scripts/regress.sh Makefile \
          data/SHA256 esp32_router/main/router.bin esp32_router/README.md \
-         journal/README.md provenance .gitignore; do save "$f"; done
+         journal/README.md provenance .gitignore \
+         esp32_router/main/product.c; do save "$f"; done
 
 FIRED=results/mutation-coverage.txt; : > "$FIRED"
 DETAIL=results/mutation-detail.txt; : > "$DETAIL"
@@ -75,7 +76,10 @@ run_mut "EXPERIMENTS TOC duplicated entry"   "sed -i '' 's|^## Contents|## Conte
 run_mut "a c/src tool undocumented"          "sed -i '' 's|\`cuemine.c\`|\`XX.c\`|' doc/TOOLS.md"
 run_mut "an archive subdir undocumented"     "sed -i '' 's|archive/stray|archive/XX|g' doc/ARCHIVE.md"
 run_mut "a boot suite undocumented"          "sed -i '' 's|two_stage()|XX()|' esp32_router/README.md"
-run_mut "journal cycle count stale"          "sed -i '' 's|7 cycles|9 cycles|' journal/README.md"
+# Was hardcoded "7 cycles" and went INERT the moment the journal reached 8 - the
+# same "mutation hardcodes a count that later changed" failure METHOD #17
+# already recorded, recurring. Match the digits instead of a literal.
+run_mut "journal cycle count stale"          "sed -i '' -E 's#[0-9]+ cycles#99 cycles#' journal/README.md"
 run_mut "provenance bundle corrupted"        "printf 'X' >> provenance/needle-upstream.bundle"
 run_mut "provenance bundle untracked"        "git rm -q --cached provenance/needle-upstream.bundle"
 run_mut "doc/ARCHIVE.md untracked"           "git rm -q --cached doc/ARCHIVE.md"
@@ -102,6 +106,16 @@ git -C archive/needle_upstream update-ref "refs/heads/$UPBR" "$UPREF" 2>/dev/nul
 
 run_mut "leak guard disabled entirely"       "sed -i '' 's/    if (hits)/    if (0)/' c/src/invariants.c"
 run_mut "doc check count goes stale"         "sed -i '' -E 's/[0-9]+ checks/40 checks/g' README.md"
+
+# --- checks added later that no mutation reached ---------------------------
+# Coverage is not retroactive: every check added after this file was written
+# arrived UNCOVERED. These five close that gap.
+run_mut "blob vector count changed"          "printf '\\377' | dd of=esp32_router/main/router.bin bs=1 seek=9 conv=notrunc"
+run_mut "a stray blob gets tracked"          "git add -f archive/superseded_blobs/router-d512-1805441.bin"
+run_mut "product firmware untracked"         "git rm -q --cached esp32_router/main/product.c"
+run_mut "product actuates the none class"    "sed -i '' 's|if (!strcmp(R.names\\[cls\\], \"none\")) return -2;|if (0) return -2;|' esp32_router/main/product.c"
+run_mut "product loses a rejection cause"    "sed -i '' 's|cls == -2|cls == -9|g' esp32_router/main/product.c"
+
 git reset -q 2>/dev/null; git remote remove origin2 2>/dev/null
 
 echo

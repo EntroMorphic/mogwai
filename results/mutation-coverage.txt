@@ -7,13 +7,13 @@ t_dot algebraic rewrite exact
 blob verifier (parity + index integrity)
 blob reproducible byte-identical
 recall 85.9
-fa 1
+fa 6
 wa 13
 missed 14
 t_dot algebraic rewrite exact
 blob verifier (parity + index integrity)
 blob reproducible byte-identical
-blobfmt REJECTS a truncated blob
+
 blob verifier (parity + index integrity)
 blob reproducible byte-identical
 layout matches doc/BLOB_FORMAT.md
@@ -21,13 +21,14 @@ blob verifier (parity + index integrity)
 blob dim matches router.h RD
 blob reproducible byte-identical
 recall 85.9
-fa 1
+fa 6
 wa 13
 missed 14
-index 656 KB
+index 240 KB
+blob threshold matches router.h RSHIP_TH
 blob reproducible byte-identical
 recall 85.9
-fa 1
+fa 6
 wa 13
 missed 14
 threshold 136
@@ -35,15 +36,15 @@ threshold 136
 blob verifier (parity + index integrity)
 blob reproducible byte-identical
 recall 85.9
-fa 1
+fa 6
 wa 13
 missed 14
 leak guard ABORTS on a deliberate leak
 recall 85.9
-fa 1
+fa 6
 wa 13
 missed 14
-index 656 KB
+index 240 KB
 threshold 136
 dev  code-overlap zero
 test code-overlap zero
@@ -84,7 +85,7 @@ EXPERIMENTS contents has no duplicates
 every c/src tool is in TOOLS.md
 every archive/ subdir is in ARCHIVE.md
 every boot suite is in esp32_router/README
-journal README cycle count is current
+
 tracked provenance bundle checksum
 provenance bundle present and TRACKED
 doc/ARCHIVE.md present and tracked
@@ -92,12 +93,9 @@ archive untracked
 no remote points at the upstream clone
 local archive bundle checksum
 no remote points at the upstream clone
-local archive bundle checksum
 upstream repo 270 commits
 no remote points at the upstream clone
 leak guard ABORTS on a deliberate leak
-local archive bundle checksum
 no remote points at the upstream clone
-local archive bundle checksum
 no remote points at the upstream clone
 docs quote the live check count

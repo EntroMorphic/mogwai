@@ -53,6 +53,16 @@ head -c "20 20 12 61 79 80 81 701 702 33 98 100 204 250 395 398 399 400( 20 20 1
      esp32_router/main/router.bin > /tmp/_trunc.bin 2>/dev/null
 c/bin/blobfmt /tmp/_trunc.bin >/dev/null 2>&1
 chk "blobfmt REJECTS a truncated blob" "$?" "1"
+# A blob with TRAILING bytes is the only input that reaches blobfmt's
+# size-accounting guard (o != size). Truncation is caught earlier by the
+# record-bounds guard, so the truncated case above proves nothing about it -
+# mutation testing showed "blobfmt stops rejecting bad blobs" firing NOTHING
+# once the truncation became size-1. Verified: with that guard disabled this
+# input returns 0 and the truncated one still returns 1.
+cat esp32_router/main/router.bin > /tmp/_trail.bin; printf 'X' >> /tmp/_trail.bin
+c/bin/blobfmt /tmp/_trail.bin >/dev/null 2>&1; TRAIL_RC=$?
+rm -f /tmp/_trail.bin
+chk "blobfmt REJECTS a blob with trailing bytes" "$TRAIL_RC" "1"
 rm -f /tmp/_trunc.bin
 chk "layout matches doc/BLOB_FORMAT.md" "$(c/bin/blobfmt esp32_router/main/router.bin | grep -c 'OK: layout matches')" "1"
 c/bin/eval esp32_router/main/router.bin data/validation.json >/dev/null 2>&1

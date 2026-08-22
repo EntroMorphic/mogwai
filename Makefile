@@ -80,10 +80,22 @@ clean:
 # Build every tool and test. Catches bit-rot in diagnostics that nothing else
 # compiles — probe.c sat broken behind a changed t_score signature until this
 # target existed.
+# The two tests live in c/test/, so the $(BIN)/% pattern above - which needs a
+# matching $(SRC)/%.c - never applies to them. Without these explicit rules
+# `make c/bin/blobfmt` is a SILENT NO-OP: make finds a file with no rule and
+# considers it already up to date, exit 0, no output. doc/TOOLS.md advertises
+# `make c/bin/<name>` for every tool; it did not work for these two, and a
+# mutation test consequently ran the PREVIOUS binary and reported a pass.
+$(BIN)/t_popcnt: c/test/t_popcnt.c c/test/probe.c $(SRC)/router.c $(SRC)/router.h $(SRC)/ternary.h
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -DTPOPCNT=1 -o $@ c/test/t_popcnt.c c/test/probe.c $(SRC)/router.c $(LDLIBS)
+
+$(BIN)/blobfmt: c/test/blobfmt.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/router.h $(SRC)/ternary.h
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -o $@ c/test/blobfmt.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
+
 .PHONY: tools
-tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c)))
-	@$(CC) $(CFLAGS) -DTPOPCNT=1 -o $(BIN)/t_popcnt c/test/t_popcnt.c c/test/probe.c $(SRC)/router.c $(LDLIBS)
-	@$(CC) $(CFLAGS) -o $(BIN)/blobfmt c/test/blobfmt.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
+tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt
 	@echo "  all tools + tests built: $$(ls $(BIN) | tr '\n' ' ')"
 
 # Full host regression. Run after any structural change.
