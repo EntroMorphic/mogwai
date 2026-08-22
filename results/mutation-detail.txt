@@ -19,7 +19,7 @@
     blob verifier (parity + index integrity)
     blob reproducible byte-identical
 === blobfmt stops rejecting bad blobs
-    
+    blobfmt REJECTS a blob with trailing bytes
 === blob bytes corrupted
     blob verifier (parity + index integrity)
     blob reproducible byte-identical
@@ -123,7 +123,7 @@
 === a boot suite undocumented
     every boot suite is in esp32_router/README
 === journal cycle count stale
-    
+    journal README cycle count is current
 === provenance bundle corrupted
     tracked provenance bundle checksum
 === provenance bundle untracked
@@ -146,3 +146,23 @@
 === doc check count goes stale
     no remote points at the upstream clone
     docs quote the live check count
+=== blob vector count changed
+    layout matches doc/BLOB_FORMAT.md
+    blob verifier (parity + index integrity)
+    blob vectors 3840 (30 SRAM chunks)
+    blob reproducible byte-identical
+    no remote points at the upstream clone
+=== a stray blob gets tracked
+    the only tracked .bin is the shipped blob
+    archive untracked
+    no remote points at the upstream clone
+=== product firmware untracked
+    product firmware source tracked
+    no remote points at the upstream clone
+=== product actuates the none class
+    product refuses to actuate the none class
+    no remote points at the upstream clone
+=== product loses a rejection cause
+    product refuses to actuate the none class
+    product reports both rejection causes
+    no remote points at the upstream clone

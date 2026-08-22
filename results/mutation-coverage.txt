@@ -13,7 +13,7 @@ missed 14
 t_dot algebraic rewrite exact
 blob verifier (parity + index integrity)
 blob reproducible byte-identical
-
+blobfmt REJECTS a blob with trailing bytes
 blob verifier (parity + index integrity)
 blob reproducible byte-identical
 layout matches doc/BLOB_FORMAT.md
@@ -85,7 +85,7 @@ EXPERIMENTS contents has no duplicates
 every c/src tool is in TOOLS.md
 every archive/ subdir is in ARCHIVE.md
 every boot suite is in esp32_router/README
-
+journal README cycle count is current
 tracked provenance bundle checksum
 provenance bundle present and TRACKED
 doc/ARCHIVE.md present and tracked
@@ -99,3 +99,18 @@ leak guard ABORTS on a deliberate leak
 no remote points at the upstream clone
 no remote points at the upstream clone
 docs quote the live check count
+layout matches doc/BLOB_FORMAT.md
+blob verifier (parity + index integrity)
+blob vectors 3840 (30 SRAM chunks)
+blob reproducible byte-identical
+no remote points at the upstream clone
+the only tracked .bin is the shipped blob
+archive untracked
+no remote points at the upstream clone
+product firmware source tracked
+no remote points at the upstream clone
+product refuses to actuate the none class
+no remote points at the upstream clone
+product refuses to actuate the none class
+product reports both rejection causes
+no remote points at the upstream clone

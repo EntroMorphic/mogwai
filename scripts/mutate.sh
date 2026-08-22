@@ -15,10 +15,16 @@ trap 'rm -rf "$SNAP"' EXIT
 save(){ mkdir -p "$SNAP/$(dirname "$1")"; cp -R "$1" "$SNAP/$1" 2>/dev/null; }
 restore(){ rm -rf "$1"; cp -R "$SNAP/$1" "$1" 2>/dev/null; }
 
-for f in c/src c/test doc README.md LICENSE scripts/regress.sh Makefile \
-         data/SHA256 esp32_router/main/router.bin esp32_router/README.md \
-         journal/README.md provenance .gitignore \
-         esp32_router/main/product.c; do save "$f"; done
+# ONE list, used by BOTH save and restore. They were two hardcoded literals and
+# drifted the instant a path was added to one of them: product.c was saved but
+# never restored, so a run left the working tree mutated and two checks failing.
+# METHOD #17 says a mutation harness is not trusted until its restores are
+# verified - that has to be structural, not remembered.
+MPATHS="c/src c/test doc README.md LICENSE scripts/regress.sh Makefile
+        data/SHA256 esp32_router/main/router.bin esp32_router/README.md
+        journal/README.md provenance .gitignore esp32_router/main/product.c"
+
+for f in $MPATHS; do save "$f"; done
 
 FIRED=results/mutation-coverage.txt; : > "$FIRED"
 DETAIL=results/mutation-detail.txt; : > "$DETAIL"
@@ -31,9 +37,7 @@ run_mut(){                       # $1 label   $2 mutation
   { printf '=== %s\n' "$1"; printf '%s\n' "$names" | sed 's/^/    /'; } >> "$DETAIL"
   if [ "$n" -gt 0 ]; then printf '  %-44s fired %2d\n' "$1" "$n"
   else                    printf '  %-44s ** NOTHING FIRED **\n' "$1"; fi
-  for f in c/src c/test doc README.md LICENSE scripts/regress.sh Makefile \
-           data/SHA256 esp32_router/main/router.bin esp32_router/README.md \
-           journal/README.md provenance .gitignore; do restore "$f"; done
+  for f in $MPATHS; do restore "$f"; done
   git reset -q 2>/dev/null          # index mutations leaked between runs otherwise
   make -s tools >/dev/null 2>&1
 }
@@ -118,6 +122,19 @@ run_mut "product loses a rejection cause"    "sed -i '' 's|cls == -2|cls == -9|g
 
 git reset -q 2>/dev/null; git remote remove origin2 2>/dev/null
 
+
+# The harness must verify its own restores. A run that leaves the tree mutated
+# has silently corrupted the thing it was measuring, and the "covered N of M"
+# denominator quietly drops because failing checks are neither PASS nor SKIP -
+# which is exactly how the product.c leak showed up: 58 of 61, not 58 of 63.
+# Compared against the snapshot, not against git, so it is correct even when the
+# run starts from a dirty tree.
+bad=0
+for f in $MPATHS; do
+  diff -r -q "$SNAP/$f" "$f" >/dev/null 2>&1 || { echo "  ** NOT RESTORED: $f"; bad=1; }
+done
+if [ "$bad" -ne 0 ]; then echo "  ** the tree is still mutated - fix before trusting any number above"; exit 1; fi
+echo "  restore verified: every mutated path matches its pre-run snapshot"
 echo
 echo "=== checks NO mutation could make fail ==="
 ./scripts/regress.sh 2>&1 | grep -E '^  (PASS|SKIP)' | sed -E 's/^  (PASS|SKIP)  //' | sort -u > /tmp/_all
