@@ -43,6 +43,12 @@ that produced the guardrails in [METHOD.md](METHOD.md).
 Compared `t_score` against a candidate `dice()`; Dice was then adopted **as**
 `t_score`, so it compares a function to itself.
 
+## `archive/superseded_blobs/` — the first blob this project made
+
+`router-d512-1805441.bin`, 830 KB, `dim=512`, from the original C rewrite. It
+was TRACKED and referenced by nothing; `blobfmt` rejects it against the current
+format. Untracked and moved here — see that directory's README.
+
 ## The one deliberate exception
 
 A copy of the upstream bundle is tracked at `provenance/needle-upstream.bundle`.

@@ -59,3 +59,8 @@ core
 # drift — the tracked copy once held CONFIG_ESPTOOLPY_FLASHMODE_QIO=y alongside
 # CONFIG_ESPTOOLPY_FLASHMODE="dio", which cost an hour to understand.
 esp32_router/sdkconfig
+
+# Superseded blobs live in archive/superseded_blobs/, not next to the source.
+# c/router.bin was a tracked 830 KB d=512 blob from the first C commit that
+# nothing referenced. The only tracked blob is the shipped one.
+c/*.bin

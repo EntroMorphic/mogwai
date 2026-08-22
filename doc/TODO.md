@@ -26,11 +26,26 @@ and **not yet run** - it needs an explicit decision to spend test budget.
 **Closes when:** test evaluation #6 runs and its result is recorded beside the
 prediction, or the 240 KB index is reverted.
 
-### P2-2 · `.git` is 123 MB for a 16 MB tree
+### P2-2 · `.git` is large, and will stay that way — WON'T FIX
 Python-era `.npy`/`.npz` blobs and seven copies of a 5.8 MB
 `compile_commands.json` remain in history. Gitignoring stopped the growth; only
-a history rewrite removes the weight, which is destructive. This is not
-theoretical — it made the first push to GitHub time out.
+a history rewrite removes the weight. This is not theoretical — it made the
+first push to GitHub time out.
+
+**Closed as won't-fix, for a reason stronger than "rewriting is destructive".**
+`results/RESULTS.tsv` stamps every run with the git SHA and the clean/dirty
+state of the tree — 19 rows so far — and `journal/` and `doc/EXPERIMENTS.md`
+cite commits by SHA. A history rewrite changes every SHA in the repository, so
+it would **orphan the entire experimental record**: every stamped row would
+point at a commit that no longer exists. The provenance discipline that makes
+the results checkable is exactly what makes the history unrewritable. That is a
+trade this project already made, knowingly, and it is the right side of it.
+
+What *was* done instead: `git gc --prune=now` packed 29.3 MB of loose objects
+and took `.git` from **126 MB to 85 MB** — a third of it, non-destructively,
+with every SHA intact. And the one stale tracked artefact (`c/router.bin`, an 830 KB `dim=512` blob from the first
+C commit that nothing referenced) is archived and untracked. Neither shrinks
+history, and neither is claimed to.
 
 ### P2-3 · No pre-test signal
 Dev and index cross-validation both failed to predict a held-out result, and the

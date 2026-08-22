@@ -67,6 +67,10 @@ rm -f /tmp/_regress.bin
 chk "product firmware source tracked" "$([ -f esp32_router/main/product.c ] && git ls-files esp32_router/main/product.c | wc -l | tr -d ' ')" "1"
 chk "product refuses to actuate the none class" "$(grep -c 'if (!strcmp(R.names\[cls\], "none")) return -2;' esp32_router/main/product.c)" "1"
 chk "product reports both rejection causes" "$(grep -cE 'cls == -1|cls == -2' esp32_router/main/product.c)" "2"
+# A stale 830 KB dim=512 blob sat TRACKED at c/router.bin from the first C
+# commit to now, referenced by nothing and noticed by nothing. Blobs are the one
+# artefact here that is both large and easy to leave behind, so pin the set.
+chk "the only tracked .bin is the shipped blob" "$(git ls-files '*.bin' | tr '\n' ',')" "esp32_router/main/router.bin,"
 chk "blob dim matches router.h RD" "$(od -An -tu4 -j4 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RD\s' c/src/router.h | grep -oE '[0-9]+')"
 # Assert the SHIPPED BINARY, not just the harness. Everything above measures
 # what compare computes; these two read the header of the file that gets
