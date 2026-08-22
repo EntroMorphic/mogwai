@@ -1078,12 +1078,14 @@ static void packbench(void) {
 
     t0 = pb_ns();
     for (int r = 0; r < reps; r++) for (int j = 0; j < nq; j++) { long a = 0;
-        for (int i = 0; i < U_n; i++) a += t_score(&Q[j], &TI[i], AQ[j]); sink += a; }
+        for (int i = 0; i < U_n; i++) a += t_score(&Q[j], &TI[i], AQ[j]);
+        sink += a; }
     t1 = pb_ns(); ns[0] = (t1 - t0) / ((double)reps * nq * U_n);
 
     t0 = pb_ns();
     for (int r = 0; r < reps; r++) for (int j = 0; j < nq; j++) { long a = 0;
-        for (int i = 0; i < U_n; i++) a += t_score_pre(&Q[j], &TI[i], AQ[j], AB[i]); sink += a; }
+        for (int i = 0; i < U_n; i++) a += t_score_pre(&Q[j], &TI[i], AQ[j], AB[i]);
+        sink += a; }
     t1 = pb_ns(); ns[1] = (t1 - t0) / ((double)reps * nq * U_n);
 
     t0 = pb_ns();
