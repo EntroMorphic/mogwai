@@ -10,7 +10,9 @@ static char *D_t[3000]; static char D_l[3000][RNAMELEN]; static int D_n;
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
     const char*p=strstr(l,pat); if(!p)return 0; p+=strlen(pat);
-    while(*p==' ')p++; if(*p!='"')return 0; p++;
+    while (*p == ' ') p++;
+    if (*p != '"') return 0;
+    p++;
     int n=0; while(*p&&*p!='"'&&n<cap-1){if(*p=='\\'&&p[1])p++;o[n++]=*p++;} o[n]=0; return 1; }
 static int isiot(const char*l){return !strncmp(l,"iot_",4);}
 static int cls_of(const char*l){

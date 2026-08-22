@@ -18,7 +18,9 @@ static int THRESH = -1;   /* --threshold=N; required when pruning */
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
     const char*p=strstr(l,pat); if(!p)return 0; p+=strlen(pat);
-    while(*p==' ')p++; if(*p!='"')return 0; p++;
+    while (*p == ' ') p++;
+    if (*p != '"') return 0;
+    p++;
     int n=0; while(*p&&*p!='"'&&n<cap-1){if(*p=='\\'&&p[1])p++;o[n++]=*p++;} o[n]=0; return 1; }
 static int isiot(const char*l){return !strncmp(l,"iot_",4);}
 #define HN 65536
@@ -73,7 +75,7 @@ int main(int argc,char**argv){
     memset(&R,0,sizeof R); R.magic=RMAGIC; R.dim=RD; R.n_index=U_n;
     for(int i=0;i<U_n;i++){ int fnd=-1;
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){fnd=c;break;}
-        if(fnd<0&&R.n_class<RMAXCLS) snprintf(R.names[R.n_class++],RNAMELEN,"%s",U_l[i]); }
+        if(fnd<0&&R.n_class<RMAXCLS) snprintf(R.names[R.n_class++],RNAMELEN,"%.*s",RNAMELEN-1,U_l[i]); }
     int64_t sum[RD]; memset(sum,0,sizeof sum); int16_t acc[RD]; int32_t tot;
     for(int i=0;i<U_n;i++){ r_counts(U_t[i],acc,&tot);
         for(int d=0;d<RD;d++) sum[d]+=((int64_t)acc[d]*RSCALE)/tot; }

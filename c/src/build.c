@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < g_n; i++) {
         int found = -1;
         for (uint32_t c = 0; c < r.n_class; c++) if (!strcmp(r.names[c], g_lab[i])) { found = (int)c; break; }
-        if (found < 0 && r.n_class < RMAXCLS) { snprintf(r.names[r.n_class], RNAMELEN, "%s", g_lab[i]); r.n_class++; }
+        if (found < 0 && r.n_class < RMAXCLS) { snprintf(r.names[r.n_class], RNAMELEN, "%.*s", RNAMELEN-1, g_lab[i]); r.n_class++; }
     }
     /* integer centre: mean over the index of count_i/total, in RSCALE units */
     int64_t sum[RD]; memset(sum, 0, sizeof sum);
