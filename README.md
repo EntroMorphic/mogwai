@@ -12,6 +12,38 @@ The premise being tested is that **compressing an LLM onto an MCU is not
 necessary for this task**. Controlling nine IoT intents does not need 45M
 parameters; it needs a good representation and an honest threshold.
 
+> **Status: exploratory research.** There is no product and no real user, and
+> the task framing is inherited from a public dataset rather than specified by
+> anyone. Read [FRAME.md](FRAME.md) before quoting any number from this repo.
+
+## What is unusual here
+
+Most small-model repositories publish what worked. This one publishes the
+operating curve, the size-matched control, the paired significance test, and
+every architecture that was built, measured and cut — including one that
+dominated the dev curve and still failed on held-out data.
+
+- The first held-out evaluation is marked **VOID** and the budget stayed spent,
+  because the config it measured had been chosen on a leaked split.
+- The shipped threshold was moved to 126 on dev evidence and then **reverted by
+  its own pre-registered falsifier** when held-out data disagreed.
+- The headline representation claim carries its p-value **in the README**
+  (p=0.0931 on dev, not significant) rather than in a footnote.
+- `scripts/regress.sh` is mutation-tested: every check has been verified to fail
+  when the thing it guards is deliberately broken. Two rounds of that found four
+  checks that could never fail.
+
+[EXPERIMENTS.md](EXPERIMENTS.md) is a lab notebook, not a highlight reel.
+[doc/METHOD.md](doc/METHOD.md) is fifteen guardrails, each named for the
+incident that produced it.
+
+## Provenance
+
+This began as an audit of [anjaustin/needle](https://github.com/anjaustin/needle)
+— the Cactus Needle 2 Python package — and asks whether that approach is needed
+for this task. It **shares no code with it**. The original clone is archived
+locally with its full history; see [doc/ARCHIVE.md](doc/ARCHIVE.md).
+
 ## Try it
 
     make demo                                    # 60-second tour
@@ -130,6 +162,7 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
     esp32_router/   VALIDATION firmware (see its README) — parity + benchmarks,
                     not a product build; sources are SYMLINKS into c/src
     QUICKSTART.md   60 seconds to a routed sentence
+    TODO.md         open items, ranked by consequence
     doc/            blob format, method/guardrails, tool reference, archive inventory
     EXPERIMENTS.md  the full experimental record, including invalidated results
     FRAME.md        what these numbers do and do not mean — read before quoting any

@@ -100,7 +100,9 @@ chk "archive untracked"        "$(git ls-files archive | wc -l | tr -d ' ')" "0"
 chk "needle bundle checksum"   "$(cd archive/needle_upstream 2>/dev/null && shasum -a 256 -c needle_full.bundle.sha256 2>/dev/null | grep -c OK)" "1"
 chk "upstream repo 270 commits" "$(git -C archive/needle_upstream rev-list --count HEAD 2>/dev/null)" "270"
 chk "doc/ARCHIVE.md tracked"   "$(git ls-files doc/ARCHIVE.md | wc -l | tr -d ' ')" "1"
-chk "no git remote"            "$(git remote | wc -l | tr -d ' ')" "0"
+# We now have our own remote. The thing this check exists to catch is the repo
+# ever pointing back at the upstream clone it was separated from.
+chk "no remote points at the upstream clone" "$(git remote -v 2>/dev/null | grep -ci 'anjaustin/needle')" "0"
 
 # The docs quote this suite's size. That number went stale the moment the
 # suite grew, and nothing noticed. Check it against reality.
