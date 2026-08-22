@@ -190,29 +190,56 @@ static void curve(const char *name, hit (*f)(const char *), int lo, int hi) {
    indistinguishable to the router, so a test item sharing a code with an index
    entry is effectively leaked even though no assertion fires. Also reports the
    IoT counts the error bars are computed from. */
+/* Exact-string disjointness is necessary but not sufficient: two different
+   strings that encode to the SAME twin-ternary code are indistinguishable to
+   the router, so a test item sharing a code with an index entry is effectively
+   leaked with no assertion firing. */
+enum { CO_HB = 1 << 15 };
+static int co_head[CO_HB], co_nxt[40000], co_built = 0;
+static void co_build(void) {
+    if (co_built) return;
+    for (int i = 0; i < CO_HB; i++) co_head[i] = -1;
+    for (int i = 0; i < U_n; i++) {
+        const unsigned char *b = (const unsigned char *)&TI[i];
+        uint32_t h = 2166136261u;
+        for (size_t k = 0; k < sizeof(tvec); k++) { h ^= b[k]; h *= 16777619u; }
+        uint32_t s = h & (CO_HB - 1); co_nxt[i] = co_head[s]; co_head[s] = i;
+    }
+    co_built = 1;
+}
+/* THE single collision test. The self-check below and the reporting loop must
+   both go through this. An earlier version of the self-check had its own copy
+   of the memcmp, so disabling the real one left the self-check green — the
+   control validated a parallel implementation instead of the live one. */
+static int co_collides(const tvec *q) {
+    const unsigned char *b = (const unsigned char *)q;
+    uint32_t h = 2166136261u;
+    for (size_t k = 0; k < sizeof(tvec); k++) { h ^= b[k]; h *= 16777619u; }
+    for (int j = co_head[h & (CO_HB - 1)]; j >= 0; j = co_nxt[j])
+        if (!memcmp(&TI[j], q, sizeof(tvec))) return 1;
+    return 0;
+}
 static void code_overlap(const char *tag, char **X, char lx[][RNAMELEN], int nx) {
-    enum { HB = 1 << 15 };
-    static int head[HB], nxt[40000]; static int built = 0;
-    if (!built) {
-        for (int i = 0; i < HB; i++) head[i] = -1;
-        for (int i = 0; i < U_n; i++) {
-            const unsigned char *b = (const unsigned char *)&TI[i];
-            uint32_t h = 2166136261u;
-            for (size_t k = 0; k < sizeof(tvec); k++) { h ^= b[k]; h *= 16777619u; }
-            uint32_t s = h & (HB - 1); nxt[i] = head[s]; head[s] = i;
+    co_build();
+    /* POSITIVE CONTROL: "0 overlaps" from a broken detector looks identical to
+       "0 overlaps" from a clean split. Prove it can fire first — an index
+       utterance must collide with its own stored code. */
+    if (U_n > 0) {
+        tvec p; t_encode(&R, U_t[0], &p);
+        if (!co_collides(&p)) {
+            fprintf(stderr,
+                "  [diag] SELFTEST FAILED: the code-overlap detector cannot find an\n"
+                "         index utterance in its own index. It is broken, so any\n"
+                "         \"0 overlaps\" it reports is meaningless.\n");
+            exit(2);
         }
-        built = 1;
     }
     int iot = 0, coll = 0, coll_iot = 0;
     for (int i = 0; i < nx; i++) {
         int is_iot = strcmp(lx[i], "none") != 0;
         iot += is_iot;
         tvec q; t_encode(&R, X[i], &q);
-        const unsigned char *b = (const unsigned char *)&q;
-        uint32_t h = 2166136261u;
-        for (size_t k = 0; k < sizeof(tvec); k++) { h ^= b[k]; h *= 16777619u; }
-        for (int j = head[h & (HB - 1)]; j >= 0; j = nxt[j])
-            if (!memcmp(&TI[j], &q, sizeof(tvec))) { coll++; coll_iot += is_iot; break; }
+        if (co_collides(&q)) { coll++; coll_iot += is_iot; }
     }
     fprintf(stderr, "  [diag] %-5s n=%-5d iot=%-4d | code-identical to an index entry: "
                     "%d (%.2f%%), of which iot %d\n", tag, nx, iot, coll, 100.0*coll/nx, coll_iot);

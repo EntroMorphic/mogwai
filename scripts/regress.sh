@@ -27,6 +27,13 @@ chk "popcount table exact over all 2^32 words" "$(echo "$o" | grep -c '429496729
 chk "t_dot algebraic rewrite exact" "$(echo "$o" | grep -c 'exact (2M random')" "1"
 
 echo "=== BLOB ==="
+# NEGATIVE CONTROL: prove blobfmt can REJECT. Mutation testing showed that
+# rigging it to skip its size check left it printing "OK" and the suite green —
+# a validator that always passes validates nothing.
+head -c 700000 esp32_router/main/router.bin > /tmp/_trunc.bin 2>/dev/null
+c/bin/blobfmt /tmp/_trunc.bin >/dev/null 2>&1
+chk "blobfmt REJECTS a truncated blob" "$?" "1"
+rm -f /tmp/_trunc.bin
 chk "layout matches doc/BLOB_FORMAT.md" "$(c/bin/blobfmt esp32_router/main/router.bin | grep -c 'OK: layout matches')" "1"
 c/bin/eval esp32_router/main/router.bin data/validation.json >/dev/null 2>&1
 chk "blob verifier (parity + index integrity)" "$?" "0"

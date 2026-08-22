@@ -208,3 +208,28 @@ have it.
 
 Generalise: any number a doc quotes about the repo itself should be verified by
 the repo itself.
+
+## 15. "Detector reported clean" is not "clean" — controls, not just assertions
+
+Mutation-testing all 43 checks found two that could never fail, and they shared
+a shape: both asserted that a **detector reported nothing wrong**.
+
+- `code_overlap` reports how many evaluation items share an encoded code with
+  the index. The check asserted that count was 0 — but a detector rigged to
+  always return 0 also passes. Clean and broken are indistinguishable.
+- `blobfmt` validates the blob layout. The check asserted it printed `OK` — but
+  a validator with its size check removed still prints `OK`.
+
+**A check on a detector must prove the detector can fire.**
+
+- `code_overlap` now runs a **positive control** first: an index utterance must
+  collide with its own stored code, or it aborts. Any "0 overlaps" it reports is
+  then meaningful.
+- The suite runs a **negative control** on `blobfmt`: a deliberately truncated
+  blob must be REJECTED (rc=1).
+
+**And the control must exercise the same code.** The first version of the
+positive control had its own copy of the `memcmp`, so disabling the real one
+left the control green. It was validating a parallel implementation. Fixed by
+factoring a single `co_collides()` that both the control and the reporting loop
+call. **A control that does not share the code path is testing a copy.**
