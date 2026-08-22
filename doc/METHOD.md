@@ -252,3 +252,56 @@ the index.
 **And re-run the suite between the last mutation and the commit.** I ran it, saw
 `50 passed, 4 failed`, and committed anyway — the output was on screen and I did
 not read it. A green suite is only evidence if you look at it.
+
+## 17. Mutation-test the whole suite, and check the harness too
+
+Three of four checks written to guard a detector could not detect anything
+(#15). At that rate, spot-checking is not defensible — so `scripts/mutate.sh`
+mutation-tests **every** check: 46 mutations, each breaking one guarded thing,
+reporting which checks fire and, crucially, **which checks no mutation can make
+fail**.
+
+Coverage: **53 of 55**. The two uncovered are honest and named as such — see
+below.
+
+### What the first complete pass found
+
+- **The leak guard was unguarded.** Disabling `inv_disjoint`'s abort fired
+  *nothing*. Both checks grep for the SUCCESS line, which a disabled guard still
+  prints. The mechanism that exists because of the 75.6% leak could have been
+  silently dead. Fixed with an end-to-end control: `--leak` reintroduces the
+  leak deliberately and the run must abort with rc=2.
+- **`git ls-files` reads the index, not the working tree.** Deleting `LICENSE`
+  left its check passing. Four checks affected; all now assert existence too.
+- **A working check was silently disconnected by a later edit.** `blob
+  reproducible byte-identical` reads `$?` from a `cmp`; inserting a new check
+  between them meant `$?` held the *new* check's status. It had been passing
+  unconditionally. Nothing about reading the file revealed this.
+
+### The harness needed the same treatment
+
+The first two passes produced numbers that were wrong in the *flattering*
+direction:
+
+- **BSD `sed` alternation** (`\(a\|b\)`) does not substitute and does not error,
+  so the coverage comparison matched nothing and reported "covered 0 of 55".
+- **Git-index mutations leaked between runs**, because the restore only handled
+  the working tree. Unrelated checks appeared to fire — inflating coverage,
+  which is exactly the wrong way for this to fail. Fixed with `git reset` per
+  mutation; per-mutation fire counts fell from 4-6 to 1-3.
+- **Two mutations were inert**: one hardcoded a check count that had since
+  changed; one moved `archive/.git`, which makes the check SKIP rather than
+  fail, proving nothing.
+- **One restore was mangled** by an earlier substitution eating `$ARGV[0]`, so a
+  run left the archived bundle corrupt and a genuinely failing checksum behind.
+
+### The two checks nothing can make fail
+
+`invariant RAN and reported on DEV` / `... on TEST` verify the invariant
+executed and reported, not that it can detect. That is unfixable in their
+current form — a disabled guard prints the same line. They are **named for what
+they do** rather than left implying detection, and the real detection test sits
+beside them.
+
+**Rule:** a check is not trusted until a mutation has made it fail, and a
+mutation harness is not trusted until its own restores have been verified.

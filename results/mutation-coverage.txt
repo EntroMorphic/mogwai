@@ -1,0 +1,103 @@
+tools+tests build with zero warnings
+binary count
+cuemine mines colour from index
+corpus checksums
+popcount table exact over all 2^32 words
+t_dot algebraic rewrite exact
+blob verifier (parity + index integrity)
+blob reproducible byte-identical
+recall 85.9
+fa 1
+wa 13
+missed 14
+t_dot algebraic rewrite exact
+blob verifier (parity + index integrity)
+blob reproducible byte-identical
+blobfmt REJECTS a truncated blob
+blob verifier (parity + index integrity)
+blob reproducible byte-identical
+layout matches doc/BLOB_FORMAT.md
+blob verifier (parity + index integrity)
+blob dim matches router.h RD
+blob reproducible byte-identical
+recall 85.9
+fa 1
+wa 13
+missed 14
+index 656 KB
+blob reproducible byte-identical
+recall 85.9
+fa 1
+wa 13
+missed 14
+threshold 136
+--route reports score vs threshold
+blob verifier (parity + index integrity)
+blob reproducible byte-identical
+recall 85.9
+fa 1
+wa 13
+missed 14
+leak guard ABORTS on a deliberate leak
+recall 85.9
+fa 1
+wa 13
+missed 14
+index 656 KB
+threshold 136
+dev  code-overlap zero
+test code-overlap zero
+gate == prior, bit-exact
+paths default to data/ (no positional args)
+gate == prior, bit-exact
+leaktest reproduces 75.6% leak
+leakchk dev/test near-dup
+cuemine mines colour from index
+--help documents --route
+--help groups retained negative results
+--help exits 0
+unknown flag refused with rc=1
+paths default to data/ (no positional args)
+--route decision line names the class
+--route shows nearest stored utterances
+--route reports score vs threshold
+--route declines a non-command
+--route declines nonsense below threshold
+--route decision line names the class
+--route declines a non-command
+--route declines nonsense below threshold
+--route shows nearest stored utterances
+--route reports score vs threshold
+--route declines a non-command
+--route output is clean (no corpus chatter)
+LICENSE present and tracked
+LICENSE is MIT
+markdown links resolve
+LICENSE is MIT
+README states the licence
+QUICKSTART present and tracked
+markdown links resolve
+markdown links resolve
+EXPERIMENTS anchors resolve
+EXPERIMENTS contents covers every section
+EXPERIMENTS contents has no duplicates
+every c/src tool is in TOOLS.md
+every archive/ subdir is in ARCHIVE.md
+every boot suite is in esp32_router/README
+journal README cycle count is current
+tracked provenance bundle checksum
+provenance bundle present and TRACKED
+doc/ARCHIVE.md present and tracked
+archive untracked
+no remote points at the upstream clone
+local archive bundle checksum
+no remote points at the upstream clone
+local archive bundle checksum
+upstream repo 270 commits
+no remote points at the upstream clone
+leak guard ABORTS on a deliberate leak
+local archive bundle checksum
+no remote points at the upstream clone
+local archive bundle checksum
+no remote points at the upstream clone
+docs quote the live check count

@@ -52,12 +52,15 @@ rm -f /tmp/_trunc.bin
 chk "layout matches doc/BLOB_FORMAT.md" "$(c/bin/blobfmt esp32_router/main/router.bin | grep -c 'OK: layout matches')" "1"
 c/bin/eval esp32_router/main/router.bin data/validation.json >/dev/null 2>&1
 chk "blob verifier (parity + index integrity)" "$?" "0"
+# Capture cmp's status IMMEDIATELY. This check silently passed for a while
+# because a later-inserted check landed between the cmp and the `chk "$?"`,
+# so $? held the intervening check's status, not cmp's. Mutation testing
+# caught it; reading the file did not.
 c/bin/mkblob $D /tmp/_regress.bin >/dev/null 2>&1
-cmp -s /tmp/_regress.bin esp32_router/main/router.bin
-# BLOB_FORMAT.md: blob and firmware must agree on RD or parity measures nothing.
-# The blob header carries dim at byte offset 4.
+cmp -s /tmp/_regress.bin esp32_router/main/router.bin; BLOB_RC=$?
+rm -f /tmp/_regress.bin
 chk "blob dim matches router.h RD" "$(od -An -tu4 -j4 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RD\s' c/src/router.h | grep -oE '[0-9]+')"
-chk "blob reproducible byte-identical" "$?" "0"; rm -f /tmp/_regress.bin
+chk "blob reproducible byte-identical" "$BLOB_RC" "0"
 
 echo "=== SHIPPED CONFIG (ROW: 1=ROW 2=split 3=variant 4=acc 5=se 6=fa 7=wa 8=missed 9=kb 10=th 11=n) ==="
 row=$(c/bin/compare $D --ship 2>&1 | grep '^ROW' | grep twin)
@@ -70,8 +73,14 @@ chk "threshold 136" "$(echo "$row" | cut -f10)" "136"
 
 echo "=== LEAK GUARDS (abort on failure) ==="
 o=$(c/bin/compare $D --ship 2>&1)
-chk "index vs DEV disjoint"  "$(echo "$o" | grep -c 'index vs DEV .*disjoint')"  "1"
-chk "index vs TEST disjoint" "$(echo "$o" | grep -c 'index vs TEST .*disjoint')" "1"
+# The two greps below confirm the guard REPORTED disjoint. They cannot tell a
+# working guard from a disabled one — disabling the abort still prints the
+# success line (mutation testing, METHOD.md #15). So first prove it FIRES:
+# --leak deliberately reintroduces the 75.6%% dev leak and must abort.
+c/bin/compare $D --leak >/dev/null 2>&1; LEAK_RC=$?
+chk "leak guard ABORTS on a deliberate leak" "$LEAK_RC" "2"
+chk "invariant RAN and reported on DEV"  "$(echo "$o" | grep -c 'index vs DEV .*disjoint')"  "1"
+chk "invariant RAN and reported on TEST" "$(echo "$o" | grep -c 'index vs TEST .*disjoint')" "1"
 chk "dev  code-overlap zero" "$(echo "$o" | grep 'diag. DEV'  | grep -c 'entry: 0 ')" "1"
 chk "test code-overlap zero" "$(echo "$o" | grep 'diag. TEST' | grep -c 'entry: 0 ')" "1"
 
@@ -97,10 +106,10 @@ BT_LINE='    decision               none  (score below threshold — no action)'
 chk "--route declines a non-command" "$(c/bin/compare --ship --route='what time does the train leave' 2>/dev/null | grep -Fxc "$NC_LINE")" "1"
 chk "--route declines nonsense below threshold" "$(c/bin/compare --ship --route='zzz qqq xyzzy' 2>/dev/null | grep -Fxc "$BT_LINE")" "1"
 chk "--route output is clean (no corpus chatter)" "$(c/bin/compare --ship --route=x 2>&1 | grep -c '\[inv\]')" "0"
-chk "LICENSE present and tracked" "$(git ls-files LICENSE | wc -l | tr -d ' ')" "1"
+chk "LICENSE present and tracked" "$([ -f LICENSE ] && git ls-files LICENSE | wc -l | tr -d ' ')" "1"
 chk "LICENSE is MIT" "$(grep -c '^MIT License$' LICENSE)" "1"
 chk "README states the licence" "$(grep -c '\[MIT\](LICENSE)' README.md)" "1"
-chk "QUICKSTART tracked" "$(git ls-files doc/QUICKSTART.md | wc -l | tr -d ' ')" "1"
+chk "QUICKSTART present and tracked" "$([ -f doc/QUICKSTART.md ] && git ls-files doc/QUICKSTART.md | wc -l | tr -d ' ')" "1"
 
 echo "=== DOCS ==="
 b=0
@@ -129,14 +138,14 @@ chk "journal README cycle count is current" "$(grep -oE '[0-9]+ cycles' journal/
 echo "=== ARCHIVE (gitignored, must remain intact on disk) ==="
 chk "archive untracked"        "$(git ls-files archive | wc -l | tr -d ' ')" "0"
 chk "tracked provenance bundle checksum" "$(shasum -a 256 -c provenance/needle-upstream.bundle.sha256 2>/dev/null | grep -c OK)" "1"
-chk "provenance bundle is TRACKED (off-disk backup)" "$(git ls-files provenance/needle-upstream.bundle | wc -l | tr -d ' ')" "1"
+chk "provenance bundle present and TRACKED" "$([ -f provenance/needle-upstream.bundle ] && git ls-files provenance/needle-upstream.bundle | wc -l | tr -d ' ')" "1"
 if [ "$HAVE_ARCHIVE" = 1 ]; then
   chk "local archive bundle checksum" "$(cd archive/needle_upstream && shasum -a 256 -c needle_full.bundle.sha256 2>/dev/null | grep -c OK)" "1"
 else skip "local archive bundle checksum" "archive/ is local-only"; fi
 if [ "$HAVE_ARCHIVE" = 1 ]; then
   chk "upstream repo 270 commits" "$(git -C archive/needle_upstream rev-list --count HEAD 2>/dev/null)" "270"
 else skip "upstream repo 270 commits" "archive/ is local-only"; fi
-chk "doc/ARCHIVE.md tracked"   "$(git ls-files doc/ARCHIVE.md | wc -l | tr -d ' ')" "1"
+chk "doc/ARCHIVE.md present and tracked" "$([ -f doc/ARCHIVE.md ] && git ls-files doc/ARCHIVE.md | wc -l | tr -d ' ')" "1"
 # We now have our own remote. The thing this check exists to catch is the repo
 # ever pointing back at the upstream clone it was separated from.
 chk "no remote points at the upstream clone" "$(git remote -v 2>/dev/null | grep -ci 'anjaustin/needle')" "0"

@@ -1,0 +1,150 @@
+=== compiler warning introduced
+    tools+tests build with zero warnings
+=== a tool source deleted
+    binary count
+    cuemine mines colour from index
+=== corpus checksum altered
+    corpus checksums
+=== popcount table corrupted
+    popcount table exact over all 2^32 words
+    t_dot algebraic rewrite exact
+    blob verifier (parity + index integrity)
+    blob reproducible byte-identical
+    recall 85.9
+    fa 1
+    wa 13
+    missed 14
+=== t_dot rewrite broken
+    t_dot algebraic rewrite exact
+    blob verifier (parity + index integrity)
+    blob reproducible byte-identical
+=== blobfmt stops rejecting bad blobs
+    blobfmt REJECTS a truncated blob
+=== blob bytes corrupted
+    blob verifier (parity + index integrity)
+    blob reproducible byte-identical
+=== RD changed, blob left alone
+    layout matches doc/BLOB_FORMAT.md
+    blob verifier (parity + index integrity)
+    blob dim matches router.h RD
+    blob reproducible byte-identical
+    recall 85.9
+    fa 1
+    wa 13
+    missed 14
+    index 656 KB
+=== shipped threshold changed
+    blob reproducible byte-identical
+    recall 85.9
+    fa 1
+    wa 13
+    missed 14
+    threshold 136
+    --route reports score vs threshold
+=== Dice smoothing changed
+    blob verifier (parity + index integrity)
+    blob reproducible byte-identical
+    recall 85.9
+    fa 1
+    wa 13
+    missed 14
+=== leak guard disabled
+    leak guard ABORTS on a deliberate leak
+=== code-overlap detector disabled
+    recall 85.9
+    fa 1
+    wa 13
+    missed 14
+    index 656 KB
+    threshold 136
+    dev  code-overlap zero
+    test code-overlap zero
+    gate == prior, bit-exact
+    paths default to data/ (no positional args)
+=== gate diverges from prior
+    gate == prior, bit-exact
+=== leaktest under-reports
+    leaktest reproduces 75.6% leak
+=== leakchk output changed
+    leakchk dev/test near-dup
+=== cuemine finds nothing
+    cuemine mines colour from index
+=== --help loses --route
+    --help documents --route
+=== --help loses the negatives group
+    --help groups retained negative results
+=== --help returns nonzero
+    --help exits 0
+=== unknown flags silently ignored
+    unknown flag refused with rc=1
+=== path defaults removed
+    paths default to data/ (no positional args)
+    --route decision line names the class
+    --route shows nearest stored utterances
+    --route reports score vs threshold
+    --route declines a non-command
+    --route declines nonsense below threshold
+=== --route decision line broken
+    --route decision line names the class
+    --route declines a non-command
+    --route declines nonsense below threshold
+=== --route neighbours suppressed
+    --route shows nearest stored utterances
+=== --route score line broken
+    --route reports score vs threshold
+=== --route none-reason changed
+    --route declines a non-command
+=== --route leaks corpus chatter
+    --route output is clean (no corpus chatter)
+=== LICENSE removed
+    LICENSE present and tracked
+    LICENSE is MIT
+    markdown links resolve
+=== LICENSE changed to Apache
+    LICENSE is MIT
+=== README drops the licence line
+    README states the licence
+=== QUICKSTART removed
+    QUICKSTART present and tracked
+    markdown links resolve
+=== broken markdown link
+    markdown links resolve
+=== broken EXPERIMENTS anchor
+    EXPERIMENTS anchors resolve
+=== EXPERIMENTS section without TOC
+    EXPERIMENTS contents covers every section
+=== EXPERIMENTS TOC duplicated entry
+    EXPERIMENTS contents has no duplicates
+=== a c/src tool undocumented
+    every c/src tool is in TOOLS.md
+=== an archive subdir undocumented
+    every archive/ subdir is in ARCHIVE.md
+=== a boot suite undocumented
+    every boot suite is in esp32_router/README
+=== journal cycle count stale
+    journal README cycle count is current
+=== provenance bundle corrupted
+    tracked provenance bundle checksum
+=== provenance bundle untracked
+    provenance bundle present and TRACKED
+=== doc/ARCHIVE.md untracked
+    doc/ARCHIVE.md present and tracked
+=== archive/ becomes tracked
+    archive untracked
+=== upstream remote re-added
+    no remote points at the upstream clone
+=== local archive bundle corrupted
+    local archive bundle checksum
+    no remote points at the upstream clone
+=== upstream repo commit count changed
+    local archive bundle checksum
+    upstream repo 270 commits
+    no remote points at the upstream clone
+=== leak guard disabled entirely
+    leak guard ABORTS on a deliberate leak
+    local archive bundle checksum
+    no remote points at the upstream clone
+=== doc check count goes stale
+    local archive bundle checksum
+    no remote points at the upstream clone
+    docs quote the live check count
