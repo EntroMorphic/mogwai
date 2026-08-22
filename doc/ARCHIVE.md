@@ -43,6 +43,26 @@ that produced the guardrails in [METHOD.md](METHOD.md).
 Compared `t_score` against a candidate `dice()`; Dice was then adopted **as**
 `t_score`, so it compares a function to itself.
 
+## The one deliberate exception
+
+A copy of the upstream bundle is tracked at `provenance/needle-upstream.bundle`.
+Everything under `archive/` itself stays local-only.
+
+It could not simply be force-added where it sat: `archive/needle_upstream/`
+contains a nested `.git`, and git refuses to track anything inside a nested
+repository whatever `-f` you pass. It also should not have lived there — a
+backup inside the repository it backs up is not a backup.
+
+The reason: three commits in that history were never pushed anywhere, and the
+only two copies — the original `.git` and this bundle — sat in the same folder
+on the same disk. Co-located redundancy is not redundancy. Tracking the bundle
+puts those commits on a remote, which is the only backup that survives losing
+this machine.
+
+Restore with:
+
+    git clone archive/needle_upstream/needle_full.bundle <dest>
+
 ## Why gitignored rather than tracked
 
 Tracking it cost 45 MB of tracked files and most of a 122 MB `.git`, for content

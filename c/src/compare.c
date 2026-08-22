@@ -167,8 +167,30 @@ static void mcnemar(hit *A, int ta, hit *B, int tb, char la[][RNAMELEN], int n) 
         int wb = (gn && strcmp(pb, "none")) || (!gn && strcmp(pb, "none") && strcmp(pb, la[i]));
         if (wa && !wb) fixed++; else if (wb && !wa) broke++;
     }
+    /* Overall correctness, with an exact p. The wrong-axis counts above say
+       which errors moved; they do NOT say whether the change is real. The core
+       twin-vs-binary claim went into a public README carrying only a gap and a
+       saturation argument, because nothing computed this. Now everything does. */
+    int cfix = 0, cbrk = 0;
+    for (int i = 0; i < n; i++) {
+        int ca = (A[i].score > ta) ? A[i].cls : -1;
+        int cb = (B[i].score > tb) ? B[i].cls : -1;
+        int oa = !strcmp(ca < 0 ? "none" : R.names[ca], la[i]);
+        int ob = !strcmp(cb < 0 ? "none" : R.names[cb], la[i]);
+        if (ob && !oa) cfix++; else if (oa && !ob) cbrk++;
+    }
+    int m = cfix + cbrk; double s = 0, tot = 0;
+    int lo = cfix < cbrk ? cfix : cbrk, hi = cfix > cbrk ? cfix : cbrk;
+    for (int k = 0; k <= m; k++) {
+        double w = 1; for (int j = 0; j < k; j++) w = w * (m - j) / (j + 1);
+        tot += w; if (k <= lo || k >= hi) s += w;
+    }
+    double p = m ? s / tot : 1.0;
     printf("      vs %-18s wrong: fixed %-3d broke %-3d %s\n",
            LAST_NAME, fixed, broke, broke == 0 ? "(non-destructive)" : "");
+    printf("      %-21s overall: fixed %-3d broke %-3d  p=%.4f %s\n", "",
+           cfix, cbrk, p, p < 0.05 ? "SIGNIFICANT" : "not significant");
+    printf("PAIR\t%s\t%d\t%d\t%.6f\n", LAST_NAME, cfix, cbrk, p);
 }
 /* Does the prior MOVE the operating curve, or merely slide along it?
  * If its (wrong, missed) frontier sits on top of the no-prior frontier, it is

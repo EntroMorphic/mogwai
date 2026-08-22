@@ -5,6 +5,8 @@ Source: the concerns audit in `EXPERIMENTS.md` and `doc/METHOD.md`.
 
 ## P0 — unrecoverable, or makes a published claim wrong
 
+_P0-1 closed 2026-08-22; P0-2 in progress._
+
 ### P0-1 · Three commits exist only on one disk
 `archive/needle_upstream/` holds both the original `.git` **and** the verified
 bundle of the same history — co-located, on a disk at 95% capacity. Three
@@ -15,9 +17,12 @@ commits were never pushed (`origin` only ever carried `main`):
 Co-located redundancy is not redundancy. **This repo's own remote does not fix
 it** — `archive/` is gitignored, so pushing mogwai does not carry the bundle.
 
-**Closes when:** the branch is pushed to `anjaustin/needle`, which is its
-natural home, or the bundle is copied off this disk. Needs the owner's call —
-pushing to another repository is not mine to do unasked.
+**CLOSED.** The bundle is now tracked at `provenance/needle-upstream.bundle`
+(1.8 MB), so this repo's remote carries it off-disk. It could not be tracked in
+place — `archive/needle_upstream/` holds a nested `.git` and git will not add
+through one, which is also why a backup should not live inside its own subject. Pushing the branch to `anjaustin/needle` remains the
+tidier home for it, but that is a different repository and the owner's call;
+the unrecoverable-loss risk is closed either way.
 
 ### P0-2 · The core claim has no held-out significance test
 Twin-ternary vs binary is **p=0.0931 on dev — not significant at n=192**. The

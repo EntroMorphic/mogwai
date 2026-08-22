@@ -97,7 +97,9 @@ chk "EXPERIMENTS anchors resolve" "$(comm -23 \
 
 echo "=== ARCHIVE (gitignored, must remain intact on disk) ==="
 chk "archive untracked"        "$(git ls-files archive | wc -l | tr -d ' ')" "0"
-chk "needle bundle checksum"   "$(cd archive/needle_upstream 2>/dev/null && shasum -a 256 -c needle_full.bundle.sha256 2>/dev/null | grep -c OK)" "1"
+chk "tracked provenance bundle checksum" "$(shasum -a 256 -c provenance/needle-upstream.bundle.sha256 2>/dev/null | grep -c OK)" "1"
+chk "provenance bundle is TRACKED (off-disk backup)" "$(git ls-files provenance/needle-upstream.bundle | wc -l | tr -d ' ')" "1"
+chk "local archive bundle checksum" "$(cd archive/needle_upstream 2>/dev/null && shasum -a 256 -c needle_full.bundle.sha256 2>/dev/null | grep -c OK)" "1"
 chk "upstream repo 270 commits" "$(git -C archive/needle_upstream rev-list --count HEAD 2>/dev/null)" "270"
 chk "doc/ARCHIVE.md tracked"   "$(git ls-files doc/ARCHIVE.md | wc -l | tr -d ' ')" "1"
 # We now have our own remote. The thing this check exists to catch is the repo
