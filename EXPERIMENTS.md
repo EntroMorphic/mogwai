@@ -1233,3 +1233,47 @@ but not established by, this corpus". No re-tuning, no second look.
 land comfortably rather than marginally — the effect is 2.7x the size of the dev
 effect on a larger sample. Recording that expectation so overconfidence is
 visible if it is wrong.
+
+## Test evaluation #5 — RESULT: the core claim IS significant on held-out data
+
+    binary (1 bit)      75.5% ±2.9   th=138
+    twin-ternary (2b)   84.1% ±2.5   th=136
+      paired, overall:  fixed 25   broke 11   p = 0.0288   SIGNIFICANT
+
+**The representation claim now has held-out statistical support.** Not merely a
+gap and a saturation argument — a paired test on 220 items, p=0.0288.
+
+**Deviation from the pre-registration, stated plainly.** I wrote "both variants
+at `RSHIP_TH`=136". `make testset` auto-tunes, so binary ran at **138** and twin
+at 136 — each at its own dev-tuned threshold. That is arguably the fairer
+comparison (each variant at its best operating point, which is how the table is
+reported), but it is not what I said I would do. For reference, on dev the two
+framings differ little: matched-136 gives p=0.0639, binary-at-138 gives p=0.0931.
+I did not re-run to match, because re-running on test to get a framing I prefer
+is exactly the behaviour the budget exists to prevent.
+
+### Predictions scored: 2 of 4
+
+| # | predicted | actual | |
+|---|---|---|---|
+| 1a | fixed 22–30 | 25 | **hit** |
+| 1b | broke 4–10 | 11 | miss — by one |
+| 2 | **p < 0.01** | **p = 0.0288** | **miss** — significant, but not comfortably |
+| 3 | twin fa/wa unchanged (23 wrong, 20 missed) | 23, 20 | **hit** — no drift |
+
+**The miss worth noting is #2.** I wrote in the pre-registration: *"the first
+prediction this session that I expect to land comfortably rather than
+marginally — recording that expectation so overconfidence is visible if it is
+wrong."* It landed at p=0.029. Significant, but a third of the margin I
+predicted, and one more discordant pair the wrong way would have put it near
+0.05. **The effect is real and it is not large.**
+
+### What the README should now say
+
+The claim rests on: a **held-out paired test at p=0.0288**, a size-matched
+control (binary d=512, same 64 B/vector), and binary saturating — its curve is
+identical at d=256 and d=512. It is **not** significant on dev (p=0.0639), and
+that remains worth stating, because it shows how close this sits to the
+resolution limit of the data.
+
+Test budget: 5.

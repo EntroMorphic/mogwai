@@ -5,7 +5,7 @@ Source: the concerns audit in `EXPERIMENTS.md` and `doc/METHOD.md`.
 
 ## P0 — unrecoverable, or makes a published claim wrong
 
-_P0-1 closed 2026-08-22; P0-2 in progress._
+_Both P0 items closed 2026-08-22. Remaining work is P1 and below._
 
 ### P0-1 · Three commits exist only on one disk
 `archive/needle_upstream/` holds both the original `.git` **and** the verified
@@ -24,14 +24,19 @@ through one, which is also why a backup should not live inside its own subject. 
 tidier home for it, but that is a different repository and the owner's call;
 the unrecoverable-loss risk is closed either way.
 
-### P0-2 · The core claim has no held-out significance test
+### P0-2 · The core claim has no held-out significance test — CLOSED
 Twin-ternary vs binary is **p=0.0931 on dev — not significant at n=192**. The
 claim currently rests on the held-out *gap* (19 net items on 220) and on binary
 saturating at d=256 vs d=512. Both are sound arguments; neither is the test.
 This is now stated in a public README.
 
-**Closes when:** one budget unit runs a paired McNemar of binary vs twin on the
-held-out split, pre-registered. Budget stands at 4.
+**CLOSED** by test evaluation #5: `fixed 25, broke 11, p=0.0288` — significant
+on held-out data. README updated to state it alongside the dev non-significance
+(p=0.0639), because the effect is real but not large. Budget now 5.
+
+One deviation recorded: the pre-registration said both variants at th=136, but
+`make testset` auto-tunes and binary ran at 138. Not re-run — re-running on test
+to obtain a preferred framing is what the budget exists to prevent.
 
 ## P1 — limits what can be deployed
 
