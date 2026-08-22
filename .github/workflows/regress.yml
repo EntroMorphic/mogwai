@@ -77,8 +77,17 @@ jobs:
           echo "blob dim=$DIM  router.h RD=$RD"
           test "$DIM" = "$RD"
 
+      # The bootloader is WRITTEN in dio for both QIO and QOUT - the ROM must read
+      # it before quad exists - so its mode byte is 2 either way and cannot tell
+      # QIO from DIO. Asserting the byte would be a check that can never fail.
+      # The choice symbol in the generated sdkconfig is what actually differs.
       - name: Flash mode is QIO
         run: |
+          # sdkconfig is generated inside the action's container; if the
+          # workspace mount does not persist it, say so plainly rather than
+          # failing on an opaque grep.
+          test -f esp32_router/sdkconfig || { echo "sdkconfig not persisted from the build container"; exit 1; }
+          grep -q '^CONFIG_ESPTOOLPY_FLASHMODE_QIO=y' esp32_router/sdkconfig
           B=$(od -An -tu1 -j2 -N1 esp32_router/build/bootloader/bootloader.bin | tr -d ' ')
-          echo "bootloader flash-mode byte=$B (0=QIO 1=QOUT 2=DIO 3=DOUT)"
-          test "$B" = "2"   # written in DIO, upgraded to quad at init — see doc/EXPERIMENTS.md
+          echo "QIO selected; bootloader written in mode $B (2=dio, upgraded to quad at init)"
+          test "$B" = "2"
