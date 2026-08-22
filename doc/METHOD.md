@@ -345,3 +345,37 @@ to be one allocation. Chunked at 8 KB it uses nearly all the free heap, and any
 chunk that will not fit stays flash-mapped and scores identically. 43.9 → 34.3
 ms on the shipped index at no accuracy cost. The constraint was never the memory
 — it was the question being asked about it.
+
+### What the second complete pass found
+
+Re-running the whole suite after a month of changes found four ways the harness
+had quietly stopped working. None of them showed up as a failure; every one
+showed up as a **pass**.
+
+- **Coverage is not retroactive.** Every check added after `mutate.sh` was
+  written arrived UNCOVERED, and nothing said so — the number simply drifted
+  from 53/55 to 53/62 while the suite grew. Adding a check now means adding the
+  mutation that kills it, in the same commit.
+- **The save and restore lists were two hardcoded literals.** Adding a path to
+  one did not add it to the other, so a mutated `product.c` was never restored:
+  the run left the tree broken and two checks failing. Worse, it **corrupted the
+  coverage number** — the denominator counts `PASS|SKIP`, so the two checks left
+  failing dropped silently out of it, reporting 58 of 61 for a 63-check suite. A
+  restore bug flatters the result. One list now feeds both loops, and the harness
+  diffs every path against its own snapshot and exits nonzero if any differ.
+- **A mutation can cancel itself out.** `sed 's|BLOBSZ - 1|BLOBSZ - 0|'` hit the
+  string twice — in the command *and* in the check's expected value — so the
+  expectation moved with the input and the check still passed. A mutation that
+  edits both sides of a comparison tests nothing. Target the input alone.
+- **A negative control failed open twice in one day.** `head -c 700000` stopped
+  truncating anything once the index shrank to 261 KB; then a mangled shell
+  expansion left the file EMPTY, which the validator rejected for the wrong
+  reason. Both times it reported PASS. The fix is not a better constant — it is
+  to **assert the control's input, not just its verdict**.
+
+Two habits came out of it. Mutating one guard proves nothing when a property is
+defended in depth: a truncated blob is caught by three independent checks, so
+every single-guard mutation looked inert until all three were disabled at once.
+And on a `make` that rebuilds by mtime, always `rm -f` the binary before
+re-measuring — three conclusions in this pass were drawn from builds that had
+not actually happened, one of them the exact opposite of the truth.

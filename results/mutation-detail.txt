@@ -20,6 +20,11 @@
     blob reproducible byte-identical
 === blobfmt stops rejecting bad blobs
     blobfmt REJECTS a blob with trailing bytes
+=== blobfmt stops validating at all
+    blobfmt REJECTS a truncated blob
+    blobfmt REJECTS a blob with trailing bytes
+=== truncated control stops truncating
+    blobfmt REJECTS a truncated blob
 === blob bytes corrupted
     blob verifier (parity + index integrity)
     blob reproducible byte-identical

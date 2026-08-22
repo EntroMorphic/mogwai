@@ -56,7 +56,10 @@ run_mut "blobfmt stops rejecting bad blobs"  "sed -i '' 's|if (o != size) { prin
 run_mut "blobfmt stops validating at all"    "sed -i '' -e 's|if (o + 1 > size) { printf(\"  FAIL: ran off the end|if (0) { printf(\"  FAIL: ran off the end|' -e 's|if (o + len + 5 > size) { printf(\"  FAIL: record %u overruns EOF|if (0) { printf(\"  FAIL: record %u overruns EOF|' -e 's|if (o != size) { printf(\"  FAIL: %ld bytes unaccounted|if (0) { printf(\"  FAIL: %ld bytes unaccounted|' c/test/blobfmt.c"
 # The negative control failing OPEN is the failure that actually happened, twice.
 # This reproduces it: the "truncated" file becomes a whole valid blob.
-run_mut "truncated control stops truncating" "sed -i '' 's|BLOBSZ - 1|BLOBSZ - 0|' scripts/regress.sh"
+# Target the head line ONLY. The first attempt sed'd "BLOBSZ - 1", which appears
+# twice - in the command AND in the check's expected value - so the expectation
+# moved with the input and the mutation cancelled itself out, firing nothing.
+run_mut "truncated control stops truncating" "sed -i '' 's|head -c .* > /tmp/_trunc.bin|cat esp32_router/main/router.bin > /tmp/_trunc.bin|' scripts/regress.sh"
 run_mut "blob bytes corrupted"               "dd if=/dev/zero of=esp32_router/main/router.bin bs=1 seek=40000 count=3000 conv=notrunc"
 run_mut "RD changed, blob left alone"        "sed -i '' 's/^#define RD        256/#define RD        128/' c/src/router.h"
 run_mut "shipped threshold changed"          "sed -i '' 's/#define RSHIP_TH  136/#define RSHIP_TH  130/' c/src/router.h"
