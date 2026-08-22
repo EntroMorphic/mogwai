@@ -145,6 +145,7 @@ threshold is the knob — the full operating curve is in
     ESP32-D0WD-V3, 240 MHz, QIO flash @ 80 MHz, stock ESP-IDF v5.5
 
     SHIPPED, 3840 vectors / 240 KB     6.3 ms   index 100% resident in SRAM
+    the same, with the WiFi stack up   9.3 ms   70% resident; WiFi takes ~72 KB
     unpruned, 10500 vectors / 656 KB  43.5 ms   (1 core)   26.7 ms  (2 cores)
     parity vs host                    64/64 class and score, bit-exact
 
@@ -165,6 +166,15 @@ while reporting success. The scan is sequential, so the index does not need one
 allocation. Lifting it in 8 KB chunks uses nearly all the free heap; any chunk
 that will not fit stays flash-mapped and scores identically. Details:
 [Chunked SRAM residency](doc/EXPERIMENTS.md#chunked-sram-residency-the-index-does-not-need-one-allocation).
+
+Two consequences worth knowing before deploying this. **3840 vectors is a
+ceiling, not a target** — chunk 31 does not cost a little, it costs 0.33 ms on
+every query forever, so the index cannot grow without falling off. And the
+295 KB free-heap figure is measured with **the WiFi stack never started**; bring
+WiFi up and it is 70% resident and 9.3 ms, because WiFi takes ~72 KB of liftable
+heap. That is the chunked design degrading rather than failing — a flat lift
+would have dropped to 43.9 ms — but 6.3 ms is a no-WiFi number and is labelled
+as one above.
 
 ## How it works
 

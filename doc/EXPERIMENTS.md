@@ -73,6 +73,7 @@ not a discipline anyone has to remember.
 - [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) — free heap is a **sum of regions**; one malloc can never fit. 43.9 → 34.3 ms at no accuracy cost
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
 - [The shipped index is pruned to 240 KB](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms; the price is `fa` 1 → 6 and nothing else
+  - [With WiFi running it is 70% resident](#with-wifi-running-it-is-70-resident-not-100) — 9.3 ms; the 6.3 ms figure is a no-WiFi number
 - [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) — does the pruning cost transfer? **not yet run**
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
@@ -1581,6 +1582,44 @@ Measured on device, shipped firmware:
 *identical* to the 656 KB build (227 and 187), which is the sweep's structural
 claim confirmed on hardware: at th=136 a negative is never an IoT utterance's
 nearest neighbour, so removing negatives cannot move an IoT score.
+
+
+### With WiFi running it is 70% resident, not 100%
+
+The 295 KB free-heap figure everything above rests on was measured with the WiFi
+stack **never started**. `CONFIG_ESP_WIFI_ENABLED=y` is the ESP-IDF default so
+WiFi is compiled in, but `product.c` never calls `esp_wifi_init`, and a stack
+that is not started allocates nothing. For a device that actually talks to
+anything, that is not the heap it will have.
+
+Measured rather than estimated — a temporary build that brings up NVS, netif,
+the event loop and `esp_wifi_start()` **before** the index is lifted:
+
+    index 2688/3840 vectors in SRAM (70%), 30 chunks of 128
+    needs 253440 B | largest contiguous block 110592 B | total free 40240 B
+
+    "turn the lights on"   ACTUATED  light -> ON     9298 us
+    "start the vacuum"     ACTUATED  cleaner -> START 9181 us
+
+**6.3 → 9.3 ms.** WiFi takes ~72 KB of liftable heap (the largest block falls
+163,840 → 110,592 B), which pushes 9 chunks — 1152 vectors — back to flash. The
+reserve held in both cases: 40,144 B free without WiFi, 40,240 B with.
+
+This is the chunked design behaving as designed. It **degrades, it does not
+fail**: the same 30 chunks are scanned, 21 from SRAM and 9 from flash, the
+addressing check still passes over all 3840, and the scores are unchanged (227
+and 187, identical to every other build). A flat all-or-nothing lift would have
+dropped to 43.9 ms here instead of 9.3.
+
+It also prices the cliff exactly. 9 flash chunks x 128 vectors x 2551 ns =
+2.94 ms, predicted 9.24 against 9.3 measured — **0.33 ms per unlifted chunk**.
+That is the marginal cost of the index growing past 3840 vectors, and the reason
+3840 is a hard ceiling rather than a soft target: chunk 31 does not cost a
+little, it costs a third of a millisecond, every query, forever.
+
+I predicted ~7 chunks and ~8.6 ms before measuring. It is 9 and 9.3 — the
+estimate was optimistic, which is the direction estimates about spare memory
+usually go.
 
 ### What it costs, stated plainly
 
