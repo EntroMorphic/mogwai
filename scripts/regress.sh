@@ -21,7 +21,16 @@ HAVE_ARCHIVE=0; [ -d archive/needle_upstream/.git ] && HAVE_ARCHIVE=1
 
 echo "=== BUILD ==="
 rm -rf c/bin
-chk "tools+tests build with zero warnings" "$(make -s tools 2>&1 | grep -cE 'warning|error')" "0"
+# Capture the build output so a failure shows WHAT broke, not just how many.
+# CI reported 'got 11 want 0' with the diagnostics discarded by grep -c, which
+# made a real portability break (strdup hidden under strict -std=c11 on glibc,
+# libm unlinked) invisible from the log.
+BUILD_OUT=$(make -s tools 2>&1)
+BUILD_N=$(printf '%s\n' "$BUILD_OUT" | grep -cE 'warning|error')
+chk "tools+tests build with zero warnings" "$BUILD_N" "0"
+if [ "$BUILD_N" != "0" ]; then
+  printf '%s\n' "$BUILD_OUT" | grep -E 'warning|error' | head -20 | sed 's/^/        /'
+fi
 chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "10"
 
 echo "=== CORPUS ==="

@@ -1,6 +1,11 @@
 # Everything is C. Every run is logged. No Python anywhere in this pipeline.
 CC      := cc
-CFLAGS  := -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter
+# _POSIX_C_SOURCE: strdup is POSIX, not C11. glibc hides it under strict
+# -std=c11, so eight files failed to build on Linux while building clean on
+# macOS, where Apple's headers expose it regardless. Caught by CI, not by me.
+# -lm: libm is separate on Linux; folded into libc on macOS.
+CFLAGS  := -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -D_POSIX_C_SOURCE=200809L
+LDLIBS  := -lm
 SRC     := c/src
 BIN     := c/bin
 CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c $(SRC)/prior.c $(SRC)/prune.c $(SRC)/cue.c $(SRC)/gate.c
@@ -12,7 +17,7 @@ all: $(BIN)/compare
 
 $(BIN)/%: $(SRC)/%.c $(CORE) $(SRC)/router.h $(SRC)/ternary.h
 	@mkdir -p $(BIN)
-	$(CC) $(CFLAGS) -o $@ $< $(CORE)
+	$(CC) $(CFLAGS) -o $@ $< $(CORE) $(LDLIBS)
 
 fetch:
 	@./scripts/fetch.sh
@@ -77,8 +82,8 @@ clean:
 # target existed.
 .PHONY: tools
 tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c)))
-	@cc $(CFLAGS) -DTPOPCNT=1 -o $(BIN)/t_popcnt c/test/t_popcnt.c c/test/probe.c $(SRC)/router.c
-	@cc $(CFLAGS) -o $(BIN)/blobfmt c/test/blobfmt.c $(SRC)/router.c $(SRC)/ternary.c
+	@$(CC) $(CFLAGS) -DTPOPCNT=1 -o $(BIN)/t_popcnt c/test/t_popcnt.c c/test/probe.c $(SRC)/router.c $(LDLIBS)
+	@$(CC) $(CFLAGS) -o $(BIN)/blobfmt c/test/blobfmt.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
 	@echo "  all tools + tests built: $$(ls $(BIN) | tr '\n' ' ')"
 
 # Full host regression. Run after any structural change.
