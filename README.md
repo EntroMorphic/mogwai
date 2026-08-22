@@ -19,7 +19,7 @@ parameters; it needs a good representation and an honest threshold.
     make repl                                    # interactively
 
 Two host dependencies: a C compiler and `curl`. Build is 0.8 s, a full
-evaluation 0.7 s, the entire 29-check regression suite 9 s.
+evaluation 0.7 s, the entire regression suite 11 s.
 Full path in [QUICKSTART.md](QUICKSTART.md).
 
 ## Result
@@ -98,7 +98,7 @@ are 92% of the cost, so index size predicts latency directly.
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (29 checks) — run after any structural change
+    make regress        # full host regression (42 checks) — run after any structural change
 
 Build and flash the device:
 
@@ -153,5 +153,5 @@ get something much worse — which is the whole reason for the name.
    the autopsies of both are kept — see [doc/ARCHIVE.md](doc/ARCHIVE.md).
 
 Every run is logged and stamped with the git SHA and clean/dirty tree state.
-Run `make regress` after any structural change: 29 checks, including that the
+Run `make regress` after any structural change: 42 checks, including that the
 negative results still reproduce.

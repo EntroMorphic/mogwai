@@ -62,9 +62,15 @@ chk "--help documents --route" "$(c/bin/compare --help 2>&1 | grep -c -- '--rout
 chk "--help groups retained negative results" "$(c/bin/compare --help 2>&1 | grep -c 'RETAINED NEGATIVE RESULTS')" "1"
 chk "paths default to data/ (no positional args)" "$(c/bin/compare --ship 2>/dev/null | grep -c '^ROW')" "2"
 chk "unknown flag refused with rc=1" "$(c/bin/compare --shipp >/dev/null 2>&1; echo $?)" "1"
-chk "--route routes a command" "$(c/bin/compare --ship --route='turn off the kitchen light' 2>/dev/null | grep -c 'iot_hue_lightoff')" "6"
-chk "--route declines a non-command" "$(c/bin/compare --ship --route='what time does the train leave' 2>/dev/null | grep -c 'not a command')" "1"
-chk "--route declines nonsense below threshold" "$(c/bin/compare --ship --route='zzz qqq xyzzy' 2>/dev/null | grep -c 'below threshold')" "1"
+chk "--route decision line names the class" "$(c/bin/compare --ship --route='turn off the kitchen light' 2>/dev/null | grep -cE '^ +decision +iot_hue_lightoff$')" "1"
+chk "--route shows nearest stored utterances" "$(c/bin/compare --ship --route='turn off the kitchen light' 2>/dev/null | grep -cE '^ +[0-9]+ +iot_')" "5"
+chk "--route reports score vs threshold" "$(c/bin/compare --ship --route='turn off the kitchen light' 2>/dev/null | grep -cE '^ +score +[0-9]+ +.threshold 136')" "1"
+# exact-line matches: a substring test still passes if the message is corrupted
+# by appending, which mutation testing caught. grep -Fx pins the whole line.
+NC_LINE='    decision               none  (nearest match is not a command — no action)'
+BT_LINE='    decision               none  (score below threshold — no action)'
+chk "--route declines a non-command" "$(c/bin/compare --ship --route='what time does the train leave' 2>/dev/null | grep -Fxc "$NC_LINE")" "1"
+chk "--route declines nonsense below threshold" "$(c/bin/compare --ship --route='zzz qqq xyzzy' 2>/dev/null | grep -Fxc "$BT_LINE")" "1"
 chk "--route output is clean (no corpus chatter)" "$(c/bin/compare --ship --route=x 2>&1 | grep -c '\[inv\]')" "0"
 chk "QUICKSTART.md tracked" "$(git ls-files QUICKSTART.md | wc -l | tr -d ' ')" "1"
 
@@ -88,6 +94,12 @@ chk "needle bundle checksum"   "$(cd archive/needle_upstream 2>/dev/null && shas
 chk "upstream repo 270 commits" "$(git -C archive/needle_upstream rev-list --count HEAD 2>/dev/null)" "270"
 chk "doc/ARCHIVE.md tracked"   "$(git ls-files doc/ARCHIVE.md | wc -l | tr -d ' ')" "1"
 chk "no git remote"            "$(git remote | wc -l | tr -d ' ')" "0"
+
+# The docs quote this suite's size. That number went stale the moment the
+# suite grew, and nothing noticed. Check it against reality.
+LIVE=$((P + F + 1))   # +1 for this check itself
+DOC=$(grep -ohE '[0-9]+ checks' README.md QUICKSTART.md 2>/dev/null | grep -oE '[0-9]+' | sort -u | head -1)
+chk "docs quote the live check count" "$DOC" "$LIVE"
 
 echo
 echo "  ======== $P passed, $F failed ========"

@@ -5,3 +5,5 @@ evaluation 1: VOID — measured d=256/mask=none/veto=off, a config selected
 evaluation 2: 2026-08-20T02:56:35Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test
 evaluation 3: 2026-08-21T13:57:45Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test --ship
 evaluation 4: 2026-08-21T17:52:23Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test --ship --gatesel --selmargin=8
+evaluation 5: 2026-08-22T03:16:41Z  argv: data/train.json data/validation.json
+evaluation 6: 2026-08-22T03:16:41Z  argv: data/train.json

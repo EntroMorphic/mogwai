@@ -175,3 +175,36 @@ No confirmed explanation exists.
 **Treat index CV as a filter for obviously-bad ideas, never as evidence a change
 works.** It was the strongest pre-test evidence available for the selector and
 it pointed the wrong way.
+
+## 13. A test that cannot fail is decoration — mutation-test the suite
+
+**Incident.** After adding 10 developer-experience checks, I mutation-tested
+them: broke each behaviour on purpose and asked whether the suite noticed.
+**Two of ten did not fire.**
+
+- The `--route` checks asserted that a class name appeared *somewhere* in the
+  output. Breaking the decision line still passed, because the class also
+  appears in the neighbour list below it. Fixed by anchoring on the decision
+  line itself (`^ +decision +iot_hue_lightoff$`).
+- The rejection-reason checks were substring matches, so corrupting the message
+  by appending still passed. Fixed with `grep -Fxc` against the exact line.
+
+Both looked like passing tests. Neither tested what its name claimed.
+
+**Required:** when adding a check, break the thing it guards and confirm the
+check fails. `cp` the source, mutate, run, restore. It takes a minute and it is
+the only evidence a check works.
+
+## 14. Documentation that quotes a number will go stale
+
+`README.md` and `QUICKSTART.md` both advertised "29 checks". The suite had grown
+to 41 and nothing noticed, because no check compared the documented number to
+the real one.
+
+`scripts/regress.sh` now ends by parsing the count out of the docs and comparing
+it to its own live total. It failed on its first run — adding the check changed
+the count it was checking — which is the correct behaviour and the reason to
+have it.
+
+Generalise: any number a doc quotes about the repo itself should be verified by
+the repo itself.

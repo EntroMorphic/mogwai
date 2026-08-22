@@ -878,7 +878,9 @@ dev. The one point of it that was checked against held-out data did not survive.
 The dev curve was not lying — 88.0% on dev is real — it simply does not predict
 the held-out frontier closely enough to justify a 10-point threshold move.
 
-## Asymmetric threshold ("126 up, 136 down") — REJECTED, but it found real structure
+## Asymmetric threshold ("126 up, 136 down") — REJECTED
+
+<!-- flags: --dirdump -->, but it found real structure
 
 The router already knows direction: `up` = {lighton, wemo_on, lightup},
 `down` = {lightoff, wemo_off, lightdim}, neutral = {lightchange, cleaning,
@@ -1000,6 +1002,10 @@ An oracle would reach 94.3% against the shipped 85.9% — **8.4 points on the ta
 
 ### But no rule extracts it
 
+Flags: `--priorcls` / `--priorcls2` (class delegation, harmful), `--cue`
+(hard word cues, harmful).
+
+
 Tried the clean architectural split — router (evidence reader) decides
 accept/reject, word prior decides which class:
 
@@ -1116,6 +1122,10 @@ because they are STRUCTURAL — they follow from where the code fires, not from 
 rate extrapolated off dev.
 
 ## Test evaluation #4 — RESULT: the selector FAILED and is CUT
+
+Flags: `--gatesel --selmargin=8` reproduces it; `--selsig` shows the dev result
+was never significant; `--xval` is the index cross-validation that misled.
+
 
     baseline   recall 84.1%   fa=8   wa=15   missed=20
     selector   recall 82.7%   fa=8   wa=18   missed=20
