@@ -1,7 +1,7 @@
 # Open items
 
 Ranked by consequence, not effort. Each names what would close it.
-Source: the concerns audit in `EXPERIMENTS.md` and `doc/METHOD.md`.
+Source: the concerns audit in `doc/EXPERIMENTS.md` and `doc/METHOD.md`.
 
 ## P0 — unrecoverable, or makes a published claim wrong
 

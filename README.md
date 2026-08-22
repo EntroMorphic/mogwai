@@ -1,5 +1,7 @@
 # mogwai — twin-ternary intent router for ESP32
 
+[![regress](https://github.com/EntroMorphic/mogwai/actions/workflows/regress.yml/badge.svg)](https://github.com/EntroMorphic/mogwai/actions/workflows/regress.yml)
+
 A natural-language interface for controlling ESP32-class hardware, built as an
 **integer-only nearest-neighbour router** rather than a language model.
 
@@ -14,7 +16,7 @@ parameters; it needs a good representation and an honest threshold.
 
 > **Status: exploratory research.** There is no product and no real user, and
 > the task framing is inherited from a public dataset rather than specified by
-> anyone. Read [FRAME.md](FRAME.md) before quoting any number from this repo.
+> anyone. Read [FRAME.md](doc/FRAME.md) before quoting any number from this repo.
 
 ## What is unusual here
 
@@ -33,7 +35,7 @@ dominated the dev curve and still failed on held-out data.
   when the thing it guards is deliberately broken. Two rounds of that found four
   checks that could never fail.
 
-[EXPERIMENTS.md](EXPERIMENTS.md) is a lab notebook, not a highlight reel.
+[EXPERIMENTS.md](doc/EXPERIMENTS.md) is a lab notebook, not a highlight reel.
 [doc/METHOD.md](doc/METHOD.md) is fifteen guardrails, each named for the
 incident that produced it.
 
@@ -52,7 +54,7 @@ locally with its full history; see [doc/ARCHIVE.md](doc/ARCHIVE.md).
 
 Two host dependencies: a C compiler and `curl`. Build is 0.8 s, a full
 evaluation 0.7 s, the entire regression suite 11 s.
-Full path in [QUICKSTART.md](QUICKSTART.md).
+Full path in [QUICKSTART.md](doc/QUICKSTART.md).
 
 ## Result
 
@@ -79,7 +81,7 @@ rather than capacity.
 **But binary is the more conservative router** and the table is not a clean
 sweep: at matched bytes it fires on **zero** non-commands where twin fires on
 one. Twin buys recall and pays in unbidden actuations. Which side you want is a
-deployment decision — see [EXPERIMENTS.md](EXPERIMENTS.md).
+deployment decision — see [EXPERIMENTS.md](doc/EXPERIMENTS.md).
 
 **Where the claim rests, stated precisely.** A paired test on the held-out split:
 `fixed 25, broke 11, ` **`p = 0.0288`** — significant. Plus a size-matched control
@@ -160,20 +162,20 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
 
 ## Repo map
 
-    c/src/          the entire shipping system (see doc/TOOLS.md for each tool)
-    c/test/         exhaustive popcount proof, blob-format validator
-    esp32_router/   VALIDATION firmware (see its README) — parity + benchmarks,
-                    not a product build; sources are SYMLINKS into c/src
-    QUICKSTART.md   60 seconds to a routed sentence
-    TODO.md         open items, ranked by consequence
-    doc/            blob format, method/guardrails, tool reference, archive inventory
-    EXPERIMENTS.md  the full experimental record, including invalidated results
-    FRAME.md        what these numbers do and do not mean — read before quoting any
-    journal/        Lincoln Manifold Method artifacts, 5 cycles
-    archive/        superseded work + provenance. LOCAL ONLY (gitignored);
-                    inventory in doc/ARCHIVE.md — nothing is ever deleted
-    results/        every run appends a stamped row; TEST_BUDGET is the audit log
-    board_backup/   original ESP-AT image + verified restore procedure
+    README.md          you are here
+    Makefile           every entry point: fetch, demo, route, ship, regress, testset
+    c/src/             the entire shipping system — 8 tools + 7 shared units
+    c/test/            an exhaustive 2^32 popcount proof, a blob-format validator
+    esp32_router/      VALIDATION firmware (see its README); sources are SYMLINKS into c/src
+    doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
+    journal/           Lincoln Manifold Method artifacts, 7 cycles
+    scripts/           fetch.sh (curl only), regress.sh (45 checks)
+    results/           every run appends a stamped row; TEST_BUDGET is the audit log
+    provenance/        the only off-disk copy of three never-pushed upstream commits
+    board_backup/      how to restore the board's original ESP-AT firmware
+    data/              fetched, never vendored — only SHA256 is tracked
+    archive/           superseded work + provenance. LOCAL ONLY (gitignored);
+                       inventory in doc/ARCHIVE.md — nothing is ever deleted
 
 ## Standing constraints
 

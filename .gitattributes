@@ -1,0 +1,17 @@
+# Normalise line endings for text; keep binaries byte-exact.
+* text=auto eol=lf
+
+*.bundle  binary
+*.bin     binary
+*.npy     binary
+*.npz     binary
+*.png     binary
+
+# The experiment log and the run log are the record. Never merge them
+# automatically — a conflict here means two runs disagree and a human must look.
+EXPERIMENTS.md      merge=union
+results/RESULTS.tsv merge=union
+
+# Keep generated/vendored material out of language statistics and diffs.
+journal/**  linguist-documentation
+doc/**      linguist-documentation

@@ -1,0 +1,44 @@
+name: regress
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host:
+    name: host regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: cc --version && make --version | head -1
+
+      # The corpora are fetched, never vendored. data/SHA256 is tracked, so this
+      # step also proves the upstreams still serve the exact bytes we measured on.
+      - name: Fetch corpora
+        run: make fetch
+
+      - name: Verify corpus checksums
+        run: shasum -a 256 -c data/SHA256
+
+      # 45 checks: build with zero warnings, an exhaustive 2^32 popcount proof,
+      # blob layout vs its own documentation, the six shipped-config numbers, all
+      # four leak guards, and the negative results that must keep reproducing.
+      # Two archive checks skip here by design — archive/ is local-only.
+      - name: Regression suite
+        run: make regress
+
+      - name: Shipped numbers
+        run: |
+          ./c/bin/compare --ship 2>/dev/null | grep -E '^ROW' | tee /tmp/row.tsv
+          awk -F'\t' '$3 ~ /twin/ && ($4!="85.9" || $6!="1" || $7!="13" || $8!="14") \
+            { print "shipped numbers drifted"; exit 1 }' /tmp/row.tsv
+
+      # The repo should demo itself. If this stops routing, the README is lying.
+      - name: Demo routes an utterance
+        run: |
+          ./c/bin/compare --ship --route="turn off the kitchen light" \
+            | grep -qE '^ +decision +iot_hue_lightoff$'

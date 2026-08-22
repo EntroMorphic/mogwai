@@ -1,19 +1,56 @@
-# corpora are fetched, not vendored; SHA256 is tracked so runs are reproducible
+# ─── build output ────────────────────────────────────────────────────────────
+# All regenerable. The ESP-IDF trees were tracked once (~4400 files, 7 copies of
+# a 5.8 MB compile_commands.json) and are most of why .git is 123 MB for a 16 MB
+# working tree. That history also made the first push to GitHub time out.
+c/bin/
+build/
+*/build/
+**/build/
+sdkconfig.old
+*.o
+*.a
+*.elf
+*.map
+*.d
+*.su
+compile_commands.json
+.cache/
+
+# ─── fetched data, never vendored ────────────────────────────────────────────
+# `make fetch` downloads the corpora; data/SHA256 is tracked so any run is
+# reproducible and any copy is verifiable. The files themselves are 9.8 MB and
+# belong to their upstreams, not to this repository.
 data/*.json
 data/*.csv
 data/*.gz
-c/bin/
-*.o
+data/*.tsv
+
+# ─── archive: never deleted, never tracked ───────────────────────────────────
+# Superseded work, a second git repository, and a Python virtualenv — ~880 MB
+# read perhaps once. Inventory and restore steps: doc/ARCHIVE.md
+# The one exception is provenance/, which IS tracked: it holds the only off-disk
+# copy of three commits that were never pushed anywhere.
+archive/
+
+# ─── python era, archived ────────────────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
+.venv/
+venv/
 
-# ESP-IDF build output: regenerable, ~4400 files and >100 MB per tree.
-# Both firmware build dirs were tracked, which is most of .git's size.
-# The one artifact worth keeping — the encoder-era firmware that actually ran on
-# the board — is preserved standalone at archive/python_era/tinyenc_test_firmware.bin
-build/
-esp32_router/build/
+# ─── editor / OS cruft ───────────────────────────────────────────────────────
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+Thumbs.db
 
-# Superseded work, provenance, and a second git repo — ~880 MB, read maybe once.
-# NOT deleted, just not tracked. Inventory: doc/ARCHIVE.md
-archive/
+# ─── scratch ─────────────────────────────────────────────────────────────────
+/tmp/
+*.tmp
+*.log
+core

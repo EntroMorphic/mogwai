@@ -19,3 +19,13 @@ Verify afterwards by capturing the boot log at 115200 — you should see
 Read/write the board plugged **directly** into the Mac. Through a USB hub,
 sustained transfers drop data ("Corrupt data, expected 0x1000 bytes but
 received 0x10") and the backup will not verify.
+
+## Where the image lives now
+
+The 4 MB image is **archived, not tracked**: `archive/stray/`. It is a public
+Espressif ESP-AT v1.1.2 release, so it is re-obtainable upstream, and the sha256
+above is what verifies any copy you get. Tracking 4 MB of redownloadable vendor
+firmware in a source repository is weight without redundancy.
+
+`nlu_home.csv` and the MASSIVE splits are handled the same way: fetched by
+`make fetch`, verified against `data/SHA256`, never vendored.

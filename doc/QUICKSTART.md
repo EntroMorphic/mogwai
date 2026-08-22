@@ -38,7 +38,7 @@ the score fell below the threshold, or the nearest match was not a command.
     make regress     # 45 checks incl. an exhaustive 2^32 proof (~11 s)
 
 `make testset` evaluates on held-out data and **burns one unit of a deliberately
-scarce budget** — read [doc/METHOD.md](doc/METHOD.md) before you spend one.
+scarce budget** — read [doc/METHOD.md](METHOD.md) before you spend one.
 
 ## Put it on hardware
 
@@ -49,17 +49,17 @@ scarce budget** — read [doc/METHOD.md](doc/METHOD.md) before you spend one.
 Needs ESP-IDF v5.5 (~4 GB toolchain — the one heavy dependency, and only for the
 device half). Watch for `PARITY EXACT`: the firmware re-routes 64 host-computed
 queries and prints it only if class **and** bit-exact score match on all 64.
-See [esp32_router/README.md](esp32_router/README.md) — that build is a
+See [esp32_router/README.md](../esp32_router/README.md) — that build is a
 *validation* firmware, not a product one.
 
 ## Where to read next
 
 | you want | read |
 |---|---|
-| what it is and how well it works | [README.md](README.md) |
+| what it is and how well it works | [README.md](../README.md) |
 | every flag, grouped by whether it still helps | `compare --help` |
-| what each tool in `c/src` does | [doc/TOOLS.md](doc/TOOLS.md) |
-| why the numbers can be trusted, and where they can't | [doc/METHOD.md](doc/METHOD.md) |
+| what each tool in `c/src` does | [doc/TOOLS.md](TOOLS.md) |
+| why the numbers can be trusted, and where they can't | [doc/METHOD.md](METHOD.md) |
 | the full record, including what failed | [EXPERIMENTS.md](EXPERIMENTS.md) |
 | what these numbers do and don't mean | [FRAME.md](FRAME.md) |
 

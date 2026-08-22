@@ -12,6 +12,12 @@ D="data/train.json data/validation.json data/test.json data/nlu_home.csv"
 P=0; F=0
 chk(){ if [ "$2" = "$3" ]; then printf '  PASS  %s\n' "$1"; P=$((P+1));
        else printf '  FAIL  %s  (got "%s" want "%s")\n' "$1" "$2" "$3"; F=$((F+1)); fi; }
+# Some checks need the local-only archive/ tree, which a fresh clone (and CI) will
+# not have. Skip them explicitly and say so — a skipped check must never look
+# like a passing one.
+S=0
+skip(){ printf '  SKIP  %s  (%s)\n' "$1" "$2"; S=$((S+1)); }
+HAVE_ARCHIVE=0; [ -d archive/needle_upstream/.git ] && HAVE_ARCHIVE=1
 
 echo "=== BUILD ==="
 rm -rf c/bin
@@ -79,11 +85,11 @@ BT_LINE='    decision               none  (score below threshold — no action)'
 chk "--route declines a non-command" "$(c/bin/compare --ship --route='what time does the train leave' 2>/dev/null | grep -Fxc "$NC_LINE")" "1"
 chk "--route declines nonsense below threshold" "$(c/bin/compare --ship --route='zzz qqq xyzzy' 2>/dev/null | grep -Fxc "$BT_LINE")" "1"
 chk "--route output is clean (no corpus chatter)" "$(c/bin/compare --ship --route=x 2>&1 | grep -c '\[inv\]')" "0"
-chk "QUICKSTART.md tracked" "$(git ls-files QUICKSTART.md | wc -l | tr -d ' ')" "1"
+chk "QUICKSTART tracked" "$(git ls-files doc/QUICKSTART.md | wc -l | tr -d ' ')" "1"
 
 echo "=== DOCS ==="
 b=0
-for f in README.md FRAME.md doc/*.md journal/README.md esp32_router/README.md; do
+for f in README.md doc/*.md journal/README.md esp32_router/README.md provenance/README.md results/README.md; do
   for l in $(grep -oE '\]\([^)#][^)]*\)' "$f" 2>/dev/null | tr -d ']()'); do
     case "$l" in http*) continue;; esac
     [ -e "$(dirname "$f")/$l" ] || { echo "    broken: $f -> $l"; b=$((b+1)); }
@@ -91,16 +97,20 @@ for f in README.md FRAME.md doc/*.md journal/README.md esp32_router/README.md; d
 done
 chk "markdown links resolve" "$b" "0"
 chk "EXPERIMENTS anchors resolve" "$(comm -23 \
-  <(grep -oE '\(#[a-z0-9-]+\)' EXPERIMENTS.md | tr -d '()#' | sort -u) \
-  <(grep '^#\{2,3\} ' EXPERIMENTS.md | awk '{sub(/^#+ /,"");a=tolower($0);gsub(/[^a-z0-9 -]/,"",a);gsub(/ /,"-",a);print a}' | sort -u) \
+  <(grep -oE '\(#[a-z0-9-]+\)' doc/EXPERIMENTS.md | tr -d '()#' | sort -u) \
+  <(grep '^#\{2,3\} ' doc/EXPERIMENTS.md | awk '{sub(/^#+ /,"");a=tolower($0);gsub(/[^a-z0-9 -]/,"",a);gsub(/ /,"-",a);print a}' | sort -u) \
   | wc -l | tr -d ' ')" "0"
 
 echo "=== ARCHIVE (gitignored, must remain intact on disk) ==="
 chk "archive untracked"        "$(git ls-files archive | wc -l | tr -d ' ')" "0"
 chk "tracked provenance bundle checksum" "$(shasum -a 256 -c provenance/needle-upstream.bundle.sha256 2>/dev/null | grep -c OK)" "1"
 chk "provenance bundle is TRACKED (off-disk backup)" "$(git ls-files provenance/needle-upstream.bundle | wc -l | tr -d ' ')" "1"
-chk "local archive bundle checksum" "$(cd archive/needle_upstream 2>/dev/null && shasum -a 256 -c needle_full.bundle.sha256 2>/dev/null | grep -c OK)" "1"
-chk "upstream repo 270 commits" "$(git -C archive/needle_upstream rev-list --count HEAD 2>/dev/null)" "270"
+if [ "$HAVE_ARCHIVE" = 1 ]; then
+  chk "local archive bundle checksum" "$(cd archive/needle_upstream && shasum -a 256 -c needle_full.bundle.sha256 2>/dev/null | grep -c OK)" "1"
+else skip "local archive bundle checksum" "archive/ is local-only"; fi
+if [ "$HAVE_ARCHIVE" = 1 ]; then
+  chk "upstream repo 270 commits" "$(git -C archive/needle_upstream rev-list --count HEAD 2>/dev/null)" "270"
+else skip "upstream repo 270 commits" "archive/ is local-only"; fi
 chk "doc/ARCHIVE.md tracked"   "$(git ls-files doc/ARCHIVE.md | wc -l | tr -d ' ')" "1"
 # We now have our own remote. The thing this check exists to catch is the repo
 # ever pointing back at the upstream clone it was separated from.
@@ -108,10 +118,11 @@ chk "no remote points at the upstream clone" "$(git remote -v 2>/dev/null | grep
 
 # The docs quote this suite's size. That number went stale the moment the
 # suite grew, and nothing noticed. Check it against reality.
-LIVE=$((P + F + 1))   # +1 for this check itself
+LIVE=$((P + F + S + 1))   # +1 for this check itself; skipped still count as checks
 DOC=$(grep -ohE '[0-9]+ checks' README.md QUICKSTART.md 2>/dev/null | grep -oE '[0-9]+' | sort -u | head -1)
 chk "docs quote the live check count" "$DOC" "$LIVE"
 
 echo
-echo "  ======== $P passed, $F failed ========"
+if [ "$S" -gt 0 ]; then echo "  ======== $P passed, $F failed, $S skipped ========"
+else echo "  ======== $P passed, $F failed ========"; fi
 [ "$F" -eq 0 ] || exit 1

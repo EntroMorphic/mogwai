@@ -70,4 +70,4 @@ and independence must be *verified, not assumed* — by exact-string disjointnes
 **and** by checking that no test item shares an encoded code with an index entry.
 Both are enforced by assertions that abort, in `c/src/invariants.c`. The rule
 originally pointed at `heldout.py`; that file is archived and the enforcement is
-now structural rather than advisory. See [doc/METHOD.md](doc/METHOD.md).
+now structural rather than advisory. See [doc/METHOD.md](METHOD.md).

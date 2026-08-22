@@ -197,7 +197,7 @@ the only evidence a check works.
 
 ## 14. Documentation that quotes a number will go stale
 
-`README.md` and `QUICKSTART.md` both advertised "29 checks". The suite had grown
+`README.md` and `doc/QUICKSTART.md` both advertised "29 checks". The suite had grown
 to 41 and nothing noticed, because no check compared the documented number to
 the real one.
 
