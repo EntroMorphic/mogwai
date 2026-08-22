@@ -54,6 +54,9 @@ c/bin/eval esp32_router/main/router.bin data/validation.json >/dev/null 2>&1
 chk "blob verifier (parity + index integrity)" "$?" "0"
 c/bin/mkblob $D /tmp/_regress.bin >/dev/null 2>&1
 cmp -s /tmp/_regress.bin esp32_router/main/router.bin
+# BLOB_FORMAT.md: blob and firmware must agree on RD or parity measures nothing.
+# The blob header carries dim at byte offset 4.
+chk "blob dim matches router.h RD" "$(od -An -tu4 -j4 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RD\s' c/src/router.h | grep -oE '[0-9]+')"
 chk "blob reproducible byte-identical" "$?" "0"; rm -f /tmp/_regress.bin
 
 echo "=== SHIPPED CONFIG (ROW: 1=ROW 2=split 3=variant 4=acc 5=se 6=fa 7=wa 8=missed 9=kb 10=th 11=n) ==="

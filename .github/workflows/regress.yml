@@ -42,3 +42,43 @@ jobs:
         run: |
           ./c/bin/compare --ship --route="turn off the kitchen light" \
             | grep -qE '^ +decision +iot_hue_lightoff$'
+
+  firmware:
+    name: esp32 firmware build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The firmware's router.c/ternary.c are SYMLINKS into c/src, so this also
+      # proves a host-side change did not break the device build. sdkconfig is
+      # not tracked; ESP-IDF regenerates it from sdkconfig.defaults, exactly as
+      # a fresh clone would.
+      - name: Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5
+          target: esp32
+          path: esp32_router
+          command: idf.py -DRD=256 -DTPOPCNT=1 build
+
+      - name: Artefacts exist
+        run: |
+          test -f esp32_router/build/router_validate.bin
+          test -f esp32_router/build/bootloader/bootloader.bin
+          ls -l esp32_router/build/router_validate.bin
+
+      # BLOB_FORMAT.md: "blob and firmware must agree on RD or parity is
+      # measuring nothing". The blob header carries dim at byte offset 4;
+      # router.h carries RD. A mismatch is silent on device until parity fails.
+      - name: Blob dim matches the firmware's RD
+        run: |
+          DIM=$(od -An -tu4 -j4 -N4 esp32_router/main/router.bin | tr -d ' ')
+          RD=$(grep -E '^#define RD\s' c/src/router.h | grep -oE '[0-9]+')
+          echo "blob dim=$DIM  router.h RD=$RD"
+          test "$DIM" = "$RD"
+
+      - name: Flash mode is QIO
+        run: |
+          B=$(od -An -tu1 -j2 -N1 esp32_router/build/bootloader/bootloader.bin | tr -d ' ')
+          echo "bootloader flash-mode byte=$B (0=QIO 1=QOUT 2=DIO 3=DOUT)"
+          test "$B" = "2"   # written in DIO, upgraded to quad at init — see doc/EXPERIMENTS.md

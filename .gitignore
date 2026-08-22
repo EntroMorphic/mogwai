@@ -54,3 +54,8 @@ Thumbs.db
 *.tmp
 *.log
 core
+
+# ESP-IDF regenerates this from sdkconfig.defaults. Tracking it lets the two
+# drift — the tracked copy once held CONFIG_ESPTOOLPY_FLASHMODE_QIO=y alongside
+# CONFIG_ESPTOOLPY_FLASHMODE="dio", which cost an hour to understand.
+esp32_router/sdkconfig
