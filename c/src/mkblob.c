@@ -13,7 +13,11 @@ static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static int T_n;
 static router_t R; static tvec *TI;
-static prune_opt PRUNE = {0,0,0,0};
+/* Default IS the shipped configuration, so `mkblob <data> out.bin` with no
+   flags reproduces exactly what the device runs. regress.sh relies on that to
+   prove router.bin is reproducible; if the default were "unpruned" that check
+   would be comparing against a blob nobody ships. */
+static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP};
 static int THRESH = -1;   /* --threshold=N; required when pruning */
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
@@ -91,12 +95,21 @@ int main(int argc,char**argv){
        device at an operating point the harness never measured, and PARITY still
        passes because the host reference uses the same wrong value. Parity proves
        host==device, not that either is right. So: refuse to guess. */
-    if(THRESH>=0) R.threshold=THRESH;
-    else if(PRUNE.dup||PRUNE.cnn||PRUNE.neg_k>1){
-        fprintf(stderr,"  ERROR: pruning changes the tuned threshold. Run\n"
-                       "    ./c/bin/compare <data> <prune flags>\n"
-                       "  and pass the reported th=N as --threshold=N\n"); return 1; }
-    else R.threshold=RSHIP_TH;   /* single source of truth, see router.h */
+    {
+        /* Compare against the SHIPPED prune config, not against "any pruning".
+           The old test listed dup/cnn/neg_k by hand and so never covered
+           neg_top - a blob pruned with --prune-negtop would have taken RSHIP_TH
+           silently, which is the exact failure this guard exists to prevent.
+           Comparing the whole struct cannot go stale when a mode is added. */
+        static const prune_opt SHIPPED = {0,0,0,RSHIP_NEGTOP};
+        if(THRESH>=0) R.threshold=THRESH;
+        else if(!memcmp(&PRUNE,&SHIPPED,sizeof PRUNE)) R.threshold=RSHIP_TH;
+        else {
+            fprintf(stderr,"  ERROR: this is not the shipped prune config, and\n"
+                           "  pruning changes the tuned threshold. Run\n"
+                           "    ./c/bin/compare <data> <prune flags>\n"
+                           "  and pass the reported th=N as --threshold=N\n"); return 1; }
+    }
     /* host reference: first NREF dev queries, with the answer this host gives */
     FILE*o=fopen(argv[5],"wb");
     uint32_t hdr[5]={RMAGIC,RD,(uint32_t)U_n,R.n_class,(uint32_t)R.threshold};

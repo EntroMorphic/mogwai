@@ -10,8 +10,9 @@ A natural-language interface for controlling ESP32-class hardware, built as an
 
 No floats. No learned parameters. No training step. The whole thing is a hashed
 character-n-gram encoder, a two-bit-plane vector index, and an integer
-similarity - and it runs the full 10,500-entry index on a stock ESP32-D0WD-V3
-in **34.3 ms**, bit-identical to the host.
+similarity - and it routes an utterance on a stock ESP32-D0WD-V3 in **6.3 ms**
+with the whole index resident in SRAM, flash untouched on every query,
+bit-identical to the host.
 
 The premise being tested is that **compressing an LLM onto an MCU is not
 necessary for this task**. Controlling nine IoT intents does not need 45M
@@ -85,6 +86,12 @@ at d=512 spends the same 64 bytes per vector:
 | binary, 1 bit/dim, d=512 | 79.7% ±2.9 | 0 | 15 | 24 | 656 KB |
 | **twin-ternary, 2 bit/dim, d=256** | **85.9% ±2.5** | **1** | **13** | **14** | **656 KB** |
 
+Those rows are the **representation** result, all unpruned, so the byte-matched
+comparison stays honest. What actually ships is the twin-ternary row with the
+index pruned to 240 KB: recall, `wa` and `missed` are unchanged at 85.9% / 13 /
+14, and `fa` goes **1 -> 6** of 1335 non-commands. See
+[the shipped index](#the-shipped-index-is-pruned-to-fit-sram) below.
+
 At identical bytes per vector, twin recalls **6.2 points more** and misses **10
 fewer** commands. Binary's operating curve is *identical* at d=256 and d=512 — it
 saturates, so the gain is structural, not capacity. Paired test on held-out data:
@@ -101,25 +108,49 @@ the full operating curve is in [doc/EXPERIMENTS.md](doc/EXPERIMENTS.md).
 
     ESP32-D0WD-V3, 240 MHz, QIO flash @ 80 MHz, stock ESP-IDF v5.5
 
-    index scan, 10500 vectors / 656 KB    43.5 ms  (1 core)   26.7 ms  (2 cores)
-    the same scan, index chunked to SRAM   34.3 ms  (1 core)
-    parity vs host                        64/64 class and score, bit-exact
+    SHIPPED: 3840 vectors / 240 KB        6.3 ms   100% resident in SRAM
+    unpruned, 10500 vectors / 656 KB     43.5 ms  (1 core)   26.7 ms  (2 cores)
+    parity vs host                       64/64 class and score, bit-exact
 
 Optimisation history: 200.4 -> 102.1 (clocks) -> 78.8 (precomputed activity
-counts) -> 43.5 ms (popcount table) -> 34.3 ms (chunked SRAM residency). Every
-step held bit-exact parity. The second core is real but **core 1 belongs to WiFi
-on a production device**, so the single-core number is the one that survives
-deployment.
+counts) -> 43.5 ms (popcount table) -> 34.3 ms (chunked SRAM residency) -> 6.3 ms
+(index pruned to the largest fully-resident size). Every step held bit-exact
+parity. The second core is real but **core 1 belongs to WiFi on a production
+device**, so the single-core number is the one that survives deployment.
 
-The last step is worth a sentence, because it looked impossible for a while:
-free heap is **295 KB in total but only 164 KB in the largest region**, so the
-single `malloc` that would lift the index can never succeed - and it fails
-silently, falling back to flash while reporting success. The scan is sequential,
-so the index does not need one allocation. Lifting it in 8 KB chunks puts 34% of
-the shipped index in SRAM at **no accuracy cost whatsoever** - same blob, same
-threshold, same numbers. On a pruned 245 KB index it reaches 97% resident and
-6.6 ms. See
+Getting the index into SRAM looked impossible for a while. Free heap is **295 KB
+in total but only 164 KB in the largest region**, so the single `malloc` that
+would lift it can never succeed - and it fails *silently*, falling back to flash
+while reporting success. The scan is sequential, so the index does not need one
+allocation. Lifting it in 8 KB chunks uses nearly all the free heap; any chunk
+that will not fit stays flash-mapped and scores identically. See
 [Chunked SRAM residency](doc/EXPERIMENTS.md#chunked-sram-residency-the-index-does-not-need-one-allocation).
+
+## The shipped index is pruned to fit SRAM
+
+30 chunks is the most that fits under the 40 KB heap reserve, so **3840 vectors
+is the largest index that is fully resident**. The shipped blob is pruned to
+exactly that, keeping the 2685 negatives with the highest nearest-neighbour
+coverage (`RSHIP_NEGTOP` in `c/src/router.h`; `mkblob` defaults to it and
+`compare --ship` reproduces it).
+
+    unpruned   10500 vectors   656 KB   34% resident   34.3 ms   fa 1
+    SHIPPED     3840 vectors   240 KB  100% resident    6.3 ms   fa 6
+
+**The cost is false actuations, and nothing else.** Recall, `wa` and `missed` are
+identical to the unpruned index - 85.9% +-2.5, 13, 14 - because at threshold 136
+a negative is never an IoT utterance's nearest neighbour. Pruning them changes
+only what gets *rejected*. On dev that is 6 false actuations in 1335
+non-commands (0.45%) against 1 (0.07%).
+
+That is a real regression on the property this project treats as most important,
+taken deliberately to buy a 2.7x smaller footprint and a 5.4x faster scan. It is
+also the same order as the +-2.5 dev standard error, so dev cannot resolve it
+finely; the held-out number is
+[pre-registered and pending](doc/EXPERIMENTS.md#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer).
+If your application cannot spend it, build the unpruned blob with
+`mkblob <data> out.bin --prune-negtop=0 --threshold=136` - the firmware lifts
+whatever fits and runs correctly either way.
 
 Cost model, fitted on three dimensions: **59.8 ns/byte + 326 ns/vector**. Bytes
 are 92% of the cost, so index size predicts latency directly.
@@ -130,7 +161,7 @@ are 92% of the cost, so index size predicts latency directly.
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (59 checks) — run after any structural change
+    make regress        # full host regression (61 checks) — run after any structural change
 
 Build and flash the device:
 
@@ -164,7 +195,7 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
     esp32_router/      VALIDATION firmware (see its README); sources are SYMLINKS into c/src
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 7 cycles
-    scripts/           fetch.sh (curl only), regress.sh (59 checks)
+    scripts/           fetch.sh (curl only), regress.sh (61 checks)
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
     board_backup/      how to restore the board's original ESP-AT firmware
@@ -186,7 +217,7 @@ get something much worse — which is the whole reason for the name.
    the autopsies of both are kept — see [doc/ARCHIVE.md](doc/ARCHIVE.md).
 
 Every run is logged and stamped with the git SHA and clean/dirty tree state.
-Run `make regress` after any structural change: 59 checks, 11 seconds.
+Run `make regress` after any structural change: 61 checks, 11 seconds.
 
 ## License
 

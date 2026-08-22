@@ -45,6 +45,24 @@
    that matters here. mkblob and compare --ship both read this constant. */
 #define RSHIP_TH  136
 
+/* The shipped index keeps the RSHIP_NEGTOP negatives with the highest
+   NN-coverage and drops the rest: 10500 -> 3840 vectors, 656 -> 240 KB.
+
+   3840 is not an accuracy number, it is a memory number. The ESP32 lifts the
+   index into SRAM in 8 KB chunks and 30 chunks is the most that fits under the
+   40 KB reserve, so 30*128 = 3840 vectors is the largest index that is FULLY
+   resident - flash untouched on every query, 34.3 -> 6.6 ms.
+
+   The cost is false actuations and nothing else. Dev is identical to the
+   unpruned index on every other axis - 85.9% +-2.5, wa 13, missed 14 - because
+   at th=136 a negative is never an IoT item's nearest neighbour. fa goes 1 -> 6
+   of 1335 non-commands. That is the whole trade, and it is the one property
+   doc/METHOD.md says to weigh most heavily, so it is stated here rather than
+   buried in a table.
+
+   mkblob defaults to this and compare --ship reproduces it. */
+#define RSHIP_NEGTOP 2685
+
 typedef struct { uint32_t w[RWORDS]; } rvec;
 
 typedef struct {

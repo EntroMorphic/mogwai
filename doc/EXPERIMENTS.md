@@ -11,8 +11,8 @@ not a discipline anyone has to remember.
 
 | question | answer | where |
 |---|---|---|
-| What ships? | twin-ternary, d=256, 10500 vectors, 656 KB, **threshold 136** | [126 was tried and reverted](#test-evaluation-3--result-the-dev-gain-did-not-transfer-126-reverted-to-136) |
-| How fast on device? | **34.3 ms**, shipped index, PARITY EXACT | [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) |
+| What ships? | twin-ternary, d=256, **3840 vectors, 240 KB**, threshold 136 | [126 was tried and reverted](#test-evaluation-3--result-the-dev-gain-did-not-transfer-126-reverted-to-136) |
+| How fast on device? | **6.3 ms**, index 100% resident in SRAM, PARITY EXACT | [Shipped index](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) |
 | Why is the index in flash at all? | It fits total free heap but no single heap region | [same](#chunked-sram-residency-the-index-does-not-need-one-allocation) |
 | Can the sign plane be packed? | Bit-exact, 1.61x smaller, and **4.8x slower** — no | [Packing the sign plane](#packing-the-sign-plane--measured-and-it-loses) |
 | What predicts latency? | 59.8 ns/byte + 326 ns/vector; bytes are 92% | [Cost model](#what-the-failed-lever-bought-a-resolved-cost-model) |
@@ -72,6 +72,8 @@ not a discipline anyone has to remember.
 - [Packing the sign plane — MEASURED, and it loses](#packing-the-sign-plane--measured-and-it-loses) — bit-exact and 1.61x smaller, but 4.8x slower; 6x over break-even
 - [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) — free heap is a **sum of regions**; one malloc can never fit. 43.9 → 34.3 ms at no accuracy cost
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
+- [The shipped index is pruned to 240 KB](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms; the price is `fa` 1 → 6 and nothing else
+- [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) — does the pruning cost transfer? **not yet run**
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
 > Where that happens the earlier text is left standing with the correction
@@ -1555,3 +1557,102 @@ set resolves.
 Graded condensation dominates random `--prune-neg=K` at every matched byte count
 — e.g. at 218 KB, fa 6 vs 10 and missed@fa≤3 of 17 vs 30 — which extends the
 earlier condensation-beats-random result rather than overturning it.
+
+## The shipped index is pruned to 240 KB for full SRAM residency
+
+The chunked lift put 34% of the 656 KB index in SRAM. The obvious next question
+is what size would be **100%** resident, and it has an exact answer: chunks are
+8 KB, the heap reserve is 40 KB, and 30 chunks is the most that fits — so
+**3840 vectors (30 x 128) is the largest fully-resident index.** That is a
+memory number, not an accuracy number, and it is now `RSHIP_NEGTOP = 2685` in
+`router.h`, next to `RSHIP_TH`.
+
+Measured on device, shipped firmware:
+
+    index 3840/3840 vectors in SRAM (100%), 30 chunks of 128
+    addressing verified over all 3840 vectors: 0 MISMATCHED
+    needs 253440 B | largest contiguous block 163840 B | total free 40144 B
+
+    "turn the lights on"   ACTUATED  light -> ON                  6449 us
+    "start the vacuum"     ACTUATED  cleaner -> START             6308 us
+    "asdf qwer zxcv"       REJECTED  score 67 <= threshold 136    6285 us
+
+**34.3 → 6.3 ms**, and flash is now untouched on every query. The IoT scores are
+*identical* to the 656 KB build (227 and 187), which is the sweep's structural
+claim confirmed on hardware: at th=136 a negative is never an IoT utterance's
+nearest neighbour, so removing negatives cannot move an IoT score.
+
+### What it costs, stated plainly
+
+| | recall | fa | wa | missed | index | resident | per query |
+|---|---|---|---|---|---|---|---|
+| unpruned | 85.9% ±2.5 | **1** | 13 | 14 | 656 KB | 34% | 34.3 ms |
+| **SHIPPED** | 85.9% ±2.5 | **6** | 13 | 14 | 240 KB | **100%** | **6.3 ms** |
+
+Every column is identical except `fa`. The entire price of a 2.7x smaller
+footprint and a 5.4x faster scan is **5 extra false actuations in 1335 dev
+non-commands** — 0.45% against 0.07%.
+
+This is a deliberate regression on the one property
+[the metric section](#the-accuracy-metric-is-blind-to-false-actuations--read-every-number-above-with-this-in-mind)
+says to weigh above recall. It is recorded here as a trade that was *chosen*,
+not as an improvement. Two things make it defensible and neither makes it free:
+the IoT side is bit-for-bit unchanged, and 5 events is the same order as the
+±2.5 dev standard error, so dev cannot resolve this finely. The held-out
+question is pre-registered below.
+
+`mkblob` now **defaults** to this configuration, so `mkblob <data> out.bin`
+reproduces the shipped blob exactly and `regress.sh` can prove reproducibility
+against the blob that actually ships. Building any other prune config without an
+explicit `--threshold=` is refused. That guard previously listed `dup`, `cnn` and
+`neg_k` by hand and so never covered `neg_top` — a `--prune-negtop` blob would
+have silently taken `RSHIP_TH`, which is precisely the failure the guard exists
+to prevent. It now compares the whole `prune_opt` struct against the shipped one
+and cannot go stale when a mode is added.
+
+To build the unpruned index instead:
+`mkblob <data> out.bin --prune-negtop=0 --threshold=136`. The firmware lifts
+whatever fits and is correct either way.
+
+## Test evaluation #6 — PRE-REGISTERED: does the pruning cost transfer?
+
+Written before running. Not yet run — this section is the prediction, and the
+result will be appended beside it whether or not it agrees.
+
+**Baseline**, eval #3 at th=136 on 220 IoT / 2754 non-commands:
+
+    TEST baseline   recall 84.1%   fa=8   wa=15   missed=20
+
+**The mechanism being tested.** On dev, `missed` and `wa` are *constant* at
+14/13 across the entire negative sweep — 9345 negatives down to 1 — because a
+negative is never an IoT item's argmax at th≥136. If that is structural rather
+than a dev accident, the held-out IoT numbers must not move at all, and the
+entire effect must appear in `fa`.
+
+**Predictions.**
+
+1. **`missed` ≤ 20, and most likely exactly 20.** Pruning a negative can only
+   change an IoT outcome if that negative *was* the argmax — in which case the
+   item was scored "none" and counted missed, so removing it can only help.
+   `missed` rising at all falsifies the mechanism.
+2. **`wa` = 15, unchanged.** Same argument; `wa` is decided among positives.
+3. **`fa` rises to 18, range 12–26.** Dev fa went 1 → 6 on 1335 non-commands
+   (+0.37 pp). Test carries 2754, so a constant *rate* increase predicts
+   8 + 0.37% x 2754 ≈ +10. The interval is wide because the dev counts are tiny
+   and Poisson noise at n=1..6 is large.
+4. **Recall 84.1%, unchanged**, following directly from 1 and 2.
+
+**Falsifiers, and what each would mean.**
+
+- `missed` > 20 or `wa` ≠ 15 → the "negatives never win an IoT argmax" mechanism
+  is dev-specific. The whole justification for this trade collapses and the
+  240 KB index should be reverted regardless of what `fa` did.
+- `fa` outside 10–30 → the rate model is wrong. Below 10 I over-predicted the
+  cost; above 30 the trade is worse than dev indicated.
+- **`fa` > 30 (>1.1% of non-commands) → recommend reverting to 656 KB.** Stated
+  now, before the number is known, so the decision is not made after seeing it.
+
+This is the prediction eval #3 taught: a dev gain at a changed operating point
+did **not** transfer, and 126 was reverted. The difference here is that the dev
+evidence is a claimed *invariance* rather than a claimed gain, which is a
+stronger thing to test and an easier thing to break.

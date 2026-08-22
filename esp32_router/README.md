@@ -90,7 +90,8 @@ is the whole router. `route()` is ~15 lines and needs no other scaffolding.
 
 Also note `bench_mt()` uses core 1. On a device running WiFi, core 1 is not
 free; the single-core number is the one that survives deployment. With the index
-chunked into SRAM the same scan is 34.3 ms - see doc/EXPERIMENTS.md.
+chunked into SRAM the same scan is 34.3 ms, and the shipped 240 KB index - which
+is 100% resident - routes in 6.3 ms. See doc/EXPERIMENTS.md.
 
 ## Recovery
 

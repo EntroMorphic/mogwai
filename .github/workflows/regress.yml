@@ -34,7 +34,7 @@ jobs:
       - name: Shipped numbers
         run: |
           ./c/bin/compare --ship 2>/dev/null | grep -E '^ROW' | tee /tmp/row.tsv
-          awk -F'\t' '$3 ~ /twin/ && ($4!="85.9" || $6!="1" || $7!="13" || $8!="14") \
+          awk -F'\t' '$3 ~ /twin/ && ($4!="85.9" || $6!="6" || $7!="13" || $8!="14" || $9!="240") \
             { print "shipped numbers drifted"; exit 1 }' /tmp/row.tsv
 
       # The repo should demo itself. If this stops routing, the README is lying.

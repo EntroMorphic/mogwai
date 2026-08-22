@@ -45,7 +45,12 @@ echo "=== BLOB ==="
 # NEGATIVE CONTROL: prove blobfmt can REJECT. Mutation testing showed that
 # rigging it to skip its size check left it printing "OK" and the suite green —
 # a validator that always passes validates nothing.
-head -c 700000 esp32_router/main/router.bin > /tmp/_trunc.bin 2>/dev/null
+# Truncate RELATIVE to the real blob. This was a hardcoded 700000, which stopped
+# truncating anything the moment the shipped index shrank below that - the
+# negative control silently became a copy of a valid blob, so blobfmt accepted
+# it and the check could only ever fail-open.
+head -c "20 20 12 61 79 80 81 701 702 33 98 100 204 250 395 398 399 400( 20 20 12 61 79 80 81 701 702 33 98 100 204 250 395 398 399 400wc -c < esp32_router/main/router.bin) - 1 ))" \
+     esp32_router/main/router.bin > /tmp/_trunc.bin 2>/dev/null
 c/bin/blobfmt /tmp/_trunc.bin >/dev/null 2>&1
 chk "blobfmt REJECTS a truncated blob" "$?" "1"
 rm -f /tmp/_trunc.bin
@@ -63,15 +68,22 @@ chk "product firmware source tracked" "$([ -f esp32_router/main/product.c ] && g
 chk "product refuses to actuate the none class" "$(grep -c 'if (!strcmp(R.names\[cls\], "none")) return -2;' esp32_router/main/product.c)" "1"
 chk "product reports both rejection causes" "$(grep -cE 'cls == -1|cls == -2' esp32_router/main/product.c)" "2"
 chk "blob dim matches router.h RD" "$(od -An -tu4 -j4 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RD\s' c/src/router.h | grep -oE '[0-9]+')"
+# Assert the SHIPPED BINARY, not just the harness. Everything above measures
+# what compare computes; these two read the header of the file that gets
+# flashed. n_index is the fully-SRAM-resident size (30 chunks x 128) and the
+# threshold must equal router.h's - if either drifts, the device runs an
+# operating point nothing measured.
+chk "blob vectors 3840 (30 SRAM chunks)" "$(od -An -tu4 -j8 -N4 esp32_router/main/router.bin | tr -d ' ')" "3840"
+chk "blob threshold matches router.h RSHIP_TH" "$(od -An -tu4 -j16 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RSHIP_TH\s' c/src/router.h | grep -oE '[0-9]+')"
 chk "blob reproducible byte-identical" "$BLOB_RC" "0"
 
 echo "=== SHIPPED CONFIG (ROW: 1=ROW 2=split 3=variant 4=acc 5=se 6=fa 7=wa 8=missed 9=kb 10=th 11=n) ==="
 row=$(c/bin/compare $D --ship 2>&1 | grep '^ROW' | grep twin)
 chk "recall 85.9"   "$(echo "$row" | cut -f4)"  "85.9"
-chk "fa 1"          "$(echo "$row" | cut -f6)"  "1"
+chk "fa 6"          "$(echo "$row" | cut -f6)"  "6"
 chk "wa 13"         "$(echo "$row" | cut -f7)"  "13"
 chk "missed 14"     "$(echo "$row" | cut -f8)"  "14"
-chk "index 656 KB"  "$(echo "$row" | cut -f9)"  "656"
+chk "index 240 KB"  "$(echo "$row" | cut -f9)"  "240"
 chk "threshold 136" "$(echo "$row" | cut -f10)" "136"
 
 echo "=== LEAK GUARDS (abort on failure) ==="

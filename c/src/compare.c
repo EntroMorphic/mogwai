@@ -1195,7 +1195,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--priorcls")) PRIORCLS=1;
         else if (!strcmp(a,"--priorcls2")) PRIORCLS=2;
         else if (!strncmp(a,"--selmargin=",12)) SELMARG=atoi(a+12);
-        else if (!strcmp(a,"--ship")) FIXTH=RSHIP_TH;
+        else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
     }
