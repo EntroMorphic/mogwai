@@ -12,6 +12,16 @@ The premise being tested is that **compressing an LLM onto an MCU is not
 necessary for this task**. Controlling nine IoT intents does not need 45M
 parameters; it needs a good representation and an honest threshold.
 
+## Try it
+
+    make demo                                    # 60-second tour
+    make route TEXT="turn off the kitchen light" # route one utterance, see why
+    make repl                                    # interactively
+
+Two host dependencies: a C compiler and `curl`. Build is 0.8 s, a full
+evaluation 0.7 s, the entire 29-check regression suite 9 s.
+Full path in [QUICKSTART.md](QUICKSTART.md).
+
 ## Result
 
 **Held-out test set, at the shipped threshold** — 220 IoT commands, 2754 negatives:
@@ -119,6 +129,7 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
     c/test/         exhaustive popcount proof, blob-format validator
     esp32_router/   VALIDATION firmware (see its README) — parity + benchmarks,
                     not a product build; sources are SYMLINKS into c/src
+    QUICKSTART.md   60 seconds to a routed sentence
     doc/            blob format, method/guardrails, tool reference, archive inventory
     EXPERIMENTS.md  the full experimental record, including invalidated results
     FRAME.md        what these numbers do and do not mean — read before quoting any

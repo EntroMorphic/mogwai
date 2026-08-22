@@ -36,6 +36,8 @@ static int GATESZ = 0;    /* --gatesize: what a compact prior table needs */
 static int GATECHK = 0;   /* --gatecheck: gate must equal prior bit-exactly */
 static gate_t GATE; static int USEGATE = 0;  /* --gatesel: selector reads the compact table */
 static int SELSIG = 0;    /* --selsig: paired significance of the dev selector gain */
+static const char *ROUTE1 = 0;  /* --route="..." */
+static int REPL = 0;            /* --repl */
 static int PRIORCLS = 0;  /* --priorcls: router accepts/rejects, prior picks the class */
 static int SELMARG = 0;   /* --selmargin=N: prior votes only when its margin >= N */
 
@@ -482,6 +484,99 @@ static void selsig(void) {
     printf("\n  === retroactive: apply the same test to accepted claims ===\n");
     pairsig("twin-ternary vs binary (d=256)", score_bin, score_ter, 138, 136);
 }
+/* --route / --repl: try the router on one sentence and SEE WHY.
+ * For a nearest-neighbour system the honest explanation is the neighbours, so
+ * this shows them. Until now the repo could only report aggregate statistics
+ * over a corpus — there was no way to simply talk to the thing it builds. */
+static void route_one(const char *txt) {
+    tvec q; t_encode(&R, txt, &q); int aa = t_active(&q);
+    int th = (FIXTH != (1<<30)) ? FIXTH : RSHIP_TH;
+    int bi[5]; int bs[5]; for (int k = 0; k < 5; k++) { bi[k] = -1; bs[k] = -(1<<28); }
+    for (uint32_t i = 0; i < R.n_index; i++) {
+        int s = t_score(&q, &TI[i], aa);
+        for (int k = 0; k < 5; k++)
+            if (s > bs[k]) { for (int j = 4; j > k; j--) { bs[j]=bs[j-1]; bi[j]=bi[j-1]; }
+                             bs[k]=s; bi[k]=(int)i; break; }
+    }
+    int raw = R.label[bi[0]];
+    int cls = r_apply_polarity(&R, raw, txt);
+    int pol = r_polarity(txt);
+    int act = bs[0] > th;
+    printf("\n  \"%s\"\n", txt);
+    int win_is_none = !strcmp(R.names[cls], "none");
+    printf("    %-22s %s\n", "decision",
+           !act        ? "none  (score below threshold — no action)"
+           : win_is_none ? "none  (nearest match is not a command — no action)"
+                         : R.names[cls]);
+    printf("    %-22s %d   (threshold %d, margin %+d)\n", "score", bs[0], th, bs[0]-th);
+    if (pol && cls != raw)
+        printf("    %-22s %s cue moved %s -> %s\n", "polarity",
+               pol > 0 ? "positive" : "negative", R.names[raw], R.names[cls]);
+    else if (pol)
+        printf("    %-22s %s cue present, winner already agrees\n", "polarity",
+               pol > 0 ? "positive" : "negative");
+    printf("    %-22s %d of %d dims carry evidence\n", "encoding", aa, RD);
+    printf("    nearest stored utterances:\n");
+    for (int k = 0; k < 5 && bi[k] >= 0; k++)
+        printf("      %4d  %-22s \"%s\"\n", bs[k], R.names[R.label[bi[k]]], U_t[bi[k]]);
+}
+static void repl(void) {
+    char line[512];
+    printf("\n  mogwai — type an utterance, blank line or Ctrl-D to exit\n");
+    printf("  threshold %d, index %u vectors\n", (FIXTH != (1<<30)) ? FIXTH : RSHIP_TH, R.n_index);
+    for (;;) {
+        printf("\n  > "); fflush(stdout);
+        if (!fgets(line, sizeof line, stdin)) break;
+        size_t n = strlen(line);
+        while (n && (line[n-1]=='\n' || line[n-1]=='\r')) line[--n] = 0;
+        if (!n) break;
+        route_one(line);
+    }
+    printf("\n");
+}
+static void usage(void) {
+    printf(
+"mogwai compare — twin-ternary intent router harness\n"
+"\n"
+"  compare [paths] [flags]      paths default to data/ ; run `make fetch` first\n"
+"\n"
+"TRY IT\n"
+"  --route=\"turn off the kitchen light\"   route one utterance, show why\n"
+"  --repl                                  same, interactively\n"
+"\n"
+"MEASURE  (dev/validation — safe to run as often as you like)\n"
+"  --ship                 the SHIPPED operating point (threshold %d).\n"
+"                         Reproduces the table in README.md.\n"
+"  --fixth=N              force a threshold instead of tuning one\n"
+"  --curve                sweep the threshold, emit the operating curve\n"
+"  --errs                 print the actual misclassified utterances\n"
+"\n"
+"HELD-OUT  (burns one unit of results/TEST_BUDGET — see doc/METHOD.md)\n"
+"  --test                 evaluate on the test split. Prefer `make testset`.\n"
+"\n"
+"INDEX PRUNING\n"
+"  --prune-dup            drop identical codes (measured: zero exist at d=256)\n"
+"  --prune-cnn            drop negatives that are nobody's nearest neighbour\n"
+"  --prune-neg=K          keep 1-in-K negatives\n"
+"\n"
+"RETAINED NEGATIVE RESULTS  (kept per `never delete`; none of these help —\n"
+"each is reproducible evidence of a measured failure, see EXPERIMENTS.md)\n"
+"  --cue                  index-derived hard word cues .......... harmful\n"
+"  --priorcls[2]          word prior picks the class ............ harmful\n"
+"  --gatesel --selmargin=N  margin-gated selector ............... failed held-out\n"
+"  --sig=N --noveto       signature veto ....................... inert\n"
+"\n"
+"DIAGNOSTICS\n"
+"  --channels             router vs word-prior error overlap\n"
+"  --xval                 2-fold cross-validation inside the index\n"
+"  --gatecheck            gate table must equal the prior bit-exactly\n"
+"  --gatesize             what a compact prior table would need\n"
+"  --selsig               paired significance of the selector on dev\n"
+"  --seldump --dirdump    per-item signal dumps (TSV)\n"
+"  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
+"\n"
+"See also: make ship | make regress | make testset | doc/TOOLS.md\n", RSHIP_TH);
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -507,29 +602,51 @@ static void report(const char *name, hit (*f)(const char *), int lo, int hi, dou
     LAST = hh; LAST_TH = th; LAST_NAME = name;
 }
 int main(int argc,char**argv){
-    if(argc<5){fprintf(stderr,"usage: compare train val test nlu.csv [--test]\n");return 1;}
-    for(int i=5;i<argc;i++){ if(!strcmp(argv[i],"--test")) USE_TEST=1;
-        else if(!strncmp(argv[i],"--sig=",6)) SIGMODE=atoi(argv[i]+6);
-        else if(!strcmp(argv[i],"--noveto")) NOVETO=1;
-        else if(!strcmp(argv[i],"--leak")) LEAKTEST=1;
-        else if(!strncmp(argv[i],"--fixth=",8)) FIXTH=atoi(argv[i]+8);
-        else if(!strcmp(argv[i],"--curve")) CURVE=1;
-        else if(!strcmp(argv[i],"--errs")) DUMPERR=1;
-        else if(!strcmp(argv[i],"--dirdump")) DIRDUMP=1;
-        else if(!strcmp(argv[i],"--cue")) USECUE=1;
-        else if(!strcmp(argv[i],"--channels")) CHANNELS=1;
-        else if(!strcmp(argv[i],"--seldump")) SELDUMP=1;
-        else if(!strcmp(argv[i],"--xval")) XVAL=1;
-        else if(!strcmp(argv[i],"--gatesize")) GATESZ=1;
-        else if(!strcmp(argv[i],"--gatecheck")) GATECHK=1;
-        else if(!strcmp(argv[i],"--gatesel")) { USEGATE=1; PRIORCLS=1; }
-        else if(!strcmp(argv[i],"--selsig")) { SELSIG=1; SELMARG=8; }
-        else if(!strcmp(argv[i],"--priorcls")) PRIORCLS=1;
-        else if(!strcmp(argv[i],"--priorcls2")) PRIORCLS=2;
-        else if(!strncmp(argv[i],"--selmargin=",12)) SELMARG=atoi(argv[i]+12);
-        else if(!strcmp(argv[i],"--ship")) FIXTH=RSHIP_TH;
-        else if(prune_parse(argv[i],&PRUNE)) { /* consumed */ }
-}
+    /* Flags may appear anywhere; the four corpus paths are optional and default
+       to data/. Unknown flags are REFUSED — they used to be silently ignored,
+       so `--shipp` ran unshipped and reported the wrong numbers with no warning. */
+    const char *pos[4] = {0,0,0,0}; int np = 0;
+    for (int i = 1; i < argc; i++) {
+        const char *a = argv[i];
+        if (a[0] != '-') { if (np < 4) pos[np++] = a; else { fprintf(stderr,"  too many paths: %s\n",a); return 1; } continue; }
+        if      (!strcmp(a,"-h") || !strcmp(a,"--help")) { usage(); return 0; }
+        else if (!strncmp(a,"--route=",8)) { ROUTE1 = a+8; }
+        else if (!strcmp(a,"--repl")) REPL=1;
+        else if (!strcmp(a,"--test")) USE_TEST=1;
+        else if (!strncmp(a,"--sig=",6)) SIGMODE=atoi(a+6);
+        else if (!strcmp(a,"--noveto")) NOVETO=1;
+        else if (!strcmp(a,"--leak")) LEAKTEST=1;
+        else if (!strncmp(a,"--fixth=",8)) FIXTH=atoi(a+8);
+        else if (!strcmp(a,"--curve")) CURVE=1;
+        else if (!strcmp(a,"--errs")) DUMPERR=1;
+        else if (!strcmp(a,"--dirdump")) DIRDUMP=1;
+        else if (!strcmp(a,"--cue")) USECUE=1;
+        else if (!strcmp(a,"--channels")) CHANNELS=1;
+        else if (!strcmp(a,"--seldump")) SELDUMP=1;
+        else if (!strcmp(a,"--xval")) XVAL=1;
+        else if (!strcmp(a,"--gatesize")) GATESZ=1;
+        else if (!strcmp(a,"--gatecheck")) GATECHK=1;
+        else if (!strcmp(a,"--gatesel")) { USEGATE=1; PRIORCLS=1; }
+        else if (!strcmp(a,"--selsig")) { SELSIG=1; SELMARG=8; }
+        else if (!strcmp(a,"--priorcls")) PRIORCLS=1;
+        else if (!strcmp(a,"--priorcls2")) PRIORCLS=2;
+        else if (!strncmp(a,"--selmargin=",12)) SELMARG=atoi(a+12);
+        else if (!strcmp(a,"--ship")) FIXTH=RSHIP_TH;
+        else if (prune_parse(a,&PRUNE)) { /* consumed */ }
+        else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
+    }
+    if (np == 0) {                      /* the common case: just use data/ */
+        pos[0]="data/train.json"; pos[1]="data/validation.json";
+        pos[2]="data/test.json";  pos[3]="data/nlu_home.csv"; np=4;
+    }
+    if (np != 4) { fprintf(stderr,"  need 4 corpus paths or none (defaults to data/)\n  try --help\n"); return 1; }
+    { FILE *probe = fopen(pos[0], "r");
+      if (!probe) { fprintf(stderr,
+          "  cannot open %s\n"
+          "  the corpora are fetched, not vendored — run:  make fetch\n", pos[0]); return 1; }
+      fclose(probe); }
+    argv[1]=(char*)pos[0]; argv[2]=(char*)pos[1]; argv[3]=(char*)pos[2]; argv[4]=(char*)pos[3];
+    if(ROUTE1 || REPL) INV_QUIET = 1;
     if(USE_TEST){
         /* The counter used to live in results/TEST_BUDGET alongside the prose
            audit note. fscanf("%d") cannot parse a file starting with text, so it
@@ -549,7 +666,7 @@ int main(int argc,char**argv){
             for(int k=1;k<argc;k++) fprintf(bf," %s",argv[k]);
             fprintf(bf,"\n"); fclose(bf); }
         fprintf(stderr,"  *** TEST SET TOUCHED (use #%d). Every touch is a chance to overfit. ***\n",used);
-    } else fprintf(stderr,"  reporting on VALIDATION (pass --test to evaluate on test)\n");
+    } else if(!ROUTE1 && !REPL) fprintf(stderr,"  reporting on VALIDATION (pass --test to evaluate on test)\n");
     char line[8192],t[512],l[RNAMELEN];
     FILE*f;
     /* TEST is loaded FIRST so the index can exclude any string that
@@ -587,7 +704,7 @@ int main(int argc,char**argv){
         char lb[RNAMELEN]; snprintf(lb,sizeof lb,"iot_%s",fl[3]);
         push(U_t,U_l,&U_n,fl[9],lb); hs_add(fl[9]); added++;
     } fclose(f);
-    fprintf(stderr,"  index %d (train %d, +NLU %d new, %d dedup) | DEV %d | test %d\n",
+    if(!ROUTE1 && !REPL) fprintf(stderr,"  index %d (train %d, +NLU %d new, %d dedup) | DEV %d | test %d\n",
             U_n,n_train,added,dup,V_n,T_n);
     inv_disjoint("index vs DEV",  U_t, U_n, V_t, V_n);
     inv_disjoint("index vs TEST", U_t, U_n, T_t, T_n);
@@ -622,6 +739,9 @@ int main(int argc,char**argv){
     cue_build(&CUE, U_t, R.label, U_n, (int)R.n_class);   /* index only — never dev */
     gate_build(&GATE, &PR);   /* compact form of PR, verified bit-exact */
     long tb=0; for(int i=0;i<U_n;i++) tb+=strlen(U_t[i])+1;
+    /* route/repl produce only the route — no corpus diagnostics, no table */
+    if(ROUTE1){ route_one(ROUTE1); printf("\n"); return 0; }
+    if(REPL){ repl(); return 0; }
     code_overlap("DEV", V_t, V_l, V_n);
     code_overlap("TEST", T_t, T_l, T_n);
     printf("\n  %-20s %8s %-8s %-8s %8s\n","representation","iot acc","wrong","missed","index KB");

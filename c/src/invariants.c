@@ -1,3 +1,4 @@
+int INV_QUIET = 0;   /* set by callers that want only their own output */
 #include "invariants.h"
 #include "router.h"
 #include <stdio.h>
@@ -40,7 +41,7 @@ void inv_disjoint(const char *what, char **a, int na, char **b, int nb) {
     if (hits)
         ABORT("%s: %d of %d evaluation utterances (%.1f%%) are present in the index.\n"
               "  e.g. \"%s\"", what, hits, nb, 100.0*hits/nb, ex);
-    fprintf(stderr, "  [inv] %-28s disjoint (%d vs %d)\n", what, na, nb);
+    if (!INV_QUIET) fprintf(stderr, "  [inv] %-28s disjoint (%d vs %d)\n", what, na, nb);
 }
 /* a representation that CONTAINS another cannot score lower than it */
 void inv_superset(const char *sub, double sub_acc, const char *sup, double sup_acc, double tol) {

@@ -7,7 +7,7 @@ CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c
 DATA    := data/train.json data/validation.json data/test.json data/nlu_home.csv
 LOG     := results/RESULTS.tsv
 
-.PHONY: all fetch compare ship testset test tools clean log-header
+.PHONY: all fetch compare ship testset test tools regress route repl demo clean log-header
 all: $(BIN)/compare
 
 $(BIN)/%: $(SRC)/%.c $(CORE) $(SRC)/router.h $(SRC)/ternary.h
@@ -85,3 +85,24 @@ tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c
 .PHONY: regress
 regress:
 	@./scripts/regress.sh
+
+# --- try it -----------------------------------------------------------------
+# route one utterance and show why:   make route TEXT="dim the bedroom lights"
+.PHONY: route repl demo
+route: $(BIN)/compare $(DATA)
+	@$(BIN)/compare --ship --route="$(TEXT)"
+
+repl: $(BIN)/compare $(DATA)
+	@$(BIN)/compare --ship --repl
+
+# a 60-second tour: what it does, how well, and how fast
+demo: $(BIN)/compare $(DATA)
+	@printf '\n\033[1m1. it routes commands\033[0m\n'
+	@$(BIN)/compare --ship --route="turn off the kitchen light"
+	@printf '\n\033[1m2. it declines non-commands\033[0m\n'
+	@$(BIN)/compare --ship --route="what time does the train leave"
+	@printf '\n\033[1m3. it declines nonsense\033[0m\n'
+	@$(BIN)/compare --ship --route="zzz qqq xyzzy"
+	@printf '\n\033[1m4. measured, at the shipped operating point\033[0m\n'
+	@$(BIN)/compare --ship 2>/dev/null | grep -vE '^ROW' | tail -5
+	@printf '\n\033[1m5. on the device\033[0m  (43.5 ms, PARITY EXACT — see esp32_router/README.md)\n\n'

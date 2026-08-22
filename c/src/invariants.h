@@ -9,6 +9,7 @@
  *               by construction (all-ones mask reduces ternary to binary)      */
 #ifndef INVARIANTS_H
 #define INVARIANTS_H
+extern int INV_QUIET;   /* 1 = stay silent when an invariant PASSES; failures still abort */
 #include <stddef.h>
 
 void inv_disjoint(const char *what, char **a, int na, char **b, int nb);

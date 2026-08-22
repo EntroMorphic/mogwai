@@ -21,6 +21,9 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 | file | role |
 |---|---|
 | `compare.c` | the main experiment. `--test` `--curve` `--ship` `--errs` `--fixth=N` `--prune-*` |
+| `compare --route=".."` | route ONE utterance and show the nearest stored matches. The fastest way to see what the router actually does |
+| `compare --repl` | the same, interactively |
+| `compare --help` | every flag, grouped by whether it still helps |
 | `mkblob.c` | emits `router.bin`. Refuses to guess a threshold when pruning |
 | `eval.c` | **verifies a built blob** before flashing: reference-query parity + index integrity. `c/bin/eval router.bin data/validation.json`. Cannot touch test by construction |
 
@@ -39,7 +42,7 @@ against a candidate `dice()`, and Dice was then adopted *as* `t_score`, so it
 compared a function to itself. It had also bit-rotted behind a changed
 signature, which is why `make tools` now exists.
 
-## Tests in `c/test/`
+## Tests in `c/test/` (continued)
 
 | file | what it proves |
 |---|---|

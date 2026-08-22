@@ -56,6 +56,18 @@ chk "leaktest reproduces 75.6% leak" "$(c/bin/leaktest data/train.json data/nlu_
 chk "leakchk dev/test near-dup"      "$(c/bin/leakchk data/train.json data/validation.json data/test.json 2>&1 | grep -c 'near-duplicate rate')" "2"
 chk "cuemine mines colour from index" "$(c/bin/cuemine data/train.json data/test.json iot_hue_lightchange 4 2>/dev/null | grep -cE '^  colors')" "1"
 
+echo "=== DEVELOPER EXPERIENCE ==="
+chk "--help exits 0" "$(c/bin/compare --help >/dev/null 2>&1; echo $?)" "0"
+chk "--help documents --route" "$(c/bin/compare --help 2>&1 | grep -c -- '--route')" "1"
+chk "--help groups retained negative results" "$(c/bin/compare --help 2>&1 | grep -c 'RETAINED NEGATIVE RESULTS')" "1"
+chk "paths default to data/ (no positional args)" "$(c/bin/compare --ship 2>/dev/null | grep -c '^ROW')" "2"
+chk "unknown flag refused with rc=1" "$(c/bin/compare --shipp >/dev/null 2>&1; echo $?)" "1"
+chk "--route routes a command" "$(c/bin/compare --ship --route='turn off the kitchen light' 2>/dev/null | grep -c 'iot_hue_lightoff')" "6"
+chk "--route declines a non-command" "$(c/bin/compare --ship --route='what time does the train leave' 2>/dev/null | grep -c 'not a command')" "1"
+chk "--route declines nonsense below threshold" "$(c/bin/compare --ship --route='zzz qqq xyzzy' 2>/dev/null | grep -c 'below threshold')" "1"
+chk "--route output is clean (no corpus chatter)" "$(c/bin/compare --ship --route=x 2>&1 | grep -c '\[inv\]')" "0"
+chk "QUICKSTART.md tracked" "$(git ls-files QUICKSTART.md | wc -l | tr -d ' ')" "1"
+
 echo "=== DOCS ==="
 b=0
 for f in README.md FRAME.md doc/*.md journal/README.md esp32_router/README.md; do
