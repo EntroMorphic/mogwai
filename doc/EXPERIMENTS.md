@@ -1277,3 +1277,108 @@ that remains worth stating, because it shows how close this sits to the
 resolution limit of the data.
 
 Test budget: 5.
+
+## Hardware-offload audit: what can move to silicon, and what cannot
+
+Enumerated every operation in the per-query path and measured it, then mapped
+each against the ESP32-D0WD-V3's peripherals.
+
+### The path is 99.8% one operation
+
+    r_norm -> r_counts (FNV-1a 3/4-grams) -> t_encode -> t_active   ~0.05 ms
+    SCAN 10500 x (t_dot + Dice + argmax)                            43.5 ms
+    threshold -> r_polarity -> r_apply_polarity                     negligible
+
+Encode, normalisation and the polarity cue scan together are **~0.1%**. Nothing
+outside the scan is worth offloading, whatever hardware exists.
+
+### The scan is memory movement, not arithmetic
+
+    full scoring   flash-mapped 4168 ns/vec   DRAM 1617 ns/vec   2.58x
+    touch only     flash-mapped 1254 ns/vec   DRAM   63 ns/vec  19.89x
+
+**The byte cost is cache-MMU/bus overhead, not flash latency.** The same bytes
+read from internal SRAM are ~20x cheaper per access. An SRAM-resident index
+would run in ~17 ms instead of 43.5.
+
+### But bulk flash bandwidth is a hard floor
+
+    memcpy   4 KB flash->DRAM  129 MB/s     <- fits the 32 KB cache; re-reads it
+    memcpy  16 KB flash->DRAM  155 MB/s     <- same artefact
+    memcpy  64 KB flash->DRAM   24.8 MB/s   <- exceeds cache: the real rate
+    memcpy 128 KB flash->DRAM   24.1 MB/s
+
+**656 KB at ~24 MB/s = 27 ms just to move the index once.** No peripheral beats
+that; it is the device's flash read rate at QIO/80 MHz.
+
+### DMA double-buffering: measured, REJECTED
+
+Copy chunk N+1 while scoring chunk N, so the CPU always reads SRAM.
+
+    double-buffered scan (512-vector chunks): 44831 us  = **0.97x** (slower)
+
+CPU `memcpy` is synchronous, so 2461 ns copy + 1617 ns compute is additive.
+And perfect overlap only reaches `max(2461, 1617)` = 26 ms — no better than the
+naive dual-core split already measured at 26.7 ms. **Both are the same 24 MB/s
+wall approached from different directions.**
+
+### Coarse-to-fine with SRAM signatures: measured, REJECTED on accuracy
+
+Fold each 256-bit mask to 64 bits (OR groups of 4), keep 10500 x 8 B = 82 KB in
+SRAM, rank by `popcount(qf & bf)` — a legitimate upper bound on mask overlap —
+then read flash only for the top-K survivors.
+
+    K>=64    18265 us/query   2.38x   but exact-match vs full scan: **17/64**
+    K>=256   19655 us/query   2.21x                                 20/64
+
+Fast, and wrong. Folding 4 dims into 1 leaves nearly every vector with a
+near-full signature, so the ranking carries almost no information. The speedup
+is real and the answers are not.
+
+### The rest of the silicon, priced
+
+| peripheral | verdict |
+|---|---|
+| second core | 1.69x measured — but core 1 belongs to WiFi in production |
+| SHA / AES / RSA accelerators | wrong primitives, and encode is 0.1% of the work |
+| PCNT + DMA + GPIO loopback | priced earlier at 268 ms — **3.4x slower** than the CPU |
+| ULP coprocessor | 8-instruction FSM; cannot express this |
+| QIO flash @ 80 MHz | already enabled; worth 1.47x and already counted |
+| GDMA | cannot exceed the 24 MB/s flash rate it would be feeding from |
+
+### Conclusion: the lever is fewer bytes, not faster bytes
+
+Every hardware path terminates at the same wall — 656 KB per query at 24 MB/s.
+The only remaining levers move **less data**:
+
+- **Prune the index.** Measured: condensation gives 418 KB at a cost inside the
+  noise floor. 36% fewer bytes ≈ 36% faster, on the single-core path.
+- **Fit SRAM.** ~171 KB free = ~2670 vectors at 64 B. Needs aggressive pruning,
+  but buys the full 2.58x.
+- **Compress.** See below.
+
+### Footnote: TRIX and the footprint
+
+TRIX packs four ternary values per byte — **2 bits per value**. Twin-ternary is
+already at exactly that density: 256 dims x 2 planes = 64 B, 2 bits/dim. The
+difference is layout, not density: bit-planes make the dot product three
+bitwise ops and two popcounts, which is what makes this viable on an LX6 with
+no SIMD. TRIX's packed layout targets ARM NEON.
+
+Its signature routing (`weights.sum().sign()`, score, argmax) is the mechanism
+built here as `cascade.c` and **measured inert** — identical on every axis, and
+cut. Different context (weight tiles vs index vectors), so this is not a
+refutation of TRIX; it is a note that the same idea did not transfer here.
+
+The transferable idea is **sparsity**. Measured:
+
+    active dims per vector: mean 57.9 of 256 (22.6%), min 1, max 179
+
+- Naive sparse (u8 index + sign bit) = **65 B/vector — larger** than the 64 B
+  bit-plane form. Rejected.
+- But the sign plane stores 256 bits of which only ~58 are meaningful. That is
+  ~25 B/vector of provable waste, and the entropy bound at 22.6% density is
+  ~32 B/vector — **a genuine 2x footprint reduction is theoretically available**.
+- The cost is the branchless popcount: any packed form needs bit extraction to
+  realign signs with mask positions. At 92% byte-bound, fewer bytes may still
+  win. **Untested — the best-supported remaining idea in this repo.**

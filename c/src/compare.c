@@ -33,6 +33,7 @@ static int CHANNELS = 0;   /* --channels: word vs n-gram error overlap */
 static int SELDUMP = 0;   /* --seldump: per-item signals a selector could use */
 static int XVAL = 0;      /* --xval: 2-fold CV inside the index */
 static int GATESZ = 0;    /* --gatesize: what a compact prior table needs */
+static int DENSITY = 0;   /* --density: how sparse are the index vectors? */
 static int GATECHK = 0;   /* --gatecheck: gate must equal prior bit-exactly */
 static gate_t GATE; static int USEGATE = 0;  /* --gatesel: selector reads the compact table */
 static int SELSIG = 0;    /* --selsig: paired significance of the dev selector gain */
@@ -628,6 +629,27 @@ static void usage(void) {
 "\n"
 "See also: make ship | make regress | make testset | doc/TOOLS.md\n", RSHIP_TH);
 }
+static void density(void) {
+    long tot = 0, mn = 1<<30, mx = 0; long hist[9] = {0};
+    for (int i = 0; i < U_n; i++) {
+        int a = t_active(&TI[i]);
+        tot += a; if (a < mn) mn = a; if (a > mx) mx = a;
+        hist[a * 8 / (RD + 1)]++;
+    }
+    double avg = (double)tot / U_n;
+    printf("\n  === index vector density (footprint lever, since we are 92%% byte-bound) ===\n");
+    printf("    active dims per vector: mean %.1f of %d (%.1f%%), min %ld, max %ld\n",
+           avg, RD, 100.0*avg/RD, mn, mx);
+    printf("    octile histogram:");
+    for (int i = 0; i < 8; i++) printf(" %ld", hist[i]);
+    printf("\n\n    current bit-plane layout : %d B/vector  (2 bits/dim, TRIX density)\n", (int)sizeof(tvec));
+    printf("    sparse (u8 idx + sign)   : %.0f B/vector average  -> %.2fx %s\n",
+           avg * 1.125, sizeof(tvec) / (avg * 1.125),
+           avg * 1.125 < sizeof(tvec) ? "SMALLER" : "LARGER");
+    printf("    but: sparse needs a gather per dim, and popcount over bit-planes is\n");
+    printf("    branchless. The question is whether fewer BYTES beats more CYCLES,\n");
+    printf("    and at 92%% byte-bound the answer may be yes.\n");
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -676,6 +698,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--seldump")) SELDUMP=1;
         else if (!strcmp(a,"--xval")) XVAL=1;
         else if (!strcmp(a,"--gatesize")) GATESZ=1;
+        else if (!strcmp(a,"--density")) DENSITY=1;
         else if (!strcmp(a,"--gatecheck")) GATECHK=1;
         else if (!strcmp(a,"--gatesel")) { USEGATE=1; PRIORCLS=1; }
         else if (!strcmp(a,"--selsig")) { SELSIG=1; SELMARG=8; }
@@ -802,6 +825,7 @@ int main(int argc,char**argv){
     if(SELDUMP){ seldump(); return 0; }
     if(XVAL){ xval(); return 0; }
     if(GATESZ){ gatesize(); return 0; }
+    if(DENSITY){ density(); return 0; }
     if(GATECHK){ gatecheck(); return 0; }
     if(SELSIG){ selsig(); return 0; }
     report("binary (1 bit)",   score_bin,-RD,RD,          U_n*sizeof(rvec)/1024.0);
