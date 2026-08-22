@@ -183,8 +183,16 @@ chk "no remote points at the upstream clone" "$(git remote -v 2>/dev/null | grep
 # The docs quote this suite's size. That number went stale the moment the
 # suite grew, and nothing noticed. Check it against reality.
 LIVE=$((P + F + S + 1))   # +1 for this check itself; skipped still count as checks
-DOC=$(grep -ohE '[0-9]+ checks' README.md QUICKSTART.md 2>/dev/null | grep -oE '[0-9]+' | sort -u | head -1)
-chk "docs quote the live check count" "$DOC" "$LIVE"
+# Every doc that states a LIVE check count must state the same one, and it must
+# be the real one. Three bugs lived here at once: the path was `QUICKSTART.md`
+# (repo root, nonexistent) silenced by 2>/dev/null so that file was never
+# checked at all; the pattern missed the hyphenated "55-check" form; and
+# `sort -u | head -1` took the LOWEST number rather than requiring agreement, so
+# a README quoting 55, 48 and 61 in three places passed. It did exactly that.
+# doc/METHOD.md is excluded on purpose - it narrates past counts in past tense.
+DOCN=$(grep -ohE '[0-9]+[- ]checks?\b' README.md doc/QUICKSTART.md esp32_router/README.md \
+       | grep -oE '^[0-9]+' | sort -u)
+chk "docs quote the live check count" "$(echo $DOCN)" "$LIVE"
 
 echo
 if [ "$S" -gt 0 ]; then echo "  ======== $P passed, $F failed, $S skipped ========"
