@@ -85,6 +85,9 @@ BT_LINE='    decision               none  (score below threshold — no action)'
 chk "--route declines a non-command" "$(c/bin/compare --ship --route='what time does the train leave' 2>/dev/null | grep -Fxc "$NC_LINE")" "1"
 chk "--route declines nonsense below threshold" "$(c/bin/compare --ship --route='zzz qqq xyzzy' 2>/dev/null | grep -Fxc "$BT_LINE")" "1"
 chk "--route output is clean (no corpus chatter)" "$(c/bin/compare --ship --route=x 2>&1 | grep -c '\[inv\]')" "0"
+chk "LICENSE present and tracked" "$(git ls-files LICENSE | wc -l | tr -d ' ')" "1"
+chk "LICENSE is MIT" "$(grep -c '^MIT License$' LICENSE)" "1"
+chk "README states the licence" "$(grep -c '\[MIT\](LICENSE)' README.md)" "1"
 chk "QUICKSTART tracked" "$(git ls-files doc/QUICKSTART.md | wc -l | tr -d ' ')" "1"
 
 echo "=== DOCS ==="

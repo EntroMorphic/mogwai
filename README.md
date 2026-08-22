@@ -135,7 +135,7 @@ are 92% of the cost, so index size predicts latency directly.
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (45 checks) — run after any structural change
+    make regress        # full host regression (48 checks) — run after any structural change
 
 Build and flash the device:
 
@@ -169,7 +169,7 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
     esp32_router/      VALIDATION firmware (see its README); sources are SYMLINKS into c/src
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 7 cycles
-    scripts/           fetch.sh (curl only), regress.sh (45 checks)
+    scripts/           fetch.sh (curl only), regress.sh (48 checks)
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
     board_backup/      how to restore the board's original ESP-AT firmware
@@ -191,5 +191,22 @@ get something much worse — which is the whole reason for the name.
    the autopsies of both are kept — see [doc/ARCHIVE.md](doc/ARCHIVE.md).
 
 Every run is logged and stamped with the git SHA and clean/dirty tree state.
-Run `make regress` after any structural change: 45 checks, including that the
+Run `make regress` after any structural change: 48 checks, including that the
 negative results still reproduce.
+
+## License
+
+[MIT](LICENSE) © 2026 Tripp Josserand-Austin.
+
+The MIT grant covers **this repository's code and documentation**. It does not
+and cannot relicense material this project does not own:
+
+- **The corpora are not vendored and not covered.** `make fetch` downloads
+  [MASSIVE](https://huggingface.co/datasets/mteb/amazon_massive_intent) and
+  [NLU-Evaluation-Data](https://github.com/xliuhw/NLU-Evaluation-Data) at build
+  time; each carries its own upstream licence. Only `data/SHA256` is tracked.
+- **`provenance/needle-upstream.bundle`** is a git bundle of
+  [anjaustin/needle](https://github.com/anjaustin/needle), retained for
+  provenance under its own terms. This project shares no code with it.
+- **`archive/`** is local-only and holds superseded work plus a second
+  repository; see [doc/ARCHIVE.md](doc/ARCHIVE.md).
