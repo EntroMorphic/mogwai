@@ -16,6 +16,7 @@ blob reproducible byte-identical
 blobfmt REJECTS a blob with trailing bytes
 blobfmt REJECTS a truncated blob
 blobfmt REJECTS a blob with trailing bytes
+blob controls are really -1/+1 byte
 blobfmt REJECTS a truncated blob
 blob verifier (parity + index integrity)
 blob reproducible byte-identical

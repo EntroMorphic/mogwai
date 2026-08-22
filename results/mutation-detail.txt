@@ -24,6 +24,7 @@
     blobfmt REJECTS a truncated blob
     blobfmt REJECTS a blob with trailing bytes
 === truncated control stops truncating
+    blob controls are really -1/+1 byte
     blobfmt REJECTS a truncated blob
 === blob bytes corrupted
     blob verifier (parity + index integrity)
