@@ -68,3 +68,22 @@ Restore with:
 Tracking it cost 45 MB of tracked files and most of a 122 MB `.git`, for content
 that is read perhaps once. The rule remains **never delete, only archive** — this
 changes where the archive lives, not whether it exists.
+
+## `archive/stray/`
+
+Material moved out of the tracked tree during housekeeping, kept because nothing
+is ever deleted.
+
+- **`data_hold_duplicate/`** — a 7.7 MB exact duplicate of the corpora, created
+  by a botched restore while testing the missing-corpora error path: `data/` was
+  moved aside, `make fetch` recreated it, and moving the original back landed it
+  *inside* the new one.
+- **`esp_at_wroom32_v1.1.2_full_4MB.bin`** — the board's original ESP-AT image.
+  A public Espressif release, so re-obtainable upstream; `board_backup/RESTORE.md`
+  keeps the sha256 that verifies any copy.
+
+## `archive/encoder_path/` and `archive/structural_ranker/`
+
+Earlier architectures, each with its own autopsy README: the distillation path
+that preceded the router, and a structural ranker that was built and cut. Both
+predate the C rewrite.

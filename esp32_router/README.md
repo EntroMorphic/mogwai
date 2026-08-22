@@ -11,6 +11,9 @@ measure where the time goes.
     profile()       memory vs compute, full index vs cache-resident
     bench_mt()      the same scan split across both cores
     redteam()       15 repeats per config + a pure size sweep
+    dram_vs_flash()     same vectors from SRAM vs flash-mapped — 2.58x apart
+    bulk_and_pipeline() bulk flash rate (24 MB/s) and a double-buffered scan
+    two_stage()         coarse-to-fine with an SRAM signature table
 
 Expect a few minutes of output. `PARITY EXACT` is the line that matters: it is
 printed only when class **and** bit-exact score match on all 64 references.

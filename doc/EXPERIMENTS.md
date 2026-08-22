@@ -44,18 +44,29 @@ not a discipline anyone has to remember.
   - [Red-team](#red-team-of-lever-2) — the smoothing confound was real, and my fix was backwards
 - [Lever 3: QIO flash — ALREADY TAKEN](#lever-3-qio-flash--already-taken-my-earlier-note-was-wrong) — it was on the whole time
 
-**The held-out evaluation**
-- [Pre-registered prediction](#test-evaluation-2--pre-registered-prediction-written-before-running) — committed before the run
-- [Result](#test-evaluation-2--result) — 84.1% ±2.5
+**Held-out evaluations** — budget is deliberately scarce; #1 is VOID
+- [#2 pre-registered](#test-evaluation-2--pre-registered-prediction-written-before-running) · [result](#test-evaluation-2--result) — 84.1% ±2.5
   - [Bug found in the budget guard while spending it](#bug-found-in-the-budget-guard-itself-while-spending-it)
-  - [Red-team](#red-team-of-test-evaluation-2) — the missing size-matched control; scoring corrected to 3/4
+  - [Red-team](#red-team-of-test-evaluation-2) — the missing size-matched control
+- [#3 pre-registered](#test-evaluation-3--pre-registered-prediction-written-before-running) · [result](#test-evaluation-3--result-the-dev-gain-did-not-transfer-126-reverted-to-136) — the 126 gain did not transfer; reverted
+- [#4 pre-registered](#test-evaluation-4--pre-registered-written-before-running) · [result](#test-evaluation-4--result-the-selector-failed-and-is-cut) — the selector failed and was cut
+- [#5 pre-registered](#test-evaluation-5--pre-registered-is-the-core-claim-significant) · [result](#test-evaluation-5--result-the-core-claim-is-significant-on-held-out-data) — **core claim significant, p=0.0288**
 
 **Choosing the operating point**
 - [Raising the threshold does not buy precision](#raising-the-threshold-for-precision--the-knob-does-not-do-what-i-claimed)
   - [Correcting my own claim](#correcting-my-own-claim)
   - [What the residual errors actually are](#what-the-residual-errors-actually-are) — the corpus ceiling
-- [Shipped threshold moved 136 → 126](#shipped-threshold-moved-136---126)
-- [The accuracy metric is blind to false actuations](#the-accuracy-metric-is-blind-to-false-actuations--read-every-number-above-with-this-in-mind) — read this before quoting any number above
+- [Shipped threshold moved 136 → 126](#shipped-threshold-moved-136---126) — later reverted, see #3
+- [The accuracy metric is blind to false actuations](#the-accuracy-metric-is-blind-to-false-actuations--read-every-number-above-with-this-in-mind) — read before quoting any number
+- [Asymmetric threshold — REJECTED](#asymmetric-threshold-126-up-136-down--rejected) — real structure, no actionable policy
+  - [Red-team](#red-team-of-the-asymmetric-threshold-rejection) — `wa` is threshold-immune
+
+**The wa floor, and the selector that failed to reach it**
+- [Complementary information exists, but nothing extracts it](#the-wa-floor-complementary-information-exists-but-nothing-extracts-it) — oracle 94.3% vs router 85.9%
+- [Shrinking the prior for the device](#shrinking-the-prior-for-the-device-213-mb---74-kb-bit-exact) — 2.13 MB → 74 KB, bit-exact
+
+**Where the time goes on device**
+- [Hardware-offload audit](#hardware-offload-audit-what-can-move-to-silicon-and-what-cannot) — every path ends at the same 24 MB/s flash wall
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
 > Where that happens the earlier text is left standing with the correction

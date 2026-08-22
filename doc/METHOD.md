@@ -233,3 +233,22 @@ positive control had its own copy of the `memcmp`, so disabling the real one
 left the control green. It was validating a parallel implementation. Fixed by
 factoring a single `co_collides()` that both the control and the reporting loop
 call. **A control that does not share the code path is testing a copy.**
+
+## 16. Mutation testing with `git checkout` destroys uncommitted work
+
+**Incident.** After fixing six stale documents, I mutation-tested the new checks
+that guard them. The restore step was `git checkout <file>` — which restores from
+HEAD, not from a snapshot. Every fix was still uncommitted, so the restores
+**reverted all six**. `git add -A` then committed the reverted state and I pushed
+it: four failing checks, live.
+
+The checks themselves were fine — they fired on all four mutations, exactly as
+intended. The harness around them was not.
+
+**Required:** commit before mutation testing, or snapshot with `cp` and restore
+from the copy. Never use `git checkout` as an undo for work that is not yet in
+the index.
+
+**And re-run the suite between the last mutation and the commit.** I ran it, saw
+`50 passed, 4 failed`, and committed anyway — the output was on screen and I did
+not read it. A green suite is only evidence if you look at it.

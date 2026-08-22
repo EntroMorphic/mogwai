@@ -15,12 +15,14 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 | `ternary.c` | twin-ternary encode, `t_dot`, Dice score, popcount table |
 | `prune.c` | index pruning — shared by the harness and the exporter, deliberately |
 | `invariants.c` | leak assertions that **abort** |
+| `gate.c` | the word prior compacted for the device: 2.13 MB -> 74 KB, bit-exact. Built but NOT shipped — the selector it serves failed held-out |
+| `cue.c` | index-derived hard word cues. Built, swept, measured harmful at every lift threshold |
 
 ## Harness
 
 | file | role |
 |---|---|
-| `compare.c` | the main experiment. `--test` `--curve` `--ship` `--errs` `--fixth=N` `--prune-*` |
+| `compare.c` | the main experiment. Every flag is listed by `compare --help`, grouped by whether it still helps — that is the single source of truth, not this table |
 | `compare --route=".."` | route ONE utterance and show the nearest stored matches. The fastest way to see what the router actually does |
 | `compare --repl` | the same, interactively |
 | `compare --help` | every flag, grouped by whether it still helps |
@@ -36,13 +38,14 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 | `leakchk.c` | is the dev split optimistically biased? `... train.json validation.json test.json` — answer: no, 36.3% vs 37.3% |
 | `leaktest.c` | reproduces the 75.6% leak on demand — a regression test for a fixed bug. `... train.json nlu_home.csv` |
 | `build.c` | older blob builder, superseded by `mkblob.c` |
+| `cuemine.c` | mines discriminative words from the INDEX ONLY, replicating compare.c's DEV carve so dev cannot contribute. `cuemine train.json test.json <class> [min_count]` |
 
 `probe.c` was archived to `archive/superseded_tools/` — it compared `t_score`
 against a candidate `dice()`, and Dice was then adopted *as* `t_score`, so it
 compared a function to itself. It had also bit-rotted behind a changed
 signature, which is why `make tools` now exists.
 
-## Tests in `c/test/` (continued)
+## Tests in `c/test/`
 
 | file | what it proves |
 |---|---|
