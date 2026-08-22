@@ -8,3 +8,17 @@ evaluation 4: 2026-08-21T17:52:23Z  argv: data/train.json data/validation.json d
 evaluation 5: 2026-08-22T03:16:41Z  argv: data/train.json data/validation.json
 evaluation 6: 2026-08-22T03:16:41Z  argv: data/train.json
 evaluation 7: 2026-08-22T13:38:13Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test
+
+--- audit note, 2026-08-22 ---
+Entries 5 and 6 are SPURIOUS and were not test-set reads. Neither names
+data/test.json (one has two corpus paths, one has one), so neither could have
+loaded the held-out split. Both were written during commit 195e68a, the DX
+mutation-testing session, from a transiently mutated build of compare.c. They
+are not reproducible against current code: a short invocation now returns at the
+`np != 4` check, before the budget block.
+
+Kept, not removed — an audit log that gets tidied is not an audit log.
+
+Real test-set reads: evaluations 1 (VOID), 2, 3, 4 and 7. That is FIVE touches,
+of which four produced usable measurements. The counter reads 7 and is therefore
+an upper bound, not a count.
