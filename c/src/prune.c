@@ -7,12 +7,13 @@ int prune_parse(const char *a, prune_opt *o) {
     if (!strcmp(a, "--prune-dup")) { o->dup = 1; return 1; }
     if (!strcmp(a, "--prune-cnn")) { o->cnn = 1; return 1; }
     if (!strncmp(a, "--prune-neg=", 12)) { o->neg_k = atoi(a + 12); return 1; }
+    if (!strncmp(a, "--prune-negtop=", 15)) { o->neg_top = atoi(a + 15); return 1; }
     return 0;
 }
 
 int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
                 tvec *TI, rvec *idx, int U_n, prune_opt o, int verbose) {
-    if (!o.dup && !o.cnn && o.neg_k <= 1) return U_n;
+    if (!o.dup && !o.cnn && o.neg_k <= 1 && o.neg_top <= 0) return U_n;
     char *keep = malloc(U_n); memset(keep, 1, U_n);
     int nonec = -1;
     for (uint32_t c = 0; c < R->n_class; c++)
@@ -43,9 +44,14 @@ int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
     /* (b) condensation: a negative earns its 64 bytes only if it is the nearest
        neighbour of something. Leave-one-out over the INDEX ONLY — the index is
        train, so this leaks neither dev nor test. */
+    /* cov[j] = how many index entries have j as their nearest neighbour.
+       cov[j] > 0 is exactly the old boolean `useful` flag, so --prune-cnn is
+       bit-identical to before; --prune-negtop reads the same counts as a
+       GRADED usefulness rank instead of thresholding them at zero. */
     int ncnn = 0;
-    if (o.cnn) {
-        char *useful = calloc(U_n, 1);
+    int *cov = NULL;
+    if (o.cnn || o.neg_top > 0) {
+        cov = calloc(U_n, sizeof(int));
         int *act = malloc(U_n * sizeof(int));
         for (int i = 0; i < U_n; i++) act[i] = t_active(&TI[i]);
         for (int i = 0; i < U_n; i++) {
@@ -55,13 +61,39 @@ int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
                 int s = t_score_pre(&TI[i], &TI[j], act[i], act[j]);
                 if (s > best) { best = s; bj = j; }
             }
-            if (bj >= 0) useful[bj] = 1;
+            if (bj >= 0) cov[bj]++;
         }
-        for (int i = 0; i < U_n; i++)
-            if (keep[i] && (int)R->label[i] == nonec && !useful[i])
-                { keep[i] = 0; ncnn++; }
-        free(useful); free(act);
+        free(act);
     }
+    if (o.cnn) {
+        for (int i = 0; i < U_n; i++)
+            if (keep[i] && (int)R->label[i] == nonec && !cov[i])
+                { keep[i] = 0; ncnn++; }
+    }
+    /* (b2) graded condensation: keep the o.neg_top negatives with the highest
+       NN-coverage, dropping the rest. --prune-cnn is the special case "keep
+       every negative with cov > 0" and cannot hit an arbitrary byte budget;
+       this can, and it selects by the same criterion rather than at random
+       (measured: condensation dominates random subsampling at equal bytes).
+       Ties inside a coverage level break by index order, so it is
+       deterministic and reproducible. */
+    int ntop = 0;
+    if (o.neg_top > 0) {
+        int maxcov = 0;
+        for (int i = 0; i < U_n; i++)
+            if (keep[i] && (int)R->label[i] == nonec && cov[i] > maxcov) maxcov = cov[i];
+        char *sel = calloc(U_n, 1);
+        int budget = o.neg_top;
+        for (int lvl = maxcov; lvl >= 0 && budget > 0; lvl--)
+            for (int i = 0; i < U_n && budget > 0; i++)
+                if (keep[i] && (int)R->label[i] == nonec && cov[i] == lvl)
+                    { sel[i] = 1; budget--; }
+        for (int i = 0; i < U_n; i++)
+            if (keep[i] && (int)R->label[i] == nonec && !sel[i])
+                { keep[i] = 0; ntop++; }
+        free(sel);
+    }
+    free(cov);
     /* (c) negative subsample. Lossy and dominated by (b) at equal bytes. */
     int nneg = 0;
     if (o.neg_k > 1) {
@@ -81,9 +113,9 @@ int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
         kept++;
     }
     if (verbose)
-        fprintf(stderr, "  [prune] %d -> %d  (dup %d, cnn %d, neg-subsample %d)"
-                        "  iot %d / none %d  | %.0f KB\n",
-                U_n, kept, ndup, ncnn, nneg, iot_k, neg_k,
+        fprintf(stderr, "  [prune] %d -> %d  (dup %d, cnn %d, negtop %d, "
+                        "neg-subsample %d)  iot %d / none %d  | %.0f KB\n",
+                U_n, kept, ndup, ncnn, ntop, nneg, iot_k, neg_k,
                 kept * sizeof(tvec) / 1024.0);
     R->n_index = kept;
     free(keep);

@@ -27,7 +27,7 @@ static int CURVE = 0;
 static int DUMPERR = 0;   /* --errs: print the actual misclassified utterances */
 static int DIRDUMP = 0;   /* --dirdump: per-item score/pred/truth, for direction analysis */
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
-static prune_opt PRUNE = {0,0,0};
+static prune_opt PRUNE = {0,0,0,0};
 static cue_t CUE; static int USECUE = 0;   /* --cue: index-derived hard word cues */
 static int CHANNELS = 0;   /* --channels: word vs n-gram error overlap */
 static int SELDUMP = 0;   /* --seldump: per-item signals a selector could use */
@@ -45,6 +45,7 @@ static const char *ROUTE1 = 0;  /* --route="..." */
 static int REPL = 0;            /* --repl */
 static int PRIORCLS = 0;  /* --priorcls: router accepts/rejects, prior picks the class */
 static int SELMARG = 0;   /* --selmargin=N: prior votes only when its margin >= N */
+static int PACKBENCH = 0; /* --packbench: packed sign plane, cycles vs bytes */
 
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
@@ -614,6 +615,7 @@ static void usage(void) {
 "  --prune-dup            drop identical codes (measured: zero exist at d=256)\n"
 "  --prune-cnn            drop negatives that are nobody's nearest neighbour\n"
 "  --prune-neg=K          keep 1-in-K negatives\n"
+"  --prune-negtop=N       keep the N negatives with the highest NN-coverage\n"
 "\n"
 "RETAINED NEGATIVE RESULTS  (kept per `never delete`; none of these help —\n"
 "each is reproducible evidence of a measured failure, see EXPERIMENTS.md)\n"
@@ -628,6 +630,7 @@ static void usage(void) {
 "  --gatecheck            gate table must equal the prior bit-exactly\n"
 "  --gatesize             what a compact prior table would need\n"
 "  --density              index vector sparsity — the footprint lever\n"
+"  --packbench            packed sign plane: cycles vs bytes, bit-exact check\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -855,6 +858,305 @@ static void report(const char *name, hit (*f)(const char *), int lo, int hi, dou
     if (LAST) mcnemar(LAST, LAST_TH, hh, th, lab, n);
     LAST = hh; LAST_TH = th; LAST_NAME = name;
 }
+/* --packbench: does a packed sign plane pay for its cycles?
+ *
+ * The sign plane stores RD bits of which only ~22.6% carry meaning (the rest
+ * sit under a zero mask bit and are never read). Packing signs down to the
+ * active dims alone gives  RD/8 B mask + ceil(active/8) B signs  — 39.2 B on
+ * this index instead of 64 B, 1.63x smaller.
+ *
+ * The cost: to read the sign of dim k you need its RANK inside the mask (how
+ * many set mask-bits precede it). That is a per-set-bit loop, not RWORDS
+ * branchless word ops. Two ways to pay it, both measured here:
+ *   EXPAND — scatter the packed signs back into RWORDS words (loop over every
+ *            active dim, ~58), then run the ordinary branchless dot.
+ *   RANK   — loop only over the INTERSECTION bits and rank-index each one.
+ *            Fewer iterations, more work per iteration.
+ * Portable C only: no PDEP/BMI2, because Xtensa LX6 has no scatter instruction
+ * and a host-only intrinsic would measure a machine we do not ship on.
+ *
+ * Exactness is checked over the FULL cross product (every dev query x every
+ * index vector), not sampled. */
+#ifndef TSMOOTH
+#define TSMOOTH 8      /* must track ternary.c; the exactness check enforces it */
+#endif
+#define PB4(n)  n, n+1, n+1, n+2
+#define PB6(n)  PB4(n), PB4(n+1), PB4(n+1), PB4(n+2)
+#define PB8(n)  PB6(n), PB6(n+1), PB6(n+1), PB6(n+2)
+/* same 8-bit table ternary.c uses, so both sides pay the same popcount price */
+static const uint8_t PBPC8[256] = { PB8(0), PB8(1), PB8(1), PB8(2) };
+static inline int pbpc(uint32_t x) {
+    return PBPC8[x & 0xff] + PBPC8[(x >> 8) & 0xff]
+         + PBPC8[(x >> 16) & 0xff] + PBPC8[x >> 24];
+}
+/* sp[] is sized for the worst case (every dim active). The STORED size is
+   RD/8 + ceil(active/8); that is what the footprint arithmetic below uses. */
+typedef struct { uint32_t m[RWORDS]; uint8_t sp[RD / 8]; } pvec;
+
+static void pb_pack(const tvec *v, pvec *p) {
+    memcpy(p->m, v->m, sizeof p->m);
+    memset(p->sp, 0, sizeof p->sp);
+    int r = 0;
+    for (int i = 0; i < RWORDS; i++) {
+        uint32_t m = v->m[i];
+        while (m) {
+            uint32_t low = m & (~m + 1u);
+            if (v->s[i] & low) p->sp[r >> 3] |= (uint8_t)(1u << (r & 7));
+            r++; m ^= low;
+        }
+    }
+}
+/* EXPAND: rebuild the sign plane, then the shipped branchless loop verbatim */
+static int pb_dot_expand(const tvec *a, const pvec *b) {
+    uint32_t s[RWORDS];
+    int r = 0;
+    for (int i = 0; i < RWORDS; i++) {
+        uint32_t m = b->m[i], o = 0;
+        while (m) {
+            uint32_t low = m & (~m + 1u);
+            o |= low & (uint32_t)(-(int32_t)((b->sp[r >> 3] >> (r & 7)) & 1));
+            r++; m ^= low;
+        }
+        s[i] = o;
+    }
+    int agree = 0, dis = 0;
+    for (int i = 0; i < RWORDS; i++) {
+        uint32_t both = a->m[i] & b->m[i];
+        uint32_t diff = a->s[i] ^ s[i];
+        agree += pbpc(both);
+        dis   += pbpc(both & diff);
+    }
+    return agree - 2 * dis;
+}
+/* RANK: iterate the intersection only; rank = words-so-far + bits-below */
+static int pb_dot_rank(const tvec *a, const pvec *b) {
+    int agree = 0, dis = 0, base = 0;
+    for (int i = 0; i < RWORDS; i++) {
+        uint32_t mb = b->m[i];
+        uint32_t both = a->m[i] & mb;
+        uint32_t sa = a->s[i], t = both;
+        agree += pbpc(both);
+        while (t) {
+            uint32_t low = t & (~t + 1u);
+            int r = base + pbpc(mb & (low - 1u));
+            int sb = (b->sp[r >> 3] >> (r & 7)) & 1;
+            dis += ((sa & low) ? 1 : 0) ^ sb;
+            t ^= low;
+        }
+        base += pbpc(mb);
+    }
+    return agree - 2 * dis;
+}
+/* RANK+: the strongest packed form we could construct. The plain RANK loop
+   re-popcounts every mask word to advance the running rank — the same 8
+   redundant popcounts BLOB_FORMAT.md priced at 569 of 2335 cycles. Precompute
+   the per-word prefix rank at BUILD time instead (RWORDS bytes/vector), so the
+   inner loop does one popcount for the bits-below and nothing else. Stored
+   bytes rise to RD/8 + RWORDS + ceil(active/8), still smaller than 64. */
+typedef struct { uint32_t m[RWORDS]; uint8_t rk[RWORDS]; uint8_t sp[RD / 8]; } pvec2;
+static void pb_pack2(const tvec *v, pvec2 *p) {
+    memcpy(p->m, v->m, sizeof p->m);
+    memset(p->sp, 0, sizeof p->sp);
+    int r = 0;
+    for (int i = 0; i < RWORDS; i++) {
+        p->rk[i] = (uint8_t)r;
+        uint32_t m = v->m[i];
+        while (m) {
+            uint32_t low = m & (~m + 1u);
+            if (v->s[i] & low) p->sp[r >> 3] |= (uint8_t)(1u << (r & 7));
+            r++; m ^= low;
+        }
+    }
+}
+static int pb_dot_rank2(const tvec *a, const pvec2 *b) {
+    int agree = 0, dis = 0;
+    for (int i = 0; i < RWORDS; i++) {
+        uint32_t mb = b->m[i];
+        uint32_t both = a->m[i] & mb;
+        uint32_t sa = a->s[i], t = both;
+        int base = b->rk[i];
+        agree += pbpc(both);
+        while (t) {
+            uint32_t low = t & (~t + 1u);
+            int r = base + pbpc(mb & (low - 1u));
+            dis += ((sa & low) ? 1 : 0) ^ ((b->sp[r >> 3] >> (r & 7)) & 1);
+            t ^= low;
+        }
+    }
+    return agree - 2 * dis;
+}
+static inline int pb_score(int d, int aa, int ab) {
+    return (2 * d * 256) / (aa + ab + TSMOOTH);
+}
+static double pb_ns(void) {
+    struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
+    return (double)t.tv_sec * 1e9 + (double)t.tv_nsec;
+}
+static void packbench(void) {
+    int nq = V_n; if (nq > 512) nq = 512;      /* queries; index is scanned whole */
+    pvec  *PI = calloc(U_n, sizeof(pvec));
+    pvec2 *PJ = calloc(U_n, sizeof(pvec2));
+    int  *AB = malloc(U_n * sizeof(int));
+    tvec *Q  = calloc(nq, sizeof(tvec));
+    int  *AQ = malloc(nq * sizeof(int));
+    long act_tot = 0, stored_p = 0, stored_p2 = 0, isect_tot = 0;
+    for (int i = 0; i < U_n; i++) {
+        AB[i] = t_active(&TI[i]); act_tot += AB[i];
+        stored_p  += RD / 8 + (AB[i] + 7) / 8;
+        stored_p2 += RD / 8 + RWORDS + (AB[i] + 7) / 8;
+        pb_pack(&TI[i], &PI[i]); pb_pack2(&TI[i], &PJ[i]);
+    }
+    for (int j = 0; j < nq; j++) { t_encode(&R, V_t[j], &Q[j]); AQ[j] = t_active(&Q[j]); }
+    double avg_act = (double)act_tot / U_n;
+    double avg_p   = (double)stored_p  / U_n;
+    double avg_p2  = (double)stored_p2 / U_n;
+
+    printf("\n  === --packbench: packed sign plane vs the branchless bit-planes ===\n");
+    printf("    index %d vectors x %d dev queries = %ld comparisons per pass\n",
+           U_n, nq, (long)U_n * nq);
+    printf("    active dims/vector mean %.1f of %d (%.1f%%)\n",
+           avg_act, RD, 100.0 * avg_act / RD);
+    printf("    stored B/vector: bit-planes %zu.0 | packed %.2f (%.3fx) | packed+rank %.2f (%.3fx)\n\n",
+           sizeof(tvec), avg_p, (double)sizeof(tvec) / avg_p,
+           avg_p2, (double)sizeof(tvec) / avg_p2);
+
+    /* ---- EXACTNESS: full cross product, every query x every index vector ---- */
+    long n = 0, bad_pack = 0, bad_ex = 0, bad_rk = 0, bad_rk2 = 0, bad_dot = 0;
+    for (int j = 0; j < nq; j++)
+        for (int i = 0; i < U_n; i++) {
+            int s0  = t_score_pre(&Q[j], &TI[i], AQ[j], AB[i]);
+            int d0  = t_dot(&Q[j], &TI[i]);
+            int de  = pb_dot_expand(&Q[j], &PI[i]);
+            int dr  = pb_dot_rank  (&Q[j], &PI[i]);
+            int dr2 = pb_dot_rank2 (&Q[j], &PJ[i]);
+            if (de != d0 || dr != d0 || dr2 != d0) bad_dot++;
+            if (pb_score(de,  AQ[j], AB[i]) != s0) bad_ex++;
+            if (pb_score(dr,  AQ[j], AB[i]) != s0) bad_rk++;
+            if (pb_score(dr2, AQ[j], AB[i]) != s0) bad_rk2++;
+            for (int w = 0; w < RWORDS; w++) isect_tot += pbpc(Q[j].m[w] & TI[i].m[w]);
+            n++;
+        }
+    /* pack/unpack round-trip: the sign plane must be recoverable at every
+       active dim (dims under a zero mask bit are unreadable BY CONSTRUCTION
+       and are exactly the bytes being reclaimed). */
+    for (int i = 0; i < U_n; i++) {
+        int r = 0;
+        for (int w = 0; w < RWORDS; w++) {
+            uint32_t m = TI[i].m[w];
+            while (m) {
+                uint32_t low = m & (~m + 1u);
+                int want = (TI[i].s[w] & low) ? 1 : 0;
+                if (want != ((PI[i].sp[r >> 3] >> (r & 7)) & 1)) bad_pack++;
+                if (want != ((PJ[i].sp[r >> 3] >> (r & 7)) & 1)) bad_pack++;
+                r++; m ^= low;
+            }
+        }
+    }
+    printf("    EXACTNESS (full cross product, no sampling)\n");
+    printf("      comparisons                  %ld\n", n);
+    printf("      dot mismatches               %ld\n", bad_dot);
+    printf("      score mismatches  EXPAND     %ld\n", bad_ex);
+    printf("      score mismatches  RANK       %ld\n", bad_rk);
+    printf("      score mismatches  RANK+      %ld\n", bad_rk2);
+    printf("      pack round-trip sign errors  %ld  (over %ld active dims x2 forms)\n",
+           bad_pack, act_tot);
+    printf("      -> %s\n", (bad_dot | bad_ex | bad_rk | bad_rk2 | bad_pack)
+                            ? "*** NOT BIT-EXACT ***" : "BIT-EXACT on all counts");
+    printf("      mean mask intersection %.1f bits — the length of the rank loop\n\n",
+           (double)isect_tot / n);
+
+    /* ---- TIMING ---- */
+    const int reps = 3;
+    volatile long sink = 0;
+    double t0, t1, ns[5];
+    const char *nm[5] = {
+        "t_score       (branchless, recomputes t_active)",
+        "t_score_pre   (branchless, SHIPPED path)",
+        "packed EXPAND (scatter signs, then branchless)",
+        "packed RANK   (rank-index the intersection)",
+        "packed RANK+  (prefix ranks precomputed, +8 B/vec)" };
+
+    t0 = pb_ns();
+    for (int r = 0; r < reps; r++) for (int j = 0; j < nq; j++) { long a = 0;
+        for (int i = 0; i < U_n; i++) a += t_score(&Q[j], &TI[i], AQ[j]); sink += a; }
+    t1 = pb_ns(); ns[0] = (t1 - t0) / ((double)reps * nq * U_n);
+
+    t0 = pb_ns();
+    for (int r = 0; r < reps; r++) for (int j = 0; j < nq; j++) { long a = 0;
+        for (int i = 0; i < U_n; i++) a += t_score_pre(&Q[j], &TI[i], AQ[j], AB[i]); sink += a; }
+    t1 = pb_ns(); ns[1] = (t1 - t0) / ((double)reps * nq * U_n);
+
+    t0 = pb_ns();
+    for (int r = 0; r < reps; r++) for (int j = 0; j < nq; j++) { long a = 0;
+        for (int i = 0; i < U_n; i++) a += pb_score(pb_dot_expand(&Q[j], &PI[i]), AQ[j], AB[i]);
+        sink += a; }
+    t1 = pb_ns(); ns[2] = (t1 - t0) / ((double)reps * nq * U_n);
+
+    t0 = pb_ns();
+    for (int r = 0; r < reps; r++) for (int j = 0; j < nq; j++) { long a = 0;
+        for (int i = 0; i < U_n; i++) a += pb_score(pb_dot_rank(&Q[j], &PI[i]), AQ[j], AB[i]);
+        sink += a; }
+    t1 = pb_ns(); ns[3] = (t1 - t0) / ((double)reps * nq * U_n);
+
+    t0 = pb_ns();
+    for (int r = 0; r < reps; r++) for (int j = 0; j < nq; j++) { long a = 0;
+        for (int i = 0; i < U_n; i++) a += pb_score(pb_dot_rank2(&Q[j], &PJ[i]), AQ[j], AB[i]);
+        sink += a; }
+    t1 = pb_ns(); ns[4] = (t1 - t0) / ((double)reps * nq * U_n);
+
+    printf("    HOST COST per vector scored (%d reps, %ld scores each)\n",
+           reps, (long)nq * U_n);
+    for (int i = 0; i < 5; i++)
+        printf("      %-50s %8.2f ns   %6.2fx\n", nm[i], ns[i], ns[i] / ns[1]);
+    printf("      (sink %ld — kept so nothing is optimised away)\n\n", (long)sink);
+
+    /* ---- DOES IT PAY? ----------------------------------------------------
+       Device numbers from the hardware-offload audit (doc/EXPERIMENTS.md):
+         full scoring  flash-mapped 4168 ns/vec   DRAM 1617 ns/vec
+         touch only    flash-mapped 1254 ns/vec   DRAM   63 ns/vec
+       The memory penalty is the part that scales with BYTES; the compute is
+       the part that scales with the ratio measured above. The flash penalty
+       taken here is 4168-1617 = 2551 ns/vec (what flash residency costs over
+       SRAM); the SRAM penalty is the 63 ns/vec touch cost itself. */
+    const double FLASH_PEN = 2551.0;            /* ns/vector at 64 B */
+    const double SRAM_PEN  =   63.0;            /* ns/vector at 64 B */
+    const double DEV_COMPUTE = 1617.0 - 63.0;   /* ns/vector, memory removed */
+
+    printf("    DOES IT PAY? (device model: compute %.0f ns/vec, memory scales with bytes)\n",
+           DEV_COMPUTE);
+    printf("      %-14s %7s %8s %10s %10s %10s %10s\n",
+           "form", "B/vec", "ratio", "dCompute", "FLASH net", "SRAM net", "index KB");
+    for (int i = 2; i < 5; i++) {
+        double b = (i == 4) ? avg_p2 : avg_p;
+        double shrink = b / (double)sizeof(tvec);
+        double dc = DEV_COMPUTE * (ns[i] / ns[1] - 1.0);
+        printf("      %-14s %7.2f %7.2fx %+9.0f %+10.0f %+10.0f %10.0f\n",
+               i == 2 ? "EXPAND" : i == 3 ? "RANK" : "RANK+", b, ns[i] / ns[1], dc,
+               dc - FLASH_PEN * (1.0 - shrink), dc - SRAM_PEN * (1.0 - shrink),
+               U_n * b / 1024);
+    }
+    printf("      (negative net = PAYS; positive = COSTS)\n\n");
+    printf("    BREAK-EVEN — the compute budget the byte saving buys:\n");
+    for (int i = 2; i < 5; i++) {
+        double b = (i == 4) ? avg_p2 : avg_p;
+        double shrink = b / (double)sizeof(tvec);
+        printf("      %-6s saves %4.1f B/vec -> budget %5.0f ns (flash) / %4.1f ns (SRAM)"
+               "  = ratio x%.2f / x%.3f\n",
+               i == 2 ? "EXPAND" : i == 3 ? "RANK" : "RANK+", sizeof(tvec) - b,
+               FLASH_PEN * (1.0 - shrink), SRAM_PEN * (1.0 - shrink),
+               1.0 + FLASH_PEN * (1.0 - shrink) / DEV_COMPUTE,
+               1.0 + SRAM_PEN  * (1.0 - shrink) / DEV_COMPUTE);
+    }
+    { double cheap = ns[3] < ns[4] ? ns[3] : ns[4];
+      double got  = cheap / ns[1] - 1.0;                       /* compute penalty */
+      double bud  = FLASH_PEN * (1.0 - avg_p / (double)sizeof(tvec)) / DEV_COMPUTE;
+      printf("      cheapest packed form measured x%.2f: penalty %.2f vs flash budget"
+             " %.2f — OVER by %.1fx\n", cheap / ns[1], got, bud, got / bud); }
+    printf("      index %.0f KB -> %.0f KB; SRAM has ~171 KB free, so packing alone\n"
+           "      does NOT move the index into SRAM either.\n",
+           U_n * (double)sizeof(tvec) / 1024, U_n * avg_p / 1024);
+    free(PI); free(PJ); free(AB); free(Q); free(AQ);
+}
 int main(int argc,char**argv){
     /* Flags may appear anywhere; the four corpus paths are optional and default
        to data/. Unknown flags are REFUSED — they used to be silently ignored,
@@ -880,6 +1182,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--xval")) XVAL=1;
         else if (!strcmp(a,"--gatesize")) GATESZ=1;
         else if (!strcmp(a,"--density")) DENSITY=1;
+        else if (!strcmp(a,"--packbench")) PACKBENCH=1;
         else if (!strcmp(a,"--footprint")) FOOTPRINT=1;
         else if (!strcmp(a,"--lmm-raw")) LMMRAW=1;
         else if (!strcmp(a,"--lmm-raw3")) LMMRAW3=1;
@@ -1011,6 +1314,7 @@ int main(int argc,char**argv){
     if(XVAL){ xval(); return 0; }
     if(GATESZ){ gatesize(); return 0; }
     if(DENSITY){ density(); return 0; }
+    if(PACKBENCH){ packbench(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }

@@ -89,7 +89,8 @@ Delete the `rtos_tax()`, `profile()`, `bench_mt()` and `redteam()` calls from
 is the whole router. `route()` is ~15 lines and needs no other scaffolding.
 
 Also note `bench_mt()` uses core 1. On a device running WiFi, core 1 is not
-free; the single-core number (43.5 ms) is the one that survives deployment.
+free; the single-core number is the one that survives deployment. With the index
+chunked into SRAM the same scan is 34.3 ms - see doc/EXPERIMENTS.md.
 
 ## Recovery
 

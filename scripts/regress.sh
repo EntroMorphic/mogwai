@@ -31,7 +31,7 @@ chk "tools+tests build with zero warnings" "$BUILD_N" "0"
 if [ "$BUILD_N" != "0" ]; then
   printf '%s\n' "$BUILD_OUT" | grep -E 'warning|error' | head -20 | sed 's/^/        /'
 fi
-chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "10"
+chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "11"
 
 echo "=== CORPUS ==="
 chk "corpus checksums" "$(shasum -a 256 -c data/SHA256 2>/dev/null | grep -c OK)" "4"
@@ -119,7 +119,22 @@ b=0
 for f in README.md doc/*.md journal/README.md esp32_router/README.md provenance/README.md results/README.md; do
   for l in $(grep -oE '\]\([^)#][^)]*\)' "$f" 2>/dev/null | tr -d ']()'); do
     case "$l" in http*) continue;; esac
-    [ -e "$(dirname "$f")/$l" ] || { echo "    broken: $f -> $l"; b=$((b+1)); }
+    # A link may carry a fragment: doc/X.md#some-anchor. Check the file exists
+    # AND that the anchor resolves inside it - otherwise a cross-file anchor
+    # link is either rejected outright (it was) or accepted unchecked.
+    p=${l%%#*}
+    if [ ! -e "$(dirname "$f")/$p" ]; then
+      echo "    broken: $f -> $p"; b=$((b+1)); continue
+    fi
+    case "$l" in
+      *"#"*) case "$p" in
+               *.md) frag=${l#*#}
+                     grep '^#\{2,4\} ' "$(dirname "$f")/$p" |
+                       awk '{sub(/^#+ /,"");a=tolower($0);gsub(/[^a-z0-9 -]/,"",a);gsub(/ /,"-",a);print a}' |
+                       grep -qx "$frag" ||
+                         { echo "    broken anchor: $f -> $l"; b=$((b+1)); } ;;
+             esac ;;
+    esac
   done
 done
 chk "markdown links resolve" "$b" "0"

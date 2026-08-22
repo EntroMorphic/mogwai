@@ -11,6 +11,7 @@ typedef struct {
     int dup;      /* drop identical code + identical label (provably free)   */
     int neg_k;    /* keep 1-in-K negatives; 0 or 1 = off (lossy)             */
     int cnn;      /* drop negatives that are nobody's nearest neighbour      */
+    int neg_top;  /* keep the N negatives with the highest NN-coverage count */
 } prune_opt;
 /* Compacts every parallel array in place and returns the surviving count.
  * idx may be NULL (mkblob does not build the binary rvec index).

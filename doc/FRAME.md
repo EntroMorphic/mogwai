@@ -51,7 +51,7 @@ construction. For an actuator, `fa` — fired on something that was not a comman
 - The on-device cost model is **quantitative and predictive**: 59.8 ns/byte +
   326 ns/vector, residuals within 1.8% across a 4× range of bytes per vector.
 - Board bring-up, ESP-AT backup and **verified restore**.
-- Optimisations are real and each preserved parity: 200.4 → 43.5 ms.
+- Optimisations are real and each preserved parity: 200.4 → 34.3 ms.
 
 ## What was established and then invalidated
 

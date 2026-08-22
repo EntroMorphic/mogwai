@@ -11,8 +11,10 @@ not a discipline anyone has to remember.
 
 | question | answer | where |
 |---|---|---|
-| What ships? | twin-ternary, d=256, 10500 vectors, 656 KB, threshold 126 | [Shipped threshold](#shipped-threshold-moved-136---126) |
-| How fast on device? | 43.5 ms 1-core / 26.7 ms 2-core, PARITY EXACT | [Popcount table](#popcount-table-killing-the-47) |
+| What ships? | twin-ternary, d=256, 10500 vectors, 656 KB, **threshold 136** | [126 was tried and reverted](#test-evaluation-3--result-the-dev-gain-did-not-transfer-126-reverted-to-136) |
+| How fast on device? | **34.3 ms**, shipped index, PARITY EXACT | [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) |
+| Why is the index in flash at all? | It fits total free heap but no single heap region | [same](#chunked-sram-residency-the-index-does-not-need-one-allocation) |
+| Can the sign plane be packed? | Bit-exact, 1.61x smaller, and **4.8x slower** — no | [Packing the sign plane](#packing-the-sign-plane--measured-and-it-loses) |
 | What predicts latency? | 59.8 ns/byte + 326 ns/vector; bytes are 92% | [Cost model](#what-the-failed-lever-bought-a-resolved-cost-model) |
 | Is 2-bit really better than 1-bit? | Yes, at **matched bytes**, on the whole curve | [Red-team of test eval](#red-team-of-test-evaluation-2) |
 | What is the held-out number? | 84.1% ±2.5 — **at threshold 136, not the shipped 126** | [Test eval #2 result](#test-evaluation-2--result) |
@@ -67,6 +69,9 @@ not a discipline anyone has to remember.
 
 **Where the time goes on device**
 - [Hardware-offload audit](#hardware-offload-audit-what-can-move-to-silicon-and-what-cannot) — every path ends at the same 24 MB/s flash wall
+- [Packing the sign plane — MEASURED, and it loses](#packing-the-sign-plane--measured-and-it-loses) — bit-exact and 1.61x smaller, but 4.8x slower; 6x over break-even
+- [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) — free heap is a **sum of regions**; one malloc can never fit. 43.9 → 34.3 ms at no accuracy cost
+- [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
 > Where that happens the earlier text is left standing with the correction
@@ -1391,5 +1396,162 @@ The transferable idea is **sparsity**. Measured:
   ~25 B/vector of provable waste, and the entropy bound at 22.6% density is
   ~32 B/vector — **a genuine 2x footprint reduction is theoretically available**.
 - The cost is the branchless popcount: any packed form needs bit extraction to
-  realign signs with mask positions. At 92% byte-bound, fewer bytes may still
-  win. **Untested — the best-supported remaining idea in this repo.**
+  realign signs with mask positions. At 92% byte-bound, fewer bytes might still
+  have won. **They do not** — measured at 4.8x slower for 1.61x fewer bytes,
+  against a break-even of 1.62x. See
+  [Packing the sign plane](#packing-the-sign-plane--measured-and-it-loses).
+
+## Packing the sign plane — MEASURED, and it loses
+
+The section above called this "the best-supported remaining idea in this repo."
+It was, and it is wrong. Measured on host, `-O2`, same 8-bit popcount table on
+both sides, three runs:
+
+| form | ns/vector | vs shipped |
+|---|---|---|
+| `t_score_pre` — branchless, **the shipped path** | **12.2–13.6** | 1.00x |
+| packed EXPAND — scatter signs back, then branchless | 108–116 | 8.0–9.2x |
+| packed RANK — rank-index the intersection only | 69–76 | 5.2–6.1x |
+| packed RANK+ — per-word prefix ranks precomputed, +8 B/vector | 63–70 | 4.8–5.6x |
+
+RANK+ exists so the answer cannot be blamed on a weak encoder: it removes the
+redundant popcounts exactly the way `t_score_pre` did. Still 4.8x.
+
+Bit-exactness is not the problem — it is perfect. Full cross product, no
+sampling: **512 dev queries x 10500 index vectors = 5,376,000 comparisons** per
+form, **0 dot mismatches, 0 score mismatches, 0 pack round-trip sign errors**
+over 607,676 active dims. The encoding is sound. It is the decoding that costs.
+
+The bytes are real too: 39.67 B/vector packed vs 64.0 — **1.613x**. The problem
+is that the byte saving is not worth what it costs to use:
+
+| | byte penalty at 64 B | bytes saved by packing | compute added | net |
+|---|---|---|---|---|
+| flash-mapped | 2551 ns/vec | −970 ns/vec | +5836 ns/vec | **+5185 — costs** |
+| SRAM-resident | 63 ns/vec | −24 ns/vec | +5836 ns/vec | **+5820 — costs** |
+
+Break-even needs a compute ratio of **1.62x** in flash and **1.015x** in SRAM.
+The cheapest measured form is 4.76x — **6.0x over budget** in the friendlier of
+the two cases. And the SRAM row is the important one now (see the next section):
+once the index is resident the scan is compute-bound, so trading cycles for
+bytes is not a close call, it is backwards.
+
+The mask intersection averages only **13.6 bits**, so RANK's loop runs ~14
+iterations and still loses. The cost is not popcount volume. It is that eight
+independent word operations were replaced by a data-dependent, serially
+dependent, branchy loop.
+
+The host is *generous* to the packed form — an M4 is out-of-order with a branch
+predictor; the LX6 is in-order, 5-stage, no predictor, no popcount instruction.
+The device ratio should be **worse** than 4.76x, so the direction of this
+conclusion is safe without re-measuring on hardware.
+
+Reproduce: `c/bin/compare --packbench`. The remaining byte lever is pruning, not
+encoding.
+
+## Chunked SRAM residency: the index does not need one allocation
+
+Flash-mapped scanning costs 4168 ns/vector against 1617 ns from internal SRAM —
+2.58x, because the cost is cache-MMU and SPI overhead, not flash bandwidth. So
+"lift the index into SRAM" has been the obvious win all along, and every attempt
+failed silently. The reason:
+
+    index needs                    258,720 B
+    total free heap                295,764 B   <- fits
+    largest contiguous free block  163,840 B   <- a single malloc cannot fit
+
+`esp_get_free_heap_size()` reports the **sum across heap regions**. The ESP32
+splits DRAM into several non-contiguous blocks, so one large `malloc` is bounded
+by the **largest block**, not the total. A flat lift can never succeed at this
+size. It does not fail loudly either — `malloc` returns NULL, the fallback
+engages, and the firmware runs at flash speed while reporting success.
+
+The index is scanned strictly in order, so it never needed to be one allocation.
+Lifting it as 8 KB chunks (128 vectors) uses nearly all the free heap, and a
+chunk that will not fit simply stays flash-mapped — same bytes, same scores,
+graceful degradation instead of all-or-nothing:
+
+| index | vectors in SRAM | per query, flat | per query, chunked | speedup |
+|---|---|---|---|---|
+| pruned, 245 KB | 3840 / 3920 (**97%**) | 16,520 µs | **6,618 µs** | 2.43x |
+| shipped, 656 KB | 3588 / 10500 (34%) | 43,900 µs | **34,300 µs** | 1.28x |
+
+**The shipped row costs nothing.** Same blob, same threshold, same 84.1% ±2.5
+held-out, same fa. 43.9 → 34.3 ms is free.
+
+Both rows land on the cost model, which is the real check here — predicted time
+is `T_flash x ((1−f) + f/2.58)` for resident fraction `f`:
+
+| | predicted | measured | error |
+|---|---|---|---|
+| f = 0.9796 | 6.61 ms | 6.62 ms | 0.2% |
+| f = 0.3417 | 34.71 ms | 34.30 ms | 1.2% |
+
+That is an independent confirmation of the 2.58x flash/SRAM figure, from a
+mechanism that did not exist when it was measured.
+
+**The check that matters is addressing, not copying.** `memcmp`-ing a chunk
+straight after `memcpy`-ing it re-reads what it just wrote and can never fail —
+it was the first thing written here and it was worthless. The real hazard in
+chunking is an off-by-one at a chunk boundary, which would silently score vector
+`i` against another vector's bytes. So boot walks **every** index through the
+exact nested accessor the scan uses and compares it to the flat flash-mapped
+original. Mutation control: shortening the copy by one vector fires **30
+mismatches, one per lifted chunk**. Clean tree reports 0 over all 10,500.
+
+Reserve is 40 KB; the board boots with 39,888 B free and the last chunk is
+correctly refused.
+
+## How few negatives does rejection need?
+
+The index is 89% negatives. Sweeping how many are needed, using graded
+condensation (`--prune-negtop=N`: the leave-one-out NN pass `--prune-cnn`
+already runs, but keeping the coverage count `cov[j]` instead of thresholding it
+at zero, then keeping the top N). Verified as a strict generalisation — byte-
+identical curve output at `N=9345` (unpruned) and `N=5529` (== `--prune-cnn`).
+
+**Negatives cost `fa` only. They never cost `missed`.** At the shipped threshold
+136, `missed` and `wa` are constant at **14 / 13 across the entire range**, from
+9345 negatives down to 1. Only false actuations move:
+
+| negatives | 9345 | 6250 | 4000 | 2845 | 2000 | 1000 | 250 | 1 |
+|---|---|---|---|---|---|---|---|---|
+| **fa @ th=136** | 1 | 2 | 4 | **6** | 8 | 11 | 17 | 24 |
+| missed @ 136 | 14 | 14 | 14 | 14 | 14 | 14 | 14 | 14 |
+| wa @ 136 | 13 | 13 | 13 | 13 | 13 | 13 | 13 | 13 |
+
+Negatives never sit in an IoT item's argmax at th ≥ 136. Every "missed at
+matched fa" figure elsewhere is a *consequence* of raising the threshold to buy
+the fa back — not a direct effect. Degradation is smooth and monotone, roughly
+**one extra false actuation per 350–400 negatives removed** in the mid range.
+
+So "where is the knee" has no single answer — **the knee is a function of the fa
+budget**, bisected to the exact negative:
+
+| fa budget | knee | negatives free below it | jump at the cliff |
+|---|---|---|---|
+| fa ≤ 1 | **8990 negatives / 634 KB** | 355 (3.8%, 22 KB) | missed 14 → 27 |
+| fa ≤ 3 | 8990 / 634 KB | 355 | missed 8 → 12 |
+| fa ≤ 8 | **6250 negatives / 463 KB** | 3095 (33%, 193 KB) | missed 5 → 8 |
+
+At fa ≤ 1 there is essentially **no free pruning**. `--prune-cnn`'s 5529 sits
+past every knee.
+
+**Nothing reaches 250 KB while holding fa.** The smallest index keeping `missed`
+within 2 of baseline at fa ≤ 1 is 634 KB — 2.5x over the SRAM budget. The honest
+statement of the trade at **2845 negatives / 4000 vectors / exactly 250 KB**,
+threshold 136:
+
+    baseline  fa=1  wa=13  missed=14      656 KB
+    250 KB    fa=6  wa=13  missed=14      250 KB
+
+The IoT side is bit-for-bit the baseline. The entire price of a 2.6x byte cut is
+**5 extra false actuations in 1335 dev non-commands (0.37% vs 0.07%)**. That is
+a rejection cost, not a missed-command cost — and it is the one property this
+project treats as non-negotiable, so it is not taken by default. It is also the
+same order as the ±2.5% dev standard error, i.e. at the edge of what this dev
+set resolves.
+
+Graded condensation dominates random `--prune-neg=K` at every matched byte count
+— e.g. at 218 KB, fa 6 vs 10 and missed@fa≤3 of 17 vs 30 — which extends the
+earlier condensation-beats-random result rather than overturning it.

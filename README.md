@@ -10,8 +10,8 @@ A natural-language interface for controlling ESP32-class hardware, built as an
 
 No floats. No learned parameters. No training step. The whole thing is a hashed
 character-n-gram encoder, a two-bit-plane vector index, and an integer
-similarity — and it runs the full 10,500-entry index on a stock ESP32-D0WD-V3
-in **43.5 ms**, bit-identical to the host.
+similarity - and it runs the full 10,500-entry index on a stock ESP32-D0WD-V3
+in **34.3 ms**, bit-identical to the host.
 
 The premise being tested is that **compressing an LLM onto an MCU is not
 necessary for this task**. Controlling nine IoT intents does not need 45M
@@ -102,12 +102,24 @@ the full operating curve is in [doc/EXPERIMENTS.md](doc/EXPERIMENTS.md).
     ESP32-D0WD-V3, 240 MHz, QIO flash @ 80 MHz, stock ESP-IDF v5.5
 
     index scan, 10500 vectors / 656 KB    43.5 ms  (1 core)   26.7 ms  (2 cores)
+    the same scan, index chunked to SRAM   34.3 ms  (1 core)
     parity vs host                        64/64 class and score, bit-exact
 
-Optimisation history: 200.4 → 102.1 (clocks) → 78.8 (precomputed activity
-counts) → 43.5 ms (popcount table). Every step held bit-exact parity. The
-second core is real but **core 1 belongs to WiFi on a production device**, so
-43.5 ms is the number that survives deployment.
+Optimisation history: 200.4 -> 102.1 (clocks) -> 78.8 (precomputed activity
+counts) -> 43.5 ms (popcount table) -> 34.3 ms (chunked SRAM residency). Every
+step held bit-exact parity. The second core is real but **core 1 belongs to WiFi
+on a production device**, so the single-core number is the one that survives
+deployment.
+
+The last step is worth a sentence, because it looked impossible for a while:
+free heap is **295 KB in total but only 164 KB in the largest region**, so the
+single `malloc` that would lift the index can never succeed - and it fails
+silently, falling back to flash while reporting success. The scan is sequential,
+so the index does not need one allocation. Lifting it in 8 KB chunks puts 34% of
+the shipped index in SRAM at **no accuracy cost whatsoever** - same blob, same
+threshold, same numbers. On a pruned 245 KB index it reaches 97% resident and
+6.6 ms. See
+[Chunked SRAM residency](doc/EXPERIMENTS.md#chunked-sram-residency-the-index-does-not-need-one-allocation).
 
 Cost model, fitted on three dimensions: **59.8 ns/byte + 326 ns/vector**. Bytes
 are 92% of the cost, so index size predicts latency directly.

@@ -13,7 +13,7 @@ static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static int T_n;
 static router_t R; static tvec *TI;
-static prune_opt PRUNE = {0,0,0};
+static prune_opt PRUNE = {0,0,0,0};
 static int THRESH = -1;   /* --threshold=N; required when pruning */
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
@@ -35,7 +35,7 @@ static void push(char**ta,char la[][RNAMELEN],int*n,const char*t,const char*l){
     ta[*n]=strdup(t); if(la) snprintf(la[*n],RNAMELEN,"%s",l); (*n)++; }
 
 int main(int argc,char**argv){
-    if(argc<6){fprintf(stderr,"usage: mkblob train val test nlu.csv out.bin [--prune-dup] [--prune-cnn] [--prune-neg=K]\n");return 1;}
+    if(argc<6){fprintf(stderr,"usage: mkblob train val test nlu.csv out.bin [--prune-dup] [--prune-cnn] [--prune-neg=K] [--prune-negtop=N]\n");return 1;}
     for(int i=6;i<argc;i++) if(!strncmp(argv[i],"--threshold=",12)) THRESH=atoi(argv[i]+12);
         else if(!prune_parse(argv[i],&PRUNE))
         { fprintf(stderr,"  unknown flag %s\n",argv[i]); return 1; }

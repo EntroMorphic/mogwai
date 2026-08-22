@@ -29,6 +29,12 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 | `mkblob.c` | emits `router.bin`. Refuses to guess a threshold when pruning |
 | `eval.c` | **verifies a built blob** before flashing: reference-query parity + index integrity. `c/bin/eval router.bin data/validation.json`. Cannot touch test by construction |
 
+## Device
+
+| file | role |
+|---|---|
+| `devtalk.c` | talk to the flashed board over serial from a script. `c/bin/devtalk /dev/cu.usbserial-0001 -r -w 6000 -s "turn the lights on" -w 1500` resets, drains the boot log, sends an utterance, prints the reply. Every device number in [EXPERIMENTS.md](EXPERIMENTS.md) is reproducible with it, and no Python is needed to do it |
+
 ## Diagnostics (kept, not on the shipping path)
 
 | file | role |

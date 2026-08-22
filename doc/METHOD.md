@@ -305,3 +305,43 @@ beside them.
 
 **Rule:** a check is not trusted until a mutation has made it fail, and a
 mutation harness is not trusted until its own restores have been verified.
+
+## 18. A free-memory total is not an allocatable size
+
+**Incident.** The index was supposed to move from flash into SRAM — the single
+largest win available on this part (2.58x). The code checked
+`esp_get_free_heap_size()`, saw 295,772 B against a 258,720 B need, called
+`malloc`, and ran at flash speed anyway. It reported success while doing
+nothing, because the fallback path is also the silent path: `malloc` returns
+NULL, the code keeps the flash pointer, and the only symptom is a latency that
+was never promised out loud.
+
+`esp_get_free_heap_size()` is the **sum across heap regions**. The ESP32 splits
+DRAM into several non-contiguous blocks — here 178 KB + 14 KB + 111 KB — so a
+single allocation is bounded by `heap_caps_get_largest_free_block()`, which was
+163,840 B. The number that was checked and the number that governs were never
+the same number.
+
+Two separate failures, and the second is the worse one:
+
+1. **The wrong quantity was measured.** A total is not a maximum.
+2. **The diagnostic that would have caught it was lost.** The first `printf`
+   added to investigate never appeared. It ran, but it sat in stdout's buffer
+   until `uart_param_config` reconfigured the console underneath it. Ten minutes
+   went into "why does this line not print" for code that was executing fine.
+
+**Rules.**
+- Ask for the quantity that governs the operation, not a quantity that sounds
+  like it. For allocation that is the largest block; for a scan it is bytes
+  touched; for a deadline it is worst case, not mean.
+- A fallback must **report which path it took**, in the banner, every boot.
+  `index 3588/10500 vectors in SRAM (34%)` is one line and it makes the failure
+  above impossible to have. "It worked" is not an observation.
+- On an embedded target, do not debug through `printf` before the console is
+  configured. Stash the value and print it where output is known to survive.
+
+**What it bought once fixed.** The scan is sequential, so the index never needed
+to be one allocation. Chunked at 8 KB it uses nearly all the free heap, and any
+chunk that will not fit stays flash-mapped and scores identically. 43.9 → 34.3
+ms on the shipped index at no accuracy cost. The constraint was never the memory
+— it was the question being asked about it.
