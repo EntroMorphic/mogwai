@@ -17,14 +17,16 @@ are specific to LX6 with no SIMD; S3/C6 would likely reorder them.
 
 ## P2 — worth doing, nothing blocked on it
 
-### P2-1 · The held-out cost of the 240 KB index is unmeasured
-The shipped index was pruned 656 -> 240 KB to fit SRAM entirely. On dev the cost
-is `fa` 1 -> 6 and nothing else. Whether that transfers is
-[pre-registered](EXPERIMENTS.md#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer)
-and **not yet run** - it needs an explicit decision to spend test budget.
+### P2-1 · CLOSED — the held-out cost of the 240 KB index is measured
+Test evaluation #6, budget entry 8, at `73a97fc`:
 
-**Closes when:** test evaluation #6 runs and its result is recorded beside the
-prediction, or the 240 KB index is reverted.
+    TEST baseline (656 KB)   recall 84.1% ±2.5   fa= 8   wa=15   missed=20
+    TEST SHIPPED  (240 KB)   recall 84.1% ±2.5   fa=12   wa=15   missed=20
+
+Four of four pre-registered predictions held and no falsifier fired. `missed` and
+`wa` are bit-identical to the unpruned index on held-out data, so the invariance
+the trade rested on is not dev-specific. The whole price is four extra false
+actuations in 2754 non-commands. The 240 KB index stands.
 
 ### P2-2 · `.git` is large, and will stay that way — WON'T FIX
 Python-era `.npy`/`.npz` blobs and seven copies of a 5.8 MB

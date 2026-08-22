@@ -93,7 +93,9 @@ byte-matched comparison stays honest.
 At identical bytes per vector, twin recalls **6.2 points more** and misses **10
 fewer** commands. Binary's operating curve is *identical* at d=256 and d=512 — it
 saturates, so the gain is structural, not capacity. Paired test on the held-out
-set: `fixed 25, broke 11,` **`p = 0.0288`**.
+set: `fixed 25, broke 11,` **`p = 0.0288`**. Re-run later at the configuration
+that actually ships — both variants pruned — it was `fixed 29, broke 12,`
+**`p = 0.0115`**.
 
 On held-out data at threshold 136 — 220 IoT commands, 2754 negatives:
 
@@ -111,21 +113,27 @@ fits — so 3840 vectors is the largest fully-resident index. It is
 |---|---|---|---|---|---|---|
 | unpruned, 656 KB | dev | 85.9% ±2.5 | **1** (0.07%) | 13 | 14 | 34.3 ms |
 | **SHIPPED, 240 KB** | dev | 85.9% ±2.5 | **6** (0.45%) | 13 | 14 | **6.3 ms** |
-| **SHIPPED, 240 KB** | **held-out** | [pre-registered, not yet run](doc/EXPERIMENTS.md#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) | | | | |
+| unpruned, 656 KB | **held-out** | 84.1% ±2.5 | **8** (0.29%) | 15 | 20 | 34.3 ms |
+| **SHIPPED, 240 KB** | **held-out** | **84.1% ±2.5** | **12** (0.44%) | **15** | **20** | **6.3 ms** |
 
 **The cost is false actuations, and nothing else.** Recall, `wa` and `missed` are
-identical to the unpruned index, because at threshold 136 a negative is never an
-IoT utterance's nearest neighbour — so pruning negatives changes only what gets
-*rejected*. The hardware confirms it: IoT scores are byte-identical to the
+*identical* to the unpruned index on **both** splits — on held-out data they are
+bit-for-bit 84.1% / 15 / 20 — because at threshold 136 a negative is never an IoT
+utterance's nearest neighbour, so pruning negatives changes only what gets
+*rejected*. The hardware confirms it too: IoT scores are byte-identical to the
 656 KB build.
 
-Six events against one is a real regression on the property this project weighs
-above recall, taken deliberately to buy a 2.7× smaller footprint and a 5.4×
-faster scan. It is also the same order as the ±2.5 dev standard error, so dev
-cannot resolve it finely, and **the held-out cost is not yet measured** — the
-prediction and its falsifiers are written down in advance.
+That invariance was [pre-registered with
+falsifiers](doc/EXPERIMENTS.md#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer)
+and then [tested on the held-out
+set](doc/EXPERIMENTS.md#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted).
+All four predictions held; none of the falsifiers fired. The price of a 2.7×
+smaller footprint and a 5.4× faster scan is **four extra false actuations in
+2754 held-out non-commands**, 0.44% against 0.29%.
 
-If your application cannot spend it, build the unpruned blob instead:
+It is still a regression on the property this project weighs above recall, and
+it was taken deliberately. If your application cannot spend it, build the
+unpruned blob instead:
 
     ./c/bin/mkblob <data> out.bin --prune-negtop=0 --threshold=136
 

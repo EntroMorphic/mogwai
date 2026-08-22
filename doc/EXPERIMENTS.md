@@ -17,7 +17,7 @@ not a discipline anyone has to remember.
 | Can the sign plane be packed? | Bit-exact, 1.61x smaller, and **4.8x slower** — no | [Packing the sign plane](#packing-the-sign-plane--measured-and-it-loses) |
 | What predicts latency? | 59.8 ns/byte + 326 ns/vector; bytes are 92% | [Cost model](#what-the-failed-lever-bought-a-resolved-cost-model) |
 | Is 2-bit really better than 1-bit? | Yes, at **matched bytes**, on the whole curve | [Red-team of test eval](#red-team-of-test-evaluation-2) |
-| What is the held-out number? | 84.1% ±2.5 — **at threshold 136, not the shipped 126** | [Test eval #2 result](#test-evaluation-2--result) |
+| What is the held-out number? | **84.1% ±2.5, fa 12/2754 (0.44%)** — the SHIPPED 240 KB index at threshold 136 | [Test eval #6 result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) |
 | Why isn't accuracy the headline? | It is recall; it cannot see false actuations | [Metric is blind](#the-accuracy-metric-is-blind-to-false-actuations--read-every-number-above-with-this-in-mind) |
 | How good could this ever get? | ~98%; some labels are wrong, some are unknowable | [Residual errors](#what-the-residual-errors-actually-are) |
 | What did we get wrong? | [Invalidated](#invalidated-kept-as-negative-results), and every `Red-team of…` section |
@@ -74,7 +74,7 @@ not a discipline anyone has to remember.
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
 - [The shipped index is pruned to 240 KB](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms; the price is `fa` 1 → 6 and nothing else
   - [With WiFi running it is 70% resident](#with-wifi-running-it-is-70-resident-not-100) — 9.3 ms; the 6.3 ms figure is a no-WiFi number
-- [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) — does the pruning cost transfer? **not yet run**
+- [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) · [result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) — the invariance transferred; **4 of 4 predictions hit**, fa 8 → 12
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
 > Where that happens the earlier text is left standing with the correction
@@ -1695,3 +1695,67 @@ This is the prediction eval #3 taught: a dev gain at a changed operating point
 did **not** transfer, and 126 was reverted. The difference here is that the dev
 evidence is a claimed *invariance* rather than a claimed gain, which is a
 stronger thing to test and an easier thing to break.
+
+## Test evaluation #6 — RESULT: the invariance transferred, and the cost is half what I predicted
+
+Run at `73a97fc`, clean tree, `make testset-ship` (`--test --ship`, threshold
+pinned at 136 — no auto-tuning, so no repeat of eval #5's deviation). Budget
+entry 8. 220 IoT, 2754 non-commands.
+
+    TEST baseline (656 KB, eval #3)   recall 84.1% ±2.5   fa= 8   wa=15   missed=20
+    TEST SHIPPED  (240 KB, this run)  recall 84.1% ±2.5   fa=12   wa=15   missed=20
+
+### Predictions scored: 4 of 4
+
+| # | predicted | actual | |
+|---|---|---|---|
+| 1 | `missed` ≤ 20, most likely exactly 20 | **20** | **hit, exactly** |
+| 2 | `wa` = 15, unchanged | **15** | **hit, exactly** |
+| 3 | `fa` = 18, range 12–26 | **12** | hit — at the very bottom of the interval |
+| 4 | recall 84.1%, unchanged | **84.1%** | **hit** |
+
+**The mechanism is real and it is not dev-specific.** `missed` and `wa` are
+*bit-identical* to the unpruned baseline on held-out data. That was the claim
+the whole trade rested on — that at threshold 136 a negative is never an IoT
+utterance's nearest neighbour, so removing negatives can only change what gets
+rejected — and it survived the strongest test available to this project. None of
+the falsifiers fired: `missed` did not rise, `wa` did not move, `fa` landed well
+inside 10–30 and nowhere near the 30 that would have meant reverting.
+
+**The 240 KB index stands.** 2.7x smaller, 5.4x faster, four extra false
+actuations in 2754 non-commands.
+
+### Where the prediction was wrong, and it matters
+
+Point estimate 18, actual 12. The interval saved me; the model did not.
+
+I predicted by transferring the *absolute rate increase*: dev fa went
+1/1335 → 6/1335, i.e. +0.375 pp, so 8 + 0.00375 × 2754 ≈ 18. The actual increase
+was +4/2754 = **+0.145 pp**, less than half. The additive-rate model is wrong.
+
+What did transfer is the **final rate**, almost exactly:
+
+    dev   shipped   6/1335 = 0.449%
+    test  shipped  12/2754 = 0.436%
+
+while the two baselines were nowhere near each other (0.075% dev vs 0.29% test).
+So the pruned index converges to ~0.44% false actuations on both splits, and the
+*unpruned* index is what differed between them. I have one observation of this
+and the counts are small enough that Poisson noise could account for a good deal
+of it — recorded as something to watch, not a finding.
+
+### The representation claim at the shipped operating point
+
+The paired comparison also re-ran, since `--ship` now prunes both variants:
+
+    binary (1 bit)      75.5% ±2.9   fa=10  wa=14  missed=40   120 KB  th=136
+    twin-ternary (2b)   84.1% ±2.5   fa=12  wa=15  missed=20   240 KB  th=136
+      paired, overall:  fixed 29   broke 12   p = 0.0115   SIGNIFICANT
+
+Stronger than eval #5's p=0.0288, and it holds at the configuration that
+actually ships rather than at an unpruned one nobody deploys. **Read with the
+caveat it deserves**: this is the fifth usable read of the same held-out set, so
+it is not an independent replication, and no multiple-comparison correction has
+been applied to that p-value. The honest summary is that the effect keeps
+appearing at the same magnitude, not that it has been independently confirmed
+five times.

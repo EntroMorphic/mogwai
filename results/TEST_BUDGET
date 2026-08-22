@@ -22,3 +22,4 @@ Kept, not removed — an audit log that gets tidied is not an audit log.
 Real test-set reads: evaluations 1 (VOID), 2, 3, 4 and 7. That is FIVE touches,
 of which four produced usable measurements. The counter reads 7 and is therefore
 an upper bound, not a count.
+evaluation 8: 2026-08-22T23:42:52Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test --ship
