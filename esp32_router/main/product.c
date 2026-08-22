@@ -1,0 +1,193 @@
+/* product.c — the router as an actual device.
+ *
+ * Utterance in over UART, GPIO out. This is the firmware that makes the result
+ * a thing rather than a benchmark: main.c proves the arithmetic matches the
+ * host, this proves the arithmetic drives a pin.
+ *
+ * The safety property measured throughout this project is enforced here in one
+ * place: **nothing actuates unless the router accepts.** Held-out, that is 8
+ * false actuations in 2754 non-commands (0.29%). A rejected utterance leaves
+ * every output exactly as it was.
+ *
+ * Pins (ESP32 devkit defaults; strapping pins avoided except GPIO2, which is
+ * the onboard LED on most boards and is only driven after boot):
+ *   GPIO2   light      LEDC PWM, so on/off/up/dim/change all drive one channel
+ *   GPIO4   wemo       plain level
+ *   GPIO16  cleaning   250 ms pulse
+ *   GPIO17  coffee     250 ms pulse
+ */
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "driver/ledc.h"
+#include "driver/uart.h"
+#include "esp_timer.h"
+#include "router.h"
+#include "ternary.h"
+
+#define PIN_LIGHT     GPIO_NUM_2
+#define PIN_WEMO      GPIO_NUM_4
+#define PIN_CLEANING  GPIO_NUM_16
+#define PIN_COFFEE    GPIO_NUM_17
+#define LEDC_CH       LEDC_CHANNEL_0
+#define LEDC_TIM      LEDC_TIMER_0
+#define DUTY_MAX      255           /* 8-bit resolution: integer, no float */
+#define DUTY_STEP     64            /* up/dim move a quarter of full scale */
+
+extern const uint8_t blob_start[] asm("_binary_router_bin_start");
+
+static router_t R;
+static const tvec *TI;
+static const uint16_t *ACT;
+static const uint8_t *REFP;
+static uint32_t NREF;
+
+/* ---- device state, integer only ------------------------------------------ */
+static int light_duty = 0;      /* 0..DUTY_MAX */
+static int wemo_on    = 0;
+
+static void light_set(int duty) {
+    if (duty < 0) duty = 0;
+    if (duty > DUTY_MAX) duty = DUTY_MAX;
+    light_duty = duty;
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CH, (uint32_t)duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CH);
+}
+static void pulse(gpio_num_t pin) {
+    gpio_set_level(pin, 1);
+    vTaskDelay(pdMS_TO_TICKS(250));
+    gpio_set_level(pin, 0);
+}
+
+static void io_init(void) {
+    gpio_config_t io = {
+        .pin_bit_mask = (1ULL << PIN_WEMO) | (1ULL << PIN_CLEANING) | (1ULL << PIN_COFFEE),
+        .mode = GPIO_MODE_OUTPUT, .pull_up_en = 0, .pull_down_en = 0, .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io);
+    gpio_set_level(PIN_WEMO, 0);
+    gpio_set_level(PIN_CLEANING, 0);
+    gpio_set_level(PIN_COFFEE, 0);
+
+    ledc_timer_config_t t = {
+        .speed_mode = LEDC_LOW_SPEED_MODE, .timer_num = LEDC_TIM,
+        .duty_resolution = LEDC_TIMER_8_BIT, .freq_hz = 5000, .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ledc_timer_config(&t);
+    ledc_channel_config_t c = {
+        .gpio_num = PIN_LIGHT, .speed_mode = LEDC_LOW_SPEED_MODE, .channel = LEDC_CH,
+        .timer_sel = LEDC_TIM, .duty = 0, .hpoint = 0,
+    };
+    ledc_channel_config(&c);
+    light_set(0);
+}
+
+/* ---- the actuation table ------------------------------------------------- */
+/* Returns a human-readable description of what was DONE, or NULL if the intent
+   is recognised but has no wired effect on this board. */
+static const char *actuate(const char *cls) {
+    static char msg[96];
+    if (!strcmp(cls, "iot_hue_lighton"))   { light_set(DUTY_MAX); snprintf(msg,sizeof msg,"light -> ON  (duty %d/%d)", light_duty, DUTY_MAX); return msg; }
+    if (!strcmp(cls, "iot_hue_lightoff"))  { light_set(0);        snprintf(msg,sizeof msg,"light -> OFF (duty %d/%d)", light_duty, DUTY_MAX); return msg; }
+    if (!strcmp(cls, "iot_hue_lightup"))   { light_set(light_duty + DUTY_STEP); snprintf(msg,sizeof msg,"light -> UP  (duty %d/%d)", light_duty, DUTY_MAX); return msg; }
+    if (!strcmp(cls, "iot_hue_lightdim"))  { light_set(light_duty - DUTY_STEP); snprintf(msg,sizeof msg,"light -> DIM (duty %d/%d)", light_duty, DUTY_MAX); return msg; }
+    if (!strcmp(cls, "iot_hue_lightchange")){ light_set(light_duty ? light_duty : DUTY_MAX/2);
+                                              snprintf(msg,sizeof msg,"light -> COLOUR change (no RGB wired; duty %d)", light_duty); return msg; }
+    if (!strcmp(cls, "iot_wemo_on"))       { wemo_on = 1; gpio_set_level(PIN_WEMO, 1); return "wemo -> ON  (GPIO4 high)"; }
+    if (!strcmp(cls, "iot_wemo_off"))      { wemo_on = 0; gpio_set_level(PIN_WEMO, 0); return "wemo -> OFF (GPIO4 low)"; }
+    if (!strcmp(cls, "iot_cleaning"))      { pulse(PIN_CLEANING); return "cleaner -> START (GPIO16 pulsed 250 ms)"; }
+    if (!strcmp(cls, "iot_coffee"))        { pulse(PIN_COFFEE);   return "coffee  -> BREW  (GPIO17 pulsed 250 ms)"; }
+    return NULL;
+}
+
+static int load(void) {
+    const uint8_t *p = blob_start;
+    uint32_t hdr[5]; memcpy(hdr, p, 20); p += 20;
+    if (hdr[0] != RMAGIC || hdr[1] != RD) return -1;
+    R.magic=hdr[0]; R.dim=hdr[1]; R.n_index=hdr[2]; R.n_class=hdr[3]; R.threshold=(int32_t)hdr[4];
+    memcpy(R.names, p, RNAMELEN * RMAXCLS); p += RNAMELEN * RMAXCLS;
+    memcpy(R.centre, p, sizeof(int32_t) * RD); p += sizeof(int32_t) * RD;
+    R.label = (uint8_t *)p; p += R.n_index;
+    ACT = (const uint16_t *)p; p += (size_t)R.n_index * 2;
+    TI = (const tvec *)p; p += (size_t)R.n_index * sizeof(tvec);
+    memcpy(&NREF, p, 4); p += 4; REFP = p;
+    return 0;
+}
+
+static int route(const char *txt, int *score_out) {
+    tvec q; t_encode(&R, txt, &q);
+    int aa = t_active(&q), best = -(1 << 28); uint32_t bi = 0;
+    for (uint32_t i = 0; i < R.n_index; i++) {
+        int s = t_score_pre(&q, &TI[i], aa, ACT[i]);
+        if (s > best) { best = s; bi = i; }
+    }
+    if (score_out) *score_out = best;
+    if (best <= R.threshold) return -1;              /* REJECT: below threshold */
+    int cls = r_apply_polarity(&R, R.label[bi], txt);
+    /* The nearest stored utterance may itself be a NON-command. That is a
+       rejection too, and a different one - the score cleared the bar but the
+       match is not a command. Missing this made the firmware print ACTUATED
+       for "what time does the train leave". Nothing moved, because the table
+       has no none case, but reporting an actuation for a non-command is the
+       one thing this system must never do. */
+    if (!strcmp(R.names[cls], "none")) return -2;
+    return cls;
+}
+
+void app_main(void) {
+    t_popcnt_init();
+    io_init();
+    if (load()) { printf("BLOB PARSE FAILED\n"); return; }
+
+    uart_config_t uc = { .baud_rate = 115200, .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE, .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE, .source_clk = UART_SCLK_DEFAULT };
+    uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0);
+    uart_param_config(UART_NUM_0, &uc);
+    /* The RX buffer holds boot-time line noise from the ROM loader and the
+       DTR/RTS reset pulse. Without this the prompt reprints once per stray
+       byte - several hundred times before the first real utterance. */
+    vTaskDelay(pdMS_TO_TICKS(200));
+    uart_flush_input(UART_NUM_0);
+
+    printf("\n===== mogwai =====\n");
+    printf("index %u vectors, threshold %d, %u classes\n",
+           (unsigned)R.n_index, (int)R.threshold, (unsigned)R.n_class);
+    printf("pins: light PWM=GPIO%d  wemo=GPIO%d  cleaning=GPIO%d  coffee=GPIO%d\n",
+           PIN_LIGHT, PIN_WEMO, PIN_CLEANING, PIN_COFFEE);
+    printf("type an utterance and press enter. non-commands actuate NOTHING.\n\n> ");
+    fflush(stdout);
+
+    char line[256]; int n = 0;
+    for (;;) {
+        uint8_t ch;
+        int got = uart_read_bytes(UART_NUM_0, &ch, 1, portMAX_DELAY);
+        if (got != 1) continue;
+        if (ch == '\r' || ch == '\n') {
+            if (!n) continue;              /* bare newline: no prompt, no noise */;
+            line[n] = 0;
+            int score; int64_t t0 = esp_timer_get_time();
+            int cls = route(line, &score);
+            int64_t us = esp_timer_get_time() - t0;
+            printf("\n  \"%s\"\n", line);
+            if (cls == -1) {
+                printf("  REJECTED     score %d <= threshold %d — no output changed\n",
+                       score, (int)R.threshold);
+            } else if (cls == -2) {
+                printf("  REJECTED     nearest match is not a command — no output changed\n");
+            } else {
+                const char *what = actuate(R.names[cls]);
+                printf("  %-12s score %d  (margin +%d)\n", R.names[cls], score, score - (int)R.threshold);
+                printf("  ACTUATED     %s\n", what ? what : "(intent recognised, no pin wired)");
+            }
+            printf("  %lld us\n\n> ", us);
+            fflush(stdout);
+            n = 0;
+        } else if (n < (int)sizeof(line) - 1 && ch >= 0x20) {
+            line[n++] = (char)ch;
+        }
+    }
+}

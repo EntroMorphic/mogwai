@@ -53,13 +53,23 @@ jobs:
       # proves a host-side change did not break the device build. sdkconfig is
       # not tracked; ESP-IDF regenerates it from sdkconfig.defaults, exactly as
       # a fresh clone would.
-      - name: Build
+      - name: Build validation firmware
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5
           target: esp32
           path: esp32_router
           command: idf.py -DRD=256 -DTPOPCNT=1 build
+
+      # The device firmware shares router.c/ternary.c by symlink, so a host
+      # change is a device change. Untested, it rots the way the host code did.
+      - name: Build PRODUCT firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5
+          target: esp32
+          path: esp32_router
+          command: idf.py -DPRODUCT=1 -DRD=256 -DTPOPCNT=1 build
 
       - name: Artefacts exist
         run: |

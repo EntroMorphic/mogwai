@@ -59,6 +59,9 @@ chk "blob verifier (parity + index integrity)" "$?" "0"
 c/bin/mkblob $D /tmp/_regress.bin >/dev/null 2>&1
 cmp -s /tmp/_regress.bin esp32_router/main/router.bin; BLOB_RC=$?
 rm -f /tmp/_regress.bin
+chk "product firmware source tracked" "$([ -f esp32_router/main/product.c ] && git ls-files esp32_router/main/product.c | wc -l | tr -d ' ')" "1"
+chk "product refuses to actuate the none class" "$(grep -c 'if (!strcmp(R.names\[cls\], "none")) return -2;' esp32_router/main/product.c)" "1"
+chk "product reports both rejection causes" "$(grep -cE 'cls == -1|cls == -2' esp32_router/main/product.c)" "2"
 chk "blob dim matches router.h RD" "$(od -An -tu4 -j4 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RD\s' c/src/router.h | grep -oE '[0-9]+')"
 chk "blob reproducible byte-identical" "$BLOB_RC" "0"
 
