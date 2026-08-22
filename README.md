@@ -143,8 +143,19 @@ The firmware lifts whatever fits and is correct either way.
 
 Recall is `correct_IoT / total_IoT`. It cannot see false actuations at all, so it
 is maximised by never rejecting anything. For a router that drives a relay, `fa`
-is the number that matters. Twin buys recall and pays a little precision; binary
-is the more conservative router. Which you want is a deployment choice and the
+is the number that matters, and for what ships it is **12 in 2754 held-out
+non-commands — 0.44%**.
+
+Held-out, at the shipped threshold, the two representations trade off like this:
+
+| | recall | fa | wa | missed | size |
+|---|---|---|---|---|---|
+| binary, 1 bit/dim | 75.5% ±2.9 | **10** | 14 | 40 | 120 KB |
+| **twin-ternary, 2 bit/dim** | **84.1% ±2.5** | 12 | 15 | **20** | 240 KB |
+
+Twin buys recall and pays a little precision: it misses **half** as many commands
+(20 against 40) for two more false actuations. Binary is the more conservative
+router and the cheaper one. Which you want is a deployment choice, and the
 threshold is the knob — the full operating curve is in
 [doc/EXPERIMENTS.md](doc/EXPERIMENTS.md).
 
