@@ -1201,3 +1201,35 @@ saturation evidence, **not** on dev significance, which it does not have.
 The selector is cut. `gate.c` (74 KB, bit-exact) and `cue.c` are retained as
 tracked negative results. Shipped config unchanged and blob byte-identical:
 **d=256, threshold 136, 84.1% ±2.5 held-out, fa 0.29%.** Test budget: 4.
+
+## Test evaluation #5 — PRE-REGISTERED: is the core claim significant?
+
+**Why spend a unit on this.** Twin-ternary beating binary is the central claim of
+this repository, it is now stated in a public README, and it has **never had a
+paired significance test on held-out data**. On dev it is `fixed 17, broke 7,
+p=0.0639` — not significant at n=192. It has been resting on the held-out *gap*
+(19 net items on 220) and on binary saturating at d=256 vs d=512. Both are
+sound; neither is the test.
+
+**Config:** both variants at `RSHIP_TH`=136 on the held-out split, same index,
+same run, paired per item. `mcnemar()` now reports overall correctness with an
+exact two-sided binomial p.
+
+**Predictions**
+
+1. **fixed 22–30, broke 4–10.** The net must be ~19 (84.1% vs 75.5% of 220 =
+   185 vs 166). Dev's broke was 7; assuming a similar rate gives fixed ≈ 26.
+2. **p < 0.01 — SIGNIFICANT.** A 19-item net on ~30 discordant pairs is far from
+   a coin flip. This is the prediction that matters.
+3. `fa` and `wa` for twin unchanged from eval #3 (8 and 15) — same config, same
+   split. A structural check that nothing drifted since.
+
+**Falsifier.** If **p ≥ 0.05**, the core claim is not statistically supported on
+held-out data either. In that case the README must say so in the same sentence
+as the claim, and the representation result is downgraded to "consistent with,
+but not established by, this corpus". No re-tuning, no second look.
+
+**Note.** Prediction 2 is the first prediction this session that I expect to
+land comfortably rather than marginally — the effect is 2.7x the size of the dev
+effect on a larger sample. Recording that expectation so overconfidence is
+visible if it is wrong.
