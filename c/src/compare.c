@@ -623,6 +623,7 @@ static void usage(void) {
 "  --xval                 2-fold cross-validation inside the index\n"
 "  --gatecheck            gate table must equal the prior bit-exactly\n"
 "  --gatesize             what a compact prior table would need\n"
+"  --density              index vector sparsity — the footprint lever\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"

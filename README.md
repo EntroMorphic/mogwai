@@ -98,7 +98,7 @@ are 92% of the cost, so index size predicts latency directly.
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (48 checks) — run after any structural change
+    make regress        # full host regression (54 checks) — run after any structural change
 
 Build and flash the device:
 
@@ -132,7 +132,7 @@ The layout and what parity does *not* cover: [doc/BLOB_FORMAT.md](doc/BLOB_FORMA
     esp32_router/      VALIDATION firmware (see its README); sources are SYMLINKS into c/src
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 7 cycles
-    scripts/           fetch.sh (curl only), regress.sh (48 checks)
+    scripts/           fetch.sh (curl only), regress.sh (54 checks)
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
     board_backup/      how to restore the board's original ESP-AT firmware
@@ -154,7 +154,7 @@ get something much worse — which is the whole reason for the name.
    the autopsies of both are kept — see [doc/ARCHIVE.md](doc/ARCHIVE.md).
 
 Every run is logged and stamped with the git SHA and clean/dirty tree state.
-Run `make regress` after any structural change: 48 checks, 11 seconds.
+Run `make regress` after any structural change: 54 checks, 11 seconds.
 
 ## License
 

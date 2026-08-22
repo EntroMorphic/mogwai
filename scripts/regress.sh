@@ -113,6 +113,16 @@ chk "EXPERIMENTS anchors resolve" "$(comm -23 \
   <(grep '^#\{2,3\} ' doc/EXPERIMENTS.md | awk '{sub(/^#+ /,"");a=tolower($0);gsub(/[^a-z0-9 -]/,"",a);gsub(/ /,"-",a);print a}' | sort -u) \
   | wc -l | tr -d ' ')" "0"
 
+echo "=== DOCS MATCH REALITY ==="
+# METHOD.md #14 generalised: anything a doc asserts ABOUT THE REPO should be
+# verified by the repo. These all went stale silently at least once.
+chk "EXPERIMENTS contents covers every section" "$(comm -13 <(grep -oE '\(#[a-z0-9-]+\)' doc/EXPERIMENTS.md | tr -d '()#' | sort -u) <(grep '^## ' doc/EXPERIMENTS.md | sed 's/^## //' | awk '{a=tolower($0);gsub(/[^a-z0-9 -]/,"",a);gsub(/ /,"-",a);print a}' | sort -u) | grep -vcE '^(contents|look-up-a-fact)$')" "0"
+chk "EXPERIMENTS contents has no duplicates" "$(sed -n '/^## Contents/,/^> Sections are chron/p' doc/EXPERIMENTS.md | grep -oE '\(#[a-z0-9-]+\)' | sort | uniq -d | wc -l | tr -d ' ')" "0"
+chk "every c/src tool is in TOOLS.md" "$(for f in c/src/*.c; do grep -q "$(basename $f)" doc/TOOLS.md || echo x; done | wc -l | tr -d ' ')" "0"
+chk "every archive/ subdir is in ARCHIVE.md" "$(for d in $(ls archive/ 2>/dev/null | grep -v README); do grep -q "$d" doc/ARCHIVE.md || echo x; done | wc -l | tr -d ' ')" "0"
+chk "every boot suite is in esp32_router/README" "$(for s in $(sed -n '/^void app_main/,/^}/p' esp32_router/main/main.c | grep -oE '^    [a-z_]+\(' | tr -d '(' | grep -vE 'printf|t_popcnt_init'); do grep -q "$s" esp32_router/README.md || echo x; done | wc -l | tr -d ' ')" "0"
+chk "journal README cycle count is current" "$(grep -oE '[0-9]+ cycles' journal/README.md | grep -oE '[0-9]+')" "$(ls journal/*.md | grep -v README | sed -E 's/.*\/([a-z0-9_]+)_(raw|nodes|reflect|synth)\.md/\1/' | sort -u | wc -l | tr -d ' ')"
+
 echo "=== ARCHIVE (gitignored, must remain intact on disk) ==="
 chk "archive untracked"        "$(git ls-files archive | wc -l | tr -d ' ')" "0"
 chk "tracked provenance bundle checksum" "$(shasum -a 256 -c provenance/needle-upstream.bundle.sha256 2>/dev/null | grep -c OK)" "1"
