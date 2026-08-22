@@ -18,27 +18,6 @@ parameters; it needs a good representation and an honest threshold.
 > the task framing is inherited from a public dataset rather than specified by
 > anyone. Read [FRAME.md](doc/FRAME.md) before quoting any number from this repo.
 
-## What is unusual here
-
-Most small-model repositories publish what worked. This one publishes the
-operating curve, the size-matched control, the paired significance test, and
-every architecture that was built, measured and cut — including one that
-dominated the dev curve and still failed on held-out data.
-
-- The first held-out evaluation is marked **VOID** and the budget stayed spent,
-  because the config it measured had been chosen on a leaked split.
-- The shipped threshold was moved to 126 on dev evidence and then **reverted by
-  its own pre-registered falsifier** when held-out data disagreed.
-- The headline representation claim carries its p-value **in the README**
-  (p=0.0931 on dev, not significant) rather than in a footnote.
-- `scripts/regress.sh` is mutation-tested: every check has been verified to fail
-  when the thing it guards is deliberately broken. Two rounds of that found four
-  checks that could never fail.
-
-[EXPERIMENTS.md](doc/EXPERIMENTS.md) is a lab notebook, not a highlight reel.
-[doc/METHOD.md](doc/METHOD.md) is fifteen guardrails, each named for the
-incident that produced it.
-
 ## Provenance
 
 This began as an audit of [anjaustin/needle](https://github.com/anjaustin/needle)
@@ -53,18 +32,32 @@ locally with its full history; see [doc/ARCHIVE.md](doc/ARCHIVE.md).
     make repl                                    # interactively
 
 Two host dependencies: a C compiler and `curl`. Build is 0.8 s, a full
-evaluation 0.7 s, the entire regression suite 11 s.
-Full path in [QUICKSTART.md](doc/QUICKSTART.md).
+evaluation 0.7 s, the entire 48-check regression suite 11 s.
+Full path in [doc/QUICKSTART.md](doc/QUICKSTART.md).
+
+```
+$ make route TEXT="turn off the kitchen light"
+
+  "turn off the kitchen light"
+    decision               iot_hue_lightoff
+    score                  220   (threshold 136, margin +84)
+    polarity               negative cue present, winner already agrees
+    encoding               42 of 256 dims carry evidence
+    nearest stored utterances:
+       220  iot_hue_lightoff   "turn off the kitchen lights"
+       199  iot_hue_lightoff   "turn off the light in the kitchen"
+```
 
 ## Result
 
-**Held-out test set, at the shipped threshold** — 220 IoT commands, 2754 negatives:
+**Held-out test set** — 220 IoT commands, 2754 negatives, threshold 136:
 
 | | recall | unbidden (fa) | wrong action (wa) | missed |
 |---|---|---|---|---|
-| **twin-ternary, d=256, th=136** | **84.1% ±2.5** | **8** (0.29%) | **15** | **20** |
+| **twin-ternary, d=256** | **84.1% ±2.5** | **8** (0.29%) | **15** | **20** |
 
-Dev split (192 IoT, 1335 negatives), same threshold, with the size-matched control:
+Two bits per dimension beats one, and the comparison is **size-matched** — binary
+at d=512 spends the same 64 bytes per vector:
 
 | | recall | fa | wa | missed | size |
 |---|---|---|---|---|---|
@@ -72,47 +65,17 @@ Dev split (192 IoT, 1335 negatives), same threshold, with the size-matched contr
 | binary, 1 bit/dim, d=512 | 79.7% ±2.9 | 0 | 15 | 24 | 656 KB |
 | **twin-ternary, 2 bit/dim, d=256** | **85.9% ±2.5** | **1** | **13** | **14** | **656 KB** |
 
-The d=512 binary row is the **size-matched** control — the honest comparison,
-since twin-ternary spends two bits per dimension. At identical bytes per vector
-twin recalls 6.2 points more and misses 10 fewer commands, and binary's operating
-curve is *identical* at d=256 and d=512: it saturates, so the gain is structural
-rather than capacity.
+At identical bytes per vector, twin recalls **6.2 points more** and misses **10
+fewer** commands. Binary's operating curve is *identical* at d=256 and d=512 — it
+saturates, so the gain is structural, not capacity. Paired test on held-out data:
+`fixed 25, broke 11, `**`p = 0.0288`**.
 
-**But binary is the more conservative router** and the table is not a clean
-sweep: at matched bytes it fires on **zero** non-commands where twin fires on
-one. Twin buys recall and pays in unbidden actuations. Which side you want is a
-deployment decision — see [EXPERIMENTS.md](doc/EXPERIMENTS.md).
-
-**Where the claim rests, stated precisely.** A paired test on the held-out split:
-`fixed 25, broke 11, ` **`p = 0.0288`** — significant. Plus a size-matched control
-(binary d=512, same 64 B/vector) and binary saturating: its operating curve is
-identical at d=256 and d=512.
-
-It is **not** significant on dev (`fixed 17, broke 7, p=0.0639`), and that is
-worth stating rather than hiding — the effect is real but not large, and sits
-close to the resolution limit of this data.
-
-### Why 136 and not 126
-
-126 was chosen on dev, where it looked clearly better (85.9 → 88.0% recall,
-missed 14 → 8). A held-out measurement then showed the gain did not transfer:
-**+3 commands recognised for +5 unbidden actuations**, and the recall comparison
-is paired and one-directional, so b=3 / c=0, **exact p=0.25 — not significant**.
-An unbidden rate that nearly doubles (0.29% → 0.47%) to buy a recall gain
-indistinguishable from zero is the wrong trade for hardware that actuates.
-Reverted per a falsifier pre-registered before the run.
-
-### Read the error columns, not the recall column
-
-`recall` is `correct_IoT / total_IoT`. **It cannot see false actuations at all** —
-firing on a non-command costs it nothing, so it is maximised by never rejecting.
-For a system that actuates physical devices, `fa` (fired on something that was
-not a command) is the number that matters. On the held-out set it is **8 in 2754
-negatives, 0.29%**.
-
-That distinction is not academic here. Moving the threshold from 136 to 126 gains
-2.1 points of dev recall and nearly doubles the unbidden rate — and the recall
-gain does not survive a held-out check. Recall alone would have endorsed it.
+**Read `fa`, not recall.** Recall is `correct_IoT / total_IoT` — it cannot see
+false actuations at all, so it is maximised by never rejecting. For anything that
+drives a relay, `fa` is the number that matters: **8 in 2754 negatives, 0.29%**.
+Twin buys recall and pays a little precision; binary is the more conservative
+router. Which you want is a deployment choice, and the threshold is the knob —
+the full operating curve is in [doc/EXPERIMENTS.md](doc/EXPERIMENTS.md).
 
 ## On hardware
 
@@ -191,8 +154,7 @@ get something much worse — which is the whole reason for the name.
    the autopsies of both are kept — see [doc/ARCHIVE.md](doc/ARCHIVE.md).
 
 Every run is logged and stamped with the git SHA and clean/dirty tree state.
-Run `make regress` after any structural change: 48 checks, including that the
-negative results still reproduce.
+Run `make regress` after any structural change: 48 checks, 11 seconds.
 
 ## License
 
