@@ -34,6 +34,10 @@ static int SELDUMP = 0;   /* --seldump: per-item signals a selector could use */
 static int XVAL = 0;      /* --xval: 2-fold CV inside the index */
 static int GATESZ = 0;    /* --gatesize: what a compact prior table needs */
 static int DENSITY = 0;   /* --density: how sparse are the index vectors? */
+static int FOOTPRINT = 0; /* --footprint: bytes, and what each encoding would cost */
+static int LMMRAW = 0;    /* --lmm-raw: footprint observations */
+static int LMMRAW3 = 0;   /* --lmm-raw3: what rejection needs */
+static int ASYM = 0;      /* --asym: exact positives + statistical negatives */
 static int GATECHK = 0;   /* --gatecheck: gate must equal prior bit-exactly */
 static gate_t GATE; static int USEGATE = 0;  /* --gatesel: selector reads the compact table */
 static int SELSIG = 0;    /* --selsig: paired significance of the dev selector gain */
@@ -651,6 +655,182 @@ static void density(void) {
     printf("    branchless. The question is whether fewer BYTES beats more CYCLES,\n");
     printf("    and at 92%% byte-bound the answer may be yes.\n");
 }
+/* --footprint: what the solution actually costs in bytes, and what each
+ * encoding would cost. Speed is a side-effect here; the metric is size. */
+static void footprint(void) {
+    long act_tot = 0, pairs = 0;
+    int mn = 1 << 30, mx = 0;
+    for (int i = 0; i < U_n; i++) {
+        int a = t_active(&TI[i]);
+        act_tot += a; if (a < mn) mn = a; if (a > mx) mx = a;
+    }
+    double avg = (double)act_tot / U_n;
+    double p = avg / RD;
+    double H = -(p * log2(p) + (1 - p) * log2(1 - p));      /* bits per dim, mask */
+    double mask_bits = RD * H;                              /* entropy of the mask plane */
+    double sign_bits = avg;                                 /* one bit per ACTIVE dim only */
+    (void)pairs;
+
+    printf("\n  === footprint, measured ===\n\n");
+    printf("  index                    %6.1f KB   %d vectors x %zu B\n",
+           U_n * (double)sizeof(tvec) / 1024, U_n, sizeof(tvec));
+    printf("  popcount table              0.25 KB   DRAM\n");
+    printf("  firmware code            ~%4.0f KB   flash\n", 78.0);
+    printf("  ------------------------------------------------\n");
+    printf("  total on a 4 MB part     %6.1f KB   (%.1f%% of flash)\n\n",
+           U_n * (double)sizeof(tvec) / 1024 + 78.25,
+           100 * (U_n * (double)sizeof(tvec) + 80128) / (4 * 1048576.0));
+
+    printf("  per vector, where the %zu bytes go:\n", sizeof(tvec));
+    printf("    mask plane   %2d B   %d bits, %.1f set on average (%.1f%% density)\n",
+           RD / 8, RD, avg, 100 * p);
+    printf("    sign plane   %2d B   %d bits, but only %.1f carry meaning\n",
+           RD / 8, RD, avg);
+    printf("                        -> %.1f B of the sign plane is provable waste\n\n",
+           (RD - avg) / 8);
+
+    printf("  encodings, bytes per vector:\n");
+    printf("    current bit-planes          %2zu.0 B   two %d-bit planes\n", sizeof(tvec), RD);
+    printf("    signs packed to active dims %4.1f B   mask %d B + %.0f sign bits\n",
+           RD / 8 + avg / 8, RD / 8, avg);
+    printf("    mask entropy-coded + signs  %4.1f B   %.1f mask bits + %.0f sign bits\n",
+           (mask_bits + sign_bits) / 8, mask_bits, sign_bits);
+    printf("    sparse u8 indices + signs   %4.1f B   %.0f x (8-bit idx + 1 sign bit)\n",
+           avg * 9 / 8, avg);
+    printf("\n  index size under each, and %% of the 4 MB part:\n");
+    double e[4] = { (double)sizeof(tvec), RD / 8 + avg / 8, (mask_bits + sign_bits) / 8, avg * 9 / 8 };
+    const char *nm[4] = { "bit-planes (now)", "packed signs", "entropy-coded", "sparse indices" };
+    for (int i = 0; i < 4; i++)
+        printf("    %-26s %6.1f KB   %4.1f%%   %.2fx\n", nm[i], U_n * e[i] / 1024,
+               100 * U_n * e[i] / (4 * 1048576.0), e[0] / e[i]);
+}
+/* RAW for the footprint LMM cycle. Three questions, measured:
+ *   1. Is the SOURCE TEXT smaller than the vector it produces?
+ *   2. Do index vectors resemble each other enough to delta-encode?
+ *   3. What is the irreducible content, if the mask is derivable from text?  */
+static void lmm_raw(void) {
+    long chars = 0; int mx = 0;
+    for (int i = 0; i < U_n; i++) { int l = strlen(U_t[i]); chars += l; if (l > mx) mx = l; }
+    double avgc = (double)chars / U_n;
+    printf("\n  === RAW 1: text vs vector ===\n");
+    printf("    stored vector            %2zu B\n", sizeof(tvec));
+    printf("    source text        %8.1f B average, %d max\n", avgc, mx);
+    printf("    text is %.2fx %s than the vector it generates\n",
+           avgc < sizeof(tvec) ? sizeof(tvec)/avgc : avgc/sizeof(tvec),
+           avgc < sizeof(tvec) ? "SMALLER" : "larger");
+    printf("    whole corpus as text     %6.1f KB  vs  %6.1f KB as vectors\n",
+           chars / 1024.0, U_n * (double)sizeof(tvec) / 1024);
+
+    /* 2. how alike are neighbours? delta-encode each vector against its nearest
+          predecessor and count the set bits that survive. */
+    printf("\n  === RAW 2: are vectors compressible against each other? ===\n");
+    long raw_bits = 0, delta_bits = 0; int n = U_n < 3000 ? U_n : 3000;
+    for (int i = 1; i < n; i++) {
+        int best = -(1<<28), bj = 0;
+        int aa = t_active(&TI[i]);
+        for (int j = 0; j < i && j < 400; j++) {          /* nearest among recent */
+            int s = t_score(&TI[i], &TI[j], aa);
+            if (s > best) { best = s; bj = j; }
+        }
+        for (int w = 0; w < RWORDS; w++) {
+            raw_bits   += __builtin_popcount(TI[i].m[w]) + __builtin_popcount(TI[i].s[w]);
+            delta_bits += __builtin_popcount(TI[i].m[w] ^ TI[bj].m[w])
+                        + __builtin_popcount(TI[i].s[w] ^ TI[bj].s[w]);
+        }
+    }
+    printf("    set bits, stored as-is        %8ld over %d vectors\n", raw_bits, n-1);
+    printf("    set bits after XOR vs nearest %8ld  (%.1f%% of raw)\n",
+           delta_bits, 100.0 * delta_bits / raw_bits);
+    printf("    -> delta encoding %s\n",
+           delta_bits < raw_bits ? "REDUCES the population count" : "does NOT help");
+}
+/* RAW 3: the index costs 656 KB. The 74 KB gate already classifies IoT better
+ * than the router (89.6% vs 85.9%) but cannot REJECT. So what does rejection
+ * actually need? If some cheap signal separates commands from non-commands,
+ * the index's only irreplaceable job disappears and the footprint collapses.
+ *
+ * Candidates, all free once the gate exists: prior margin, informative-word
+ * count, utterance length. */
+static void lmm_raw3(void) {
+    printf("\n  === RAW 3: what does REJECTION need? ===\n");
+    printf("    %-22s %-18s %-18s %s\n", "signal", "commands (mean)", "non-commands", "separation");
+    long n_iot=0, n_neg=0;
+    double mg_iot=0, mg_neg=0, wl_iot=0, wl_neg=0, sc_iot=0, sc_neg=0;
+    for (int i = 0; i < V_n; i++) {
+        int gn = !strcmp(V_l[i], "none");
+        int mg; pr_vote(&PR, V_t[i], &mg);
+        int w = 1; for (const char *p = V_t[i]; *p; p++) if (*p==' ') w++;
+        hit h = score_ter(V_t[i]);
+        if (gn) { n_neg++; mg_neg += mg; wl_neg += w; sc_neg += h.score; }
+        else    { n_iot++; mg_iot += mg; wl_iot += w; sc_iot += h.score; }
+    }
+    printf("    %-22s %-18.1f %-18.1f %.2fx\n", "prior margin", mg_iot/n_iot, mg_neg/n_neg, (mg_iot/n_iot)/(mg_neg/n_neg));
+    printf("    %-22s %-18.1f %-18.1f %.2fx\n", "words", wl_iot/n_iot, wl_neg/n_neg, (wl_iot/n_iot)/(wl_neg/n_neg));
+    printf("    %-22s %-18.1f %-18.1f %.2fx\n", "router score (656 KB)", sc_iot/n_iot, sc_neg/n_neg, (sc_iot/n_iot)/(sc_neg/n_neg));
+
+    /* how well can prior margin ALONE reject, swept as a threshold? */
+    printf("\n    prior margin as a rejector, on its own:\n");
+    printf("    %-8s %-10s %-10s %s\n", "margin>=", "fa", "missed", "iot recall");
+    for (int t = 0; t <= 40; t += 8) {
+        int fa=0, ms=0, ok=0, iot=0;
+        for (int i = 0; i < V_n; i++) {
+            int gn = !strcmp(V_l[i], "none");
+            int mg; int pv = pr_vote(&PR, V_t[i], &mg);
+            int act = (pv >= 0 && mg >= t && strcmp(R.names[pv],"none"));
+            if (!gn) { iot++; if (act && !strcmp(R.names[pv], V_l[i])) ok++; else if (!act) ms++; }
+            else if (act) fa++;
+        }
+        printf("    %-8d %-10d %-10d %.1f%%\n", t, fa, ms, 100.0*ok/iot);
+    }
+    printf("\n    router at th=136 for comparison:      fa=1   missed=14   85.9%%\n");
+}
+/* REFLECT: the index is 89% negatives, and they exist only so the router can
+ * say "no". Positives get exact nearest-neighbour; negatives get 9345 stored
+ * examples of what a non-command looks like.
+ *
+ * ASYMMETRIC IDEA: keep exact NN for the 1155 IoT vectors (74 KB) and replace
+ * the 9345 negatives with a statistical model of none-ness — the word prior's
+ * "none" evidence, which costs nothing extra because the gate already exists.
+ *
+ * Reject if the prior's none-score beats its best IoT score by NVETO. */
+static void asym(void) {
+    int nonec = -1;
+    for (uint32_t c = 0; c < R.n_class; c++) if (!strcmp(R.names[c], "none")) nonec = (int)c;
+    printf("\n  === asymmetric: exact positives + statistical negatives ===\n");
+    printf("    IoT vectors in index : %d\n", (int)(U_n - 0));
+    int iotn = 0; for (int i = 0; i < U_n; i++) if ((int)R.label[i] != nonec) iotn++;
+    printf("    positives %d (%.0f KB)   negatives %d (%.0f KB)\n",
+           iotn, iotn*64/1024.0, U_n-iotn, (U_n-iotn)*64/1024.0);
+    printf("\n    threshold sweep on POSITIVES ONLY (72 KB), veto off then on:\n");
+    printf("    %-8s %-10s %-8s %-8s %-8s %s\n", "th", "none-veto", "fa", "wa", "missed", "recall");
+    for (int vi = 0; vi < 2; vi++)
+    for (int th = 150; th <= 210; th += 15) {
+        int nv = vi ? 0 : 9999;
+        int fa=0, wa=0, ms=0, ok=0, iot=0;
+        for (int i = 0; i < V_n; i++) {
+            int gn = !strcmp(V_l[i], "none");
+            /* stage 1: nearest neighbour over POSITIVES ONLY */
+            tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+            int best = -(1<<28); uint32_t bi = 0;
+            for (int k = 0; k < U_n; k++) {
+                if ((int)R.label[k] == nonec) continue;
+                int s = t_score(&q, &TI[k], aa);
+                if (s > best) { best = s; bi = k; }
+            }
+            /* stage 2: statistical none-veto from the word channel */
+            int mg; int pv = pr_vote(&PR, V_t[i], &mg);
+            int none_wins = (pv >= 0 && pv == nonec) ? mg : -mg;
+            int act = (best > th) && (none_wins < nv);
+            const char *pred = act ? R.names[r_apply_polarity(&R, R.label[bi], V_t[i])] : "none";
+            if (!gn) { iot++; if (!strcmp(pred, V_l[i])) ok++; }
+            if (!strcmp(pred, V_l[i])) continue;
+            if (gn) fa++; else if (!strcmp(pred,"none")) ms++; else wa++;
+        }
+        printf("    %-8d %-10s %-8d %-8d %-8d %.1f%%\n", th, vi?"on":"off", fa, wa, ms, 100.0*ok/iot);
+    }
+    printf("\n    full 656 KB index for comparison:  fa=1  wa=13  missed=14  85.9%%\n");
+    printf("    iot-only + threshold (measured):   fa=11 ...  29 missed at wrong<=16\n");
+}
 static void report(const char *name, hit (*f)(const char *), int lo, int hi, double kb) {
     hit *hv = precompute(f, V_t, V_n);
     int th = (FIXTH != (1<<30)) ? FIXTH : tune(hv, V_l, V_n, lo, hi);
@@ -700,6 +880,10 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--xval")) XVAL=1;
         else if (!strcmp(a,"--gatesize")) GATESZ=1;
         else if (!strcmp(a,"--density")) DENSITY=1;
+        else if (!strcmp(a,"--footprint")) FOOTPRINT=1;
+        else if (!strcmp(a,"--lmm-raw")) LMMRAW=1;
+        else if (!strcmp(a,"--lmm-raw3")) LMMRAW3=1;
+        else if (!strcmp(a,"--asym")) ASYM=1;
         else if (!strcmp(a,"--gatecheck")) GATECHK=1;
         else if (!strcmp(a,"--gatesel")) { USEGATE=1; PRIORCLS=1; }
         else if (!strcmp(a,"--selsig")) { SELSIG=1; SELMARG=8; }
@@ -827,6 +1011,10 @@ int main(int argc,char**argv){
     if(XVAL){ xval(); return 0; }
     if(GATESZ){ gatesize(); return 0; }
     if(DENSITY){ density(); return 0; }
+    if(FOOTPRINT){ footprint(); return 0; }
+    if(LMMRAW){ lmm_raw(); return 0; }
+    if(LMMRAW3){ lmm_raw3(); return 0; }
+    if(ASYM){ asym(); return 0; }
     if(GATECHK){ gatecheck(); return 0; }
     if(SELSIG){ selsig(); return 0; }
     report("binary (1 bit)",   score_bin,-RD,RD,          U_n*sizeof(rvec)/1024.0);
