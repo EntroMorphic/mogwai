@@ -135,3 +135,50 @@ int r_route(const router_t *r, const char *text, int *score_out) {
     if (r_family(r, sc) != r_family(r, cls)) return -1;   /* signature veto */
     return cls;
 }
+
+/* ---- v2 blob parse, shared by eval (host) and the firmware ---------------
+ * One implementation, so the layout cannot drift between the thing we measure
+ * and the thing we flash. Every section is bounds-checked against `have`
+ * before it is pointed at. */
+int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have) {
+    if (have < 20) return -1;
+    uint32_t h[5]; memcpy(h, base, 20);
+    if (h[0] != RMAGIC2 || h[1] != (uint32_t)RD) return -1;
+    uint32_t n = h[2];
+    if (n == 0) return -2;
+
+    size_t off  = 20 + (size_t)RMAXCLS * RNAMELEN + (size_t)RD * 4;
+    size_t need = off + (size_t)n * RMASKB + ((size_t)n + 1) * 2
+                      + (size_t)n * 2 + n + 4;
+    if (need > have) return -2;
+
+    memset(r, 0, sizeof *r);
+    r->magic = h[0]; r->dim = h[1]; r->n_index = n;
+    r->n_class = h[3]; r->threshold = (int32_t)h[4];
+    memcpy(r->names,  base + 20, (size_t)RMAXCLS * RNAMELEN);
+    memcpy(r->centre, base + 20 + (size_t)RMAXCLS * RNAMELEN, (size_t)RD * 4);
+
+    const uint8_t *p = base + off;
+    ix->mask  = (const uint32_t *)(const void *)p; p += (size_t)n * RMASKB;
+    ix->eoff  = (const uint16_t *)(const void *)p; p += ((size_t)n + 1) * 2;
+    ix->act   = (const uint16_t *)(const void *)p; p += (size_t)n * 2;
+    ix->label = p;                                 p += n;
+    r->label  = (uint8_t *)ix->label;
+    ix->nex   = ix->eoff[n];
+    ix->epos  = p;                                 p += ix->nex;
+    if ((size_t)(p - base) + 4 > have) return -2;
+    memcpy(&ix->nref, p, 4);                       p += 4;
+    ix->refp  = p;
+
+    /* Ascending offsets and in-range positions. Both are O(n) at boot and both
+     * turn a corrupt blob into a clean refusal instead of an out-of-bounds
+     * read inside the scoring loop. At RD=256 a uint8 position cannot exceed
+     * the mask, but a smaller RD build makes that reachable. */
+    for (uint32_t i = 0; i < n; i++) if (ix->eoff[i] > ix->eoff[i + 1]) return -3;
+#if RD < 256
+    /* Only reachable below RD=256: a uint8 position cannot exceed a 256-bit
+       mask, and the compiler rightly rejects the comparison as dead there. */
+    for (uint32_t i = 0; i < ix->nex; i++) if (ix->epos[i] >= RD) return -4;
+#endif
+    return 0;
+}

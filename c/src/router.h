@@ -19,7 +19,34 @@
 #define RMAXCLS   16
 #define RNAMELEN  32
 #define RSCALE    16384              /* fixed-point scale for the centre */
-#define RMAGIC    0x52545231u        /* 'RTR1' */
+#define RMAGIC    0x52545231u        /* 'RTR1' — v1: m+s bit-planes, 64 B/vector */
+
+/* v2 stores the sign plane as what it actually is.
+ *
+ * Measured over the shipped index: 78.51% of dims are 0, 21.34% are +1, and
+ * 0.16% are -1 — 1,539 of 983,040. The sign plane is not 122,880 arbitrary
+ * bits, it is 1,539 exceptions to a rule that holds 99.84% of the time, and
+ * 83% of them are in `none` (a length signal: --condcentre showed removing
+ * that asymmetry costs twenty points, so the plane is load-bearing and must
+ * be preserved exactly, not dropped).
+ *
+ * So: keep the 32-byte active mask, make +1 implicit, and store a stream of
+ * uint8 dimension positions where the sign is BELOW centre. With s = m & ~E,
+ * inside `both` we have q.s = ~Eq and b.s = ~Eb, so diff there is Eq ^ Eb:
+ *
+ *     disagree = |Eq & bm| + |Eb & qm| - 2*|Eq & Eb|
+ *
+ * An identity for every input, so routing is bit-identical to v1 — which is
+ * what PARITY EXACT proves on the device, since the reference scores embedded
+ * in the blob are computed host-side from the v1 bit-planes.
+ *
+ * A new magic rather than a version field: a v1 blob must be REJECTED, not
+ * misparsed. The layouts differ from the vector section onward. */
+#define RMAGIC2   0x52545232u        /* 'RTR2' — v2: mask + exception stream */
+#define RMASKB    (RD / 8)           /* 32 B: the active mask, fixed size */
+#define REXMAX    65535u             /* the uint16 offset table bounds the
+                                        exception stream; mkblob aborts above
+                                        this rather than silently wrapping */
 
 /* Shipped operating point. This is what tune() returns, but that is not why it
    is here — it was moved to 126 on dev evidence and moved BACK by a held-out
@@ -85,6 +112,26 @@ int  r_family(const router_t *r, int cls);
 int  r_norm(const char *in, char *out, int cap);
 uint32_t r_fnv(const char *s, int n);
 void r_counts(const char *text, int16_t *acc, int32_t *total);
+
+
+/* v2 index, as pointers into the mapped blob. Nothing is copied: on the device
+ * this points straight at flash until lift.c moves the masks into SRAM. */
+typedef struct {
+    const uint32_t *mask;        /* n_index * RWORDS, 4-aligned by layout */
+    const uint16_t *eoff;        /* n_index + 1, ascending */
+    const uint16_t *act;         /* precomputed t_active per entry */
+    const uint8_t  *label;
+    const uint8_t  *epos;        /* nex sign-exception positions */
+    const uint8_t  *refp;
+    uint32_t        nref, nex;
+} rindex2;
+
+/* Parse and VALIDATE a v2 blob. Returns 0, or:
+ *   -1 bad magic or dim      -2 truncated / extent overflow
+ *   -3 offsets not ascending -4 exception position out of range
+ * The extent check matters because magic and dim survive a truncated blob
+ * while n_index does not describe what is really there. */
+int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have);
 
 int  r_load(router_t *r, const char *path);
 void r_free(router_t *r);

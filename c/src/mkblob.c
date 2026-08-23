@@ -112,15 +112,47 @@ int main(int argc,char**argv){
     }
     /* host reference: first NREF dev queries, with the answer this host gives */
     FILE*o=fopen(argv[5],"wb");
-    uint32_t hdr[5]={RMAGIC,RD,(uint32_t)U_n,R.n_class,(uint32_t)R.threshold};
+    uint32_t hdr[5]={RMAGIC2,RD,(uint32_t)U_n,R.n_class,(uint32_t)R.threshold};
     fwrite(hdr,4,5,o);
     fwrite(R.names,RNAMELEN,RMAXCLS,o);
     fwrite(R.centre,sizeof(int32_t),RD,o);
-    fwrite(R.label,1,U_n,o);
-    { uint16_t *act=malloc(U_n*2);
-      for(int i=0;i<U_n;i++) act[i]=(uint16_t)t_active(&TI[i]);
-      fwrite(act,2,U_n,o); free(act); }
-    fwrite(TI,sizeof(tvec),U_n,o);
+    /* v2 vector section.  Sections are ordered by DESCENDING alignment need so
+       that every one lands aligned for ANY n:
+         masks at 20+512+1024 = 1556 (4-aligned, constant)
+         eoff   at 1556 + 32n           (32n is 4-aligned, so eoff is too)
+         act    at 1556 + 32n + 2(n+1)  (stays 2-aligned)
+         label, epos are bytes; nref is read with memcpy, so needs none.
+       The v1 order put label and act BEFORE the vectors, which made the vector
+       offset 1556+3n — 4-aligned only when n is a multiple of 4.  It happened
+       to be (n=3840).  On Xtensa an unaligned uint32 load faults, so that was
+       a latent crash waiting for an index size we had not tried. */
+    { uint8_t *EP=malloc((size_t)U_n*RD); uint16_t *EO=malloc(((size_t)U_n+1)*2);
+      uint32_t ne=0;
+      for(int i=0;i<U_n;i++){
+          EO[i]=(uint16_t)ne;
+          uint8_t tmp[RD]; int c=t_exceptions(&TI[i],tmp);
+          for(int k=0;k<c;k++) EP[ne++]=tmp[k];
+          if(ne>REXMAX){
+              fprintf(stderr,"  FATAL: %u exceptions exceed the uint16 offset "
+                      "table (max %u). Widen it to uint32 (+%zu B) or re-centre "
+                      "the encoder.\n",ne,REXMAX,((size_t)U_n+1)*2);
+              fclose(o); remove(argv[5]); free(EP); free(EO); return 1; }
+      }
+      EO[U_n]=(uint16_t)ne;
+      for(int i=0;i<U_n;i++) fwrite(TI[i].m,4,RWORDS,o);       /* masks  */
+      fwrite(EO,2,(size_t)U_n+1,o);                            /* eoff   */
+      { uint16_t *act=malloc((size_t)U_n*2);
+        for(int i=0;i<U_n;i++) act[i]=(uint16_t)t_active(&TI[i]);
+        fwrite(act,2,U_n,o); free(act); }                      /* act    */
+      fwrite(R.label,1,U_n,o);                                 /* label  */
+      fwrite(EP,1,ne,o);                                       /* epos   */
+      fprintf(stderr,"  v2 vectors: %d masks x %d B + %d offsets + %u exceptions"
+              " = %zu B (v1 planes would be %zu, %.1f%% saved)\n",
+              U_n,RMASKB,U_n+1,ne,
+              (size_t)U_n*RMASKB+((size_t)U_n+1)*2+ne,(size_t)U_n*sizeof(tvec),
+              100.0*(1.0-((double)((size_t)U_n*RMASKB+((size_t)U_n+1)*2+ne))
+                          /(double)((size_t)U_n*sizeof(tvec))));
+      free(EP); free(EO); }
     uint32_t nref=(V_n<NREF)?V_n:NREF; fwrite(&nref,4,1,o);
     for(uint32_t i=0;i<nref;i++){
         tvec q; t_encode(&R,V_t[i],&q); int aa=t_active(&q);

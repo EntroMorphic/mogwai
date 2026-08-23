@@ -95,3 +95,43 @@ int t_score(const tvec *q, const tvec *b, int aa) {
 int t_score_pre(const tvec *q, const tvec *b, int aa, int ab) {
     return (2 * t_dot(q, b) * 256) / (aa + ab + TSMOOTH);
 }
+
+/* ---- v2: mask + exception stream ---------------------------------------- */
+int t_exceptions(const tvec *v, uint8_t *out) {
+    int n = 0;
+    for (int d = 0; d < RD; d++) {
+        uint32_t w = (uint32_t)(d >> 5), bit = 1u << (d & 31);
+        if ((v->m[w] & bit) && !(v->s[w] & bit)) out[n++] = (uint8_t)d;
+    }
+    return n;                                    /* ascending by construction */
+}
+int t_active_m(const uint32_t *m) {
+    int n = 0;
+    for (int i = 0; i < RWORDS; i++) n += pc(m[i]);
+    return n;
+}
+/* dot = |q & b| - 2*disagree, with
+ *   disagree = |Eq & bm| + |Eb & qm| - 2*|Eq & Eb|
+ * The intersection term is NOT an optimisation — omitting it double-counts a
+ * dimension that is below centre on BOTH sides, where the signs actually
+ * AGREE. It fires on 54,683 of 5,863,680 dev pairs. */
+int t_dot_ex(const uint32_t *qm, const uint8_t *Eq, int nq,
+             const uint32_t *bm, const uint8_t *Eb, int nb) {
+    int both = 0;
+    for (int i = 0; i < RWORDS; i++) both += pc(qm[i] & bm[i]);
+    if (!nq && !nb) return both;                 /* 89.3% of vectors: no work */
+    int dis = 0;
+    for (int k = 0; k < nq; k++) { int d = Eq[k]; if ((bm[d >> 5] >> (d & 31)) & 1) dis++; }
+    for (int k = 0; k < nb; k++) { int d = Eb[k]; if ((qm[d >> 5] >> (d & 31)) & 1) dis++; }
+    /* both lists ascend, so the overlap is a merge, not a product */
+    for (int a = 0, b = 0; a < nq && b < nb; ) {
+        if      (Eq[a] < Eb[b]) a++;
+        else if (Eq[a] > Eb[b]) b++;
+        else { dis -= 2; a++; b++; }
+    }
+    return both - 2 * dis;
+}
+int t_score_ex(const uint32_t *qm, const uint8_t *Eq, int nq,
+               const uint32_t *bm, const uint8_t *Eb, int nb, int aa, int ab) {
+    return (2 * t_dot_ex(qm, Eq, nq, bm, Eb, nb) * 256) / (aa + ab + TSMOOTH);
+}

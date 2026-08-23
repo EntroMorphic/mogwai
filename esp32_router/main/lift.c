@@ -4,9 +4,13 @@
 #include "esp_heap_caps.h"
 #include "lift.h"
 
-/* IRAM is 32-bit-access-only. tvec is uint32_t m[8] + uint32_t s[8], so the scan
- * (whole-word reads) is legal there — but memcpy/memcmp are not, they emit byte
- * accesses and fault. Word-wise equivalents, used for IRAM chunks. */
+/* IRAM is 32-bit-access-only. The lifted record is uint32_t mask[RWORDS], so a
+ * whole-word scan is legal there — but memcpy/memcmp are not, they emit byte
+ * accesses and fault. Word-wise equivalents, used for IRAM chunks.
+ *
+ * The exception stream (uint8) and act[] (uint16) are byte- and half-word
+ * addressed, so neither is ever eligible for IRAM. They go to DRAM or stay in
+ * flash. */
 static void wcopy(uint32_t *d, const uint32_t *s, size_t bytes) {
     for (size_t w = 0; w < bytes / 4; w++) d[w] = s[w];
 }
@@ -37,35 +41,51 @@ static void *iram_only_malloc(size_t bytes) {
     return p;
 }
 
-int lift_run(lift_t *L, const tvec *ti, const uint16_t *act, uint32_t n_index,
-             size_t reserve)
+int lift_run(lift_t *L, const uint32_t *mask, const uint16_t *act,
+             const uint16_t *eoff, const uint8_t *epos, uint32_t nex,
+             uint32_t n_index, size_t reserve)
 {
     memset(L, 0, sizeof *L);
-    L->act = act;
-    L->n_index = n_index;
+    L->act = act; L->eoff = eoff; L->epos = epos;
+    L->n_index = n_index; L->nex = nex;
     if (n_index > (uint32_t)LIFT_MAXCHUNK * LIFT_CHUNK_VECS) return -1;
     L->nch     = (n_index + LIFT_CHUNK_VECS - 1) / LIFT_CHUNK_VECS;
-    L->need    = (size_t)n_index * sizeof(tvec) + (size_t)n_index * 2;
+    L->need    = (size_t)n_index * RMASKB + (size_t)n_index * 2
+               + ((size_t)n_index + 1) * 2 + nex;
     /* esp_get_free_heap_size() is the SUM across heap regions; the ESP32 splits
        DRAM into non-contiguous blocks, so a single malloc is bounded by the
        LARGEST block. That distinction is why a flat lift can never succeed. */
     L->largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
-    /* ACT first: 2 B/vector, touched once per vector like the index is. */
-    size_t abytes = (size_t)n_index * 2;
-    if (heap_caps_get_free_size(MALLOC_CAP_8BIT) > abytes + reserve) {
-        uint16_t *ra = malloc(abytes);
-        if (ra) { memcpy(ra, act, abytes); L->act = ra; }
+    /* The small per-vector sidecars first: act[], the offset table, and the
+       exception bytes. Together these are ~13 KB for the shipped index and are
+       touched once per vector exactly as the masks are, so they earn SRAM at
+       least as much as any chunk does. */
+    {   size_t abytes = (size_t)n_index * 2;
+        if (heap_caps_get_free_size(MALLOC_CAP_8BIT) > abytes + reserve) {
+            uint16_t *ra = malloc(abytes);
+            if (ra) { memcpy(ra, act, abytes); L->act = ra; }
+        }
+        size_t obytes = ((size_t)n_index + 1) * 2;
+        if (heap_caps_get_free_size(MALLOC_CAP_8BIT) > obytes + reserve) {
+            uint16_t *ro = malloc(obytes);
+            if (ro) { memcpy(ro, eoff, obytes); L->eoff = ro; }
+        }
+        if (nex && heap_caps_get_free_size(MALLOC_CAP_8BIT) > nex + reserve) {
+            uint8_t *re = malloc(nex);
+            if (re) { memcpy(re, epos, nex); L->epos = re; }
+        }
     }
 
     int iram_exhausted = 0;
     for (uint32_t c = 0; c < L->nch; c++) {
         uint32_t off = c * LIFT_CHUNK_VECS;
         uint32_t n   = n_index - off; if (n > LIFT_CHUNK_VECS) n = LIFT_CHUNK_VECS;
-        size_t   b   = (size_t)n * sizeof(tvec);
-        L->ch[c] = ti + off;                 /* flash by default */
+        size_t   b   = (size_t)n * RMASKB;
+        const uint32_t *src = mask + (size_t)off * RWORDS;
+        L->ch[c] = src;                      /* flash by default */
 
-        tvec *dst = NULL; int is_iram = 0;
+        uint32_t *dst = NULL; int is_iram = 0;
         if (heap_caps_get_free_size(MALLOC_CAP_8BIT) >= b + reserve)
             dst = malloc(b);
         if (!dst && !iram_exhausted) {
@@ -74,8 +94,8 @@ int lift_run(lift_t *L, const tvec *ti, const uint16_t *act, uint32_t n_index,
         }
         if (!dst) continue;                  /* stays flash-mapped, scores the same */
 
-        if (is_iram) wcopy((uint32_t *)dst, (const uint32_t *)(ti + off), b);
-        else         memcpy(dst, ti + off, b);
+        if (is_iram) wcopy(dst, src, b);
+        else         memcpy(dst, src, b);
         L->ch[c] = dst;
         L->vec_dram += is_iram ? 0 : n;
         L->vec_iram += is_iram ? n : 0;
@@ -89,11 +109,11 @@ int lift_run(lift_t *L, const tvec *ti, const uint16_t *act, uint32_t n_index,
     {
         uint32_t i = 0;
         for (uint32_t c = 0; c < L->nch; c++) {
-            const tvec *base = L->ch[c];
+            const uint32_t *base = L->ch[c];
             uint32_t n = n_index - i; if (n > LIFT_CHUNK_VECS) n = LIFT_CHUNK_VECS;
             for (uint32_t k = 0; k < n; k++, i++)
-                if (wcmp((const uint32_t *)&base[k], (const uint32_t *)&ti[i],
-                         sizeof(tvec))) L->bad++;
+                if (wcmp(base + (size_t)k * RWORDS,
+                         mask + (size_t)i * RWORDS, RMASKB)) L->bad++;
         }
         if (i != n_index) L->bad++;          /* the walk must cover the index exactly */
     }

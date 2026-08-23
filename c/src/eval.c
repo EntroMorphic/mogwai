@@ -19,7 +19,7 @@
 #include "ternary.h"
 
 static char *V_t[4000]; static char V_l[4000][RNAMELEN]; static int V_n;
-static router_t R; static tvec *TI; static uint16_t *ACT;
+static router_t R; static rindex2 IX;
 static const unsigned char *REFP; static uint32_t NREF;
 static unsigned char *BLOB;
 
@@ -38,27 +38,26 @@ static int load_blob(const char *path) {
     BLOB = malloc(sz);
     if (fread(BLOB, 1, sz, f) != (size_t)sz) { fclose(f); return 1; }
     fclose(f);
-    long o = 0; uint32_t h[5]; memcpy(h, BLOB, 20); o = 20;
-    if (h[0] != RMAGIC) { fprintf(stderr, "  bad magic %08x\n", h[0]); return 1; }
-    if (h[1] != (uint32_t)RD) {
-        fprintf(stderr, "  blob dim %u but this binary is RD=%d — rebuild to match\n", h[1], RD);
-        return 1; }
-    memset(&R, 0, sizeof R);
-    R.magic=h[0]; R.dim=h[1]; R.n_index=h[2]; R.n_class=h[3]; R.threshold=(int32_t)h[4];
-    memcpy(R.names, BLOB+o, (size_t)RMAXCLS*RNAMELEN); o += (long)RMAXCLS*RNAMELEN;
-    memcpy(R.centre, BLOB+o, (size_t)RD*4);           o += (long)RD*4;
-    R.label = BLOB + o;                                o += R.n_index;
-    ACT = (uint16_t *)(BLOB + o);                      o += (long)R.n_index*2;
-    TI  = (tvec *)(BLOB + o);                          o += (long)R.n_index*sizeof(tvec);
-    memcpy(&NREF, BLOB+o, 4);                          o += 4;
-    REFP = BLOB + o;
+    int rc = r_parse2(&R, &IX, BLOB, (size_t)sz);
+    if (rc) {
+        static const char *why[] = { "", "bad magic or dim (a v1 blob? rebuild)",
+                                     "truncated / extent overflow",
+                                     "exception offsets not ascending",
+                                     "exception position out of range" };
+        fprintf(stderr, "  blob rejected: %s\n", why[-rc]);
+        return 1;
+    }
+    NREF = IX.nref; REFP = IX.refp;
     return 0;
 }
 static int route(const char *txt, int *score_out) {
     tvec q; t_encode(&R, txt, &q);
+    uint8_t Eq[RD]; int nq = t_exceptions(&q, Eq);
     int aa = t_active(&q), best = -(1<<28); uint32_t bi = 0;
     for (uint32_t i = 0; i < R.n_index; i++) {
-        int s = t_score_pre(&q, &TI[i], aa, ACT[i]);
+        int s = t_score_ex(q.m, Eq, nq, IX.mask + (size_t)i * RWORDS,
+                           IX.epos + IX.eoff[i],
+                           (int)(IX.eoff[i+1] - IX.eoff[i]), aa, IX.act[i]);
         if (s > best) { best = s; bi = i; }
     }
     if (score_out) *score_out = best;
@@ -74,7 +73,7 @@ int main(int argc, char **argv) {
         return 1; }
     if (load_blob(argv[1])) { fprintf(stderr, "  cannot read %s\n", argv[1]); return 1; }
     printf("  blob: %u vectors, %u classes, %.0f KB index, threshold %d\n",
-           R.n_index, R.n_class, R.n_index*sizeof(tvec)/1024.0, R.threshold);
+           R.n_index, R.n_class, (R.n_index*(size_t)RMASKB + (R.n_index+1)*2 + IX.nex)/1024.0, R.threshold);
 
     /* 1. the embedded references must still reproduce on this host */
     const unsigned char *p = REFP; int okc = 0, oks = 0;

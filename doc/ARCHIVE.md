@@ -100,3 +100,12 @@ is ever deleted.
 Earlier architectures, each with its own autopsy README: the distillation path
 that preceded the router, and a structural ranker that was built and cut. Both
 predate the C rewrite.
+
+## `archive/blob-v1/`
+
+`router.v1.bin`, the last 261,036-byte twin-ternary blob, kept from the moment
+before the v2 exception-stream format replaced it (2026-08-23). The format
+change is lossless and PARITY EXACT on hardware, so this is not needed to
+reproduce any recorded number — it is here because the v1 layout is what every
+measurement before that date was taken against, and re-deriving it later would
+mean reverting `mkblob` rather than opening a file.

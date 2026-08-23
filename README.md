@@ -57,7 +57,7 @@ enough". See [esp32_router/README.md](esp32_router/README.md).
     make repl                                    # interactively
 
 Build is about a second, a full evaluation about a second, and the whole
-70-check regression suite runs in 19 s - most of which is an exhaustive 2^32
+71-check regression suite runs in 19 s - most of which is an exhaustive 2^32
 popcount proof. Full path in [doc/QUICKSTART.md](doc/QUICKSTART.md).
 
 ```
@@ -104,17 +104,27 @@ On held-out data at threshold 136 — 220 IoT commands, 2754 negatives:
 ### What actually ships
 
 The shipped blob is the twin-ternary row with the index **pruned from 656 KB to
-240 KB** so it fits entirely in SRAM. That is a memory decision, not an accuracy
-one: chunks are 8 KB, the heap reserve is 40 KB, and 30 chunks is the most that
-fits — so 3840 vectors is the largest fully-resident index. It is
+3840 vectors**, then stored in the v2 exception format — **137 KB resident** —
+so it fits entirely in SRAM. That is a memory decision, not an accuracy one:
+chunks are 8 KB, the heap reserve is 40 KB, and 15 chunks of 256 masks now hold
+the whole index in DRAM without touching the IRAM-only pool. It is
 `RSHIP_NEGTOP` in [`c/src/router.h`](c/src/router.h), beside `RSHIP_TH`.
+
+The v2 format stores the sign plane as the 1,539 exceptions it actually is
+rather than 122,880 bit-plane bytes, which is **lossless**: routing is
+bit-identical to v1, proved on the device by `PARITY EXACT`. See
+[doc/BLOB_FORMAT.md](doc/BLOB_FORMAT.md).
 
 | index | split | recall | fa | wa | missed | per query |
 |---|---|---|---|---|---|---|
-| unpruned, 656 KB | dev | 85.9% ±2.5 | **1** (0.07%) | 13 | 14 | 34.3 ms |
-| **SHIPPED, 240 KB** | dev | 85.9% ±2.5 | **6** (0.45%) | 13 | 14 | **6.3 ms** |
-| unpruned, 656 KB | **held-out** | 84.1% ±2.5 | **8** (0.29%) | 15 | 20 | 34.3 ms |
-| **SHIPPED, 240 KB** | **held-out** | **84.1% ±2.5** | **12** (0.44%) | **15** | **20** | **6.3 ms** |
+| unpruned, 656 KB | dev | 85.9% ±2.5 | **1** (0.07%) | 13 | 14 | 34.3 ms † |
+| **SHIPPED, 137 KB** | dev | 85.9% ±2.5 | **6** (0.45%) | 13 | 14 | **4.3 ms** |
+| unpruned, 656 KB | **held-out** | 84.1% ±2.5 | **8** (0.29%) | 15 | 20 | 34.3 ms † |
+| **SHIPPED, 137 KB** | **held-out** | **84.1% ±2.5** | **12** (0.44%) | **15** | **20** | **4.3 ms** |
+
+† measured on the v1 layout and not re-run under v2; the unpruned index has
+never been the shipped one. Every **accuracy** figure above is unaffected by the
+format change, because the arithmetic is bit-identical.
 
 **The cost is false actuations, and nothing else.** Recall, `wa` and `missed` are
 *identical* to the unpruned index on **both** splits — on held-out data they are
@@ -151,7 +161,7 @@ Held-out, at the shipped threshold, the two representations trade off like this:
 | | recall | fa | wa | missed | size |
 |---|---|---|---|---|---|
 | binary, 1 bit/dim | 75.5% ±2.9 | **10** | 14 | 40 | 120 KB |
-| **twin-ternary, 2 bit/dim** | **84.1% ±2.5** | 12 | 15 | **20** | 240 KB |
+| **twin-ternary, 2 bit/dim** | **84.1% ±2.5** | 12 | 15 | **20** | 137 KB |
 
 Twin buys recall and pays a little precision: it misses **half** as many commands
 (20 against 40) for two more false actuations. Binary is the more conservative
@@ -163,14 +173,21 @@ threshold is the knob — the full operating curve is in
 
     ESP32-D0WD-V3, 240 MHz, QIO flash @ 80 MHz, stock ESP-IDF v5.5
 
-    SHIPPED, 3840 vectors / 240 KB     6.3 ms   index 100% resident in SRAM
-    the same, with the WiFi stack up   9.3 ms   70% resident; WiFi takes ~72 KB
-    unpruned, 10500 vectors / 656 KB  43.5 ms   (1 core)   26.7 ms  (2 cores)
+    SHIPPED, 3840 vectors / 137 KB     4.3 ms   100% resident, all in DRAM
+    the same, with the WiFi stack up   4.3 ms   100% resident ‡
+    unpruned, 10500 vectors / 656 KB  43.5 ms   (1 core)   26.7 ms  (2 cores) †
     parity vs host                    64/64 class and score, bit-exact
+
+† v1 layout, not re-run under v2.
+‡ the stack is initialised and retrying association; the radio is not associated,
+  so this does not include contention from active RX/TX. Under v1 the same build
+  ran 9.3 ms at 70% residency — the gap closed because the index now fits
+  alongside the network stack instead of spilling to flash.
 
 Optimisation history: 200.4 → 102.1 (clocks) → 78.8 (precomputed activity
 counts) → 43.5 ms (popcount table) → 34.3 ms (chunked SRAM residency) → 6.3 ms
-(index pruned to the largest fully-resident size). Every step held bit-exact
+(index pruned to the largest fully-resident size) → **4.3 ms** (v2 exception
+format: half the bytes per vector, half the popcounts). Every step held bit-exact
 parity. The second core is real, but **core 1 belongs to WiFi on a production
 device**, so the single-core number is the one that survives deployment.
 
@@ -213,7 +230,7 @@ as one above.
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (70 checks) — run after any structural change
+    make regress        # full host regression (71 checks) — run after any structural change
 
 Then the device:
 
@@ -243,7 +260,7 @@ The layout, and what parity does *not* cover:
                        (host-parity harness). Sources are SYMLINKS into c/src
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 8 cycles
-    scripts/           fetch.sh (curl only), regress.sh (70 checks), mutate.sh
+    scripts/           fetch.sh (curl only), regress.sh (71 checks), mutate.sh
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
     board_backup/      how to restore the board's original ESP-AT firmware
@@ -268,10 +285,10 @@ get something much worse — which is the whole reason for the name.
 The held-out split is a budgeted resource: every read is logged in
 `results/TEST_BUDGET`, and configurations are pre-registered with falsifiers
 before it is touched. Every run is stamped with the git SHA and the clean/dirty
-state of the tree. Run `make regress` after any structural change: 70 checks,
+state of the tree. Run `make regress` after any structural change: 71 checks,
 19 seconds.
 
-CI runs the same 70 checks on Linux/GCC and builds both ESP32 firmwares from
+CI runs the same 71 checks on Linux/GCC and builds both ESP32 firmwares from
 `sdkconfig.defaults`, asserting the blob and the firmware agree on `RD`. That
 job exists because the code had never left macOS/clang, and three portability
 bugs were found the first time it did.

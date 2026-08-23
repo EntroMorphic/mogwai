@@ -17,4 +17,20 @@ int  t_score(const tvec *q, const tvec *b, int aa); /* Dice: symmetric, length-i
 int  t_score_pre(const tvec *q, const tvec *b, int aa, int ab);
 int  t_active(const tvec *v);
 void t_popcnt_init(void);   /* no-op unless the 16-bit table is compiled in */
+
+/* ---- v2: mask + exception stream ----------------------------------------
+ * The sign plane stored as the 1,539 exceptions it actually is. See router.h
+ * for the algebra; the short version is
+ *
+ *     disagree = |Eq & bm| + |Eb & qm| - 2*|Eq & Eb|
+ *
+ * which is exact, so t_dot_ex == t_dot for every input. Eight popcounts
+ * instead of sixteen, plus bit tests on sets empty for 89.3% of vectors.
+ * Positions are uint8 and ascending; RD <= 256 is load-bearing. */
+int t_exceptions(const tvec *v, uint8_t *out);   /* -> count, out[] ascending */
+int t_dot_ex(const uint32_t *qm, const uint8_t *Eq, int nq,
+             const uint32_t *bm, const uint8_t *Eb, int nb);
+int t_score_ex(const uint32_t *qm, const uint8_t *Eq, int nq,
+               const uint32_t *bm, const uint8_t *Eb, int nb, int aa, int ab);
+int t_active_m(const uint32_t *m);               /* popcount of a bare mask */
 #endif

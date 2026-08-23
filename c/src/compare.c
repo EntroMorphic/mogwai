@@ -551,17 +551,6 @@ static void signplane(void) {
 static int EXSTREAM = 0;
 
 
-static inline int ex_dot(const uint32_t *qm, const uint8_t *Eq, int nq,
-                         const uint32_t *bm, const uint8_t *Eb, int nb) {
-    int both = 0;
-    for (int i = 0; i < RWORDS; i++) both += __builtin_popcount(qm[i] & bm[i]);
-    int dis = 0;
-    for (int k = 0; k < nq; k++) { int d = Eq[k]; if ((bm[d>>5] >> (d&31)) & 1) dis++; }
-    for (int k = 0; k < nb; k++) { int d = Eb[k]; if ((qm[d>>5] >> (d&31)) & 1) dis++; }
-    for (int k = 0; k < nq; k++)
-        for (int l = 0; l < nb; l++) if (Eq[k] == Eb[l]) dis -= 2;
-    return both - 2 * dis;
-}
 
 static void exstream(void) {
     _Static_assert(RD <= 256, "exception positions are uint8; RD must be <= 256");
@@ -608,7 +597,7 @@ static void exstream(void) {
         }
         for (uint32_t j = 0; j < R.n_index; j++) {
             int ref = t_dot(&q, &TI[j]);
-            int mine = ex_dot(q.m, Eq, nq, TI[j].m, EP + EO[j], (int)(EO[j+1]-EO[j]));
+            int mine = t_dot_ex(q.m, Eq, nq, TI[j].m, EP + EO[j], (int)(EO[j+1]-EO[j]));
             pairs++;
             if (ref != mine) { if (first_bad < 0) first_bad = (int)j; bad++; }
         }
@@ -691,7 +680,7 @@ static void exstream(void) {
             int in = 0;
             for (int k = 0; k < na; k++) for (int l = 0; l < nb; l++) if (Ea[k]==Eb2[l]) in++;
             if (in) hit_inter++;
-            if (t_dot(&a,&b) != ex_dot(a.m,Ea,na,b.m,Eb2,nb)) bad++;
+            if (t_dot(&a,&b) != t_dot_ex(a.m,Ea,na,b.m,Eb2,nb)) bad++;
             n++;
         }
         printf("  random pairs compared         : %llu\n", (unsigned long long)n);

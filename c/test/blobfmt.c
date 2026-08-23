@@ -21,7 +21,10 @@ int main(int argc, char **argv) {
     uint32_t hdr[5]; memcpy(hdr, b + o, 20); o += 20;
     printf("  header      @%-8ld magic=%08x dim=%u n_index=%u n_class=%u threshold=%u\n",
            0L, hdr[0], hdr[1], hdr[2], hdr[3], hdr[4]);
-    if (hdr[0] != RMAGIC)  { printf("  FAIL: magic mismatch (want %08x)\n", RMAGIC); return 1; }
+    if (hdr[0] == RMAGIC) {
+        printf("  FAIL: this is a v1 blob ('RTR1'); the runtime is v2 — rebuild it\n");
+        return 1; }
+    if (hdr[0] != RMAGIC2) { printf("  FAIL: magic mismatch (want %08x)\n", RMAGIC2); return 1; }
     if (hdr[1] != (uint32_t)RD) { printf("  FAIL: blob dim %u != build RD %d\n", hdr[1], RD); return 1; }
     uint32_t n = hdr[2];
 
@@ -29,10 +32,26 @@ int main(int argc, char **argv) {
     o += (long)RMAXCLS * RNAMELEN;
     printf("  centre      @%-8ld %d x int32 = %d B\n", o, RD, RD*4);
     o += (long)RD * 4;
-    printf("  label       @%-8ld %u x uint8\n", o, n);   o += n;
+    /* Sections run in descending alignment order so each lands aligned for any
+       n; blobfmt asserts that rather than trusting it. */
+    if (o % 4) { printf("  FAIL: masks at %ld are not 4-aligned\n", o); return 1; }
+    printf("  masks       @%-8ld %u x %d B = %ld B\n", o, n, RMASKB, (long)n*RMASKB);
+    o += (long)n * RMASKB;
+    if (o % 2) { printf("  FAIL: eoff at %ld is not 2-aligned\n", o); return 1; }
+    const uint16_t *eoff = (const uint16_t *)(const void *)(b + o);
+    printf("  eoff        @%-8ld %u x uint16\n", o, n + 1);
+    o += ((long)n + 1) * 2;
+    if (o % 2) { printf("  FAIL: act at %ld is not 2-aligned\n", o); return 1; }
     printf("  act         @%-8ld %u x uint16\n", o, n);  o += (long)n * 2;
-    printf("  index       @%-8ld %u x tvec(%zu B)\n", o, n, sizeof(tvec));
-    o += (long)n * sizeof(tvec);
+    printf("  label       @%-8ld %u x uint8\n", o, n);   o += n;
+    for (uint32_t i = 0; i < n; i++)
+        if (eoff[i] > eoff[i+1]) {
+            printf("  FAIL: eoff not ascending at %u (%u > %u)\n", i, eoff[i], eoff[i+1]);
+            return 1; }
+    uint32_t nex = eoff[n];
+    printf("  epos        @%-8ld %u x uint8  (%.3f%% of %u dims are sign exceptions)\n",
+           o, nex, 100.0*nex/((double)n*RD), n*RD);
+    o += nex;
     uint32_t nref; memcpy(&nref, b + o, 4); o += 4;
     printf("  nref        @%-8ld %u\n", o - 4, nref);
     if (nref > 4096) { printf("  FAIL: implausible nref\n"); return 1; }

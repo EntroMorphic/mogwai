@@ -70,8 +70,7 @@ extern const uint8_t blob_start[] asm("_binary_router_bin_start");
 extern const uint8_t blob_end[]   asm("_binary_router_bin_end");
 
 static router_t R;
-static const tvec *TI;
-static const uint16_t *ACT;
+static rindex2 IX;
 
 /* The index is scanned strictly in order, so it does not need to be one
    allocation. esp_get_free_heap_size() reports the SUM across heap regions, but
@@ -83,8 +82,6 @@ static const uint16_t *ACT;
 static lift_t L;                             /* reported in the banner: a printf
    here would sit in stdout's buffer and be lost when uart_param_config
    reconfigures the console */
-static const uint8_t *REFP;
-static uint32_t NREF;
 
 /* ---- device state, integer only ------------------------------------------ */
 static int light_duty = 0;      /* 0..DUTY_MAX */
@@ -146,32 +143,15 @@ static const char *actuate(const char *cls) {
 
 
 static int load(void) {
-    const uint8_t *p = blob_start;
-    uint32_t hdr[5]; memcpy(hdr, p, 20); p += 20;
-    if (hdr[0] != RMAGIC || hdr[1] != RD) return -1;
-    /* Validate the body against the blob's actual extent, not just the header.
-     *
-     * magic and dim survive a TRUNCATED blob - a partial flash write, an
-     * interrupted `idf.py flash` - while n_index does not describe what is
-     * really there. Without this the firmware would compute TI/ACT pointers
-     * past the mapped region and lift_run would memcpy from unmapped flash.
-     * blobfmt performs exactly this check offline; the firmware did not.
-     *
-     * Layout per doc/BLOB_FORMAT.md: 20 header + names + centre + n labels
-     * + 2n act + 64n index + 4 nref. */
-    {
-        size_t have = (size_t)(blob_end - blob_start);
-        size_t need = 20 + RNAMELEN * RMAXCLS + sizeof(int32_t) * RD
-                    + (size_t)hdr[2] * (1 + 2 + sizeof(tvec)) + 4;
-        if (hdr[2] == 0 || need > have) return -1;
-    }
-    R.magic=hdr[0]; R.dim=hdr[1]; R.n_index=hdr[2]; R.n_class=hdr[3]; R.threshold=(int32_t)hdr[4];
-    memcpy(R.names, p, RNAMELEN * RMAXCLS); p += RNAMELEN * RMAXCLS;
-    memcpy(R.centre, p, sizeof(int32_t) * RD); p += sizeof(int32_t) * RD;
-    R.label = (uint8_t *)p; p += R.n_index;
-    ACT = (const uint16_t *)p; p += (size_t)R.n_index * 2;
-    TI = (const tvec *)p; p += (size_t)R.n_index * sizeof(tvec);
-    memcpy(&NREF, p, 4); p += 4; REFP = p;
+    /* One shared, validating parser (router.c) rather than a second copy of the
+     * layout here. It bounds-checks every section against the blob's ACTUAL
+     * extent — magic and dim survive a truncated blob while n_index does not
+     * describe what is really there, and an unchecked n_index would send the
+     * scan past the mapped region. It also verifies the exception offsets
+     * ascend, which is what stops a corrupt blob from indexing out of the
+     * stream inside the scoring loop. */
+    int rc = r_parse2(&R, &IX, blob_start, (size_t)(blob_end - blob_start));
+    if (rc) return rc;
 
     /* Lift the index out of flash if it fits.
      *
@@ -181,24 +161,32 @@ static int load(void) {
      * is 20x cheaper. So if the index fits in heap, moving it there is the
      * single largest win available on this part.
      *
+     * v2 halves what has to fit: 32 B/vector of mask instead of 64 B of
+     * bit-planes, plus a 1.5 KB exception stream.
+     *
      * Adaptive rather than compile-time: try, and fall back to flash-mapped if
      * the allocation fails. A device that boots slower is better than one that
      * does not boot. */
 #ifdef MOGWAI_WIFI
-    return lift_run(&L, TI, ACT, R.n_index, LIFT_RESERVE_TLS);
+    return lift_run(&L, IX.mask, IX.act, IX.eoff, IX.epos, IX.nex,
+                    R.n_index, LIFT_RESERVE_TLS);
 #else
-    return lift_run(&L, TI, ACT, R.n_index, LIFT_RESERVE_BARE);
+    return lift_run(&L, IX.mask, IX.act, IX.eoff, IX.epos, IX.nex,
+                    R.n_index, LIFT_RESERVE_BARE);
 #endif
 }
 
 static int route(const char *txt, int *score_out) {
     tvec q; t_encode(&R, txt, &q);
+    uint8_t Eq[RD]; int nq = t_exceptions(&q, Eq);
     int aa = t_active(&q), best = -(1 << 28); uint32_t bi = 0, i = 0;
     for (uint32_t c = 0; c < L.nch; c++) {
-        const tvec *base = L.ch[c];
+        const uint32_t *base = L.ch[c];
         uint32_t n = R.n_index - i; if (n > LIFT_CHUNK_VECS) n = LIFT_CHUNK_VECS;
         for (uint32_t k = 0; k < n; k++, i++) {
-            int s = t_score_pre(&q, &base[k], aa, L.act[i]);
+            int s = t_score_ex(q.m, Eq, nq, base + (size_t)k * RWORDS,
+                               L.epos + L.eoff[i],
+                               (int)(L.eoff[i + 1] - L.eoff[i]), aa, L.act[i]);
             if (s > best) { best = s; bi = i; }
         }
     }

@@ -104,13 +104,19 @@ chk "product reports both rejection causes" "$(grep -cE 'cls == -1|cls == -2' es
 # commit to now, referenced by nothing and noticed by nothing. Blobs are the one
 # artefact here that is both large and easy to leave behind, so pin the set.
 chk "the only tracked .bin is the shipped blob" "$(git ls-files '*.bin' | tr '\n' ',')" "esp32_router/main/router.bin,"
+# The firmware refuses a v1 blob outright (different magic, different layout).
+# Shipping one would be caught at boot rather than silently, but a build that
+# cannot boot is not a thing to discover on a board.
+chk "shipped blob is v2 (RTR2)" \
+    "$(od -An -tx4 -N4 esp32_router/main/router.bin | tr -d ' ')" \
+    "$(printf '%08x' "$(grep -E '^#define RMAGIC2' c/src/router.h | grep -oE '0x[0-9a-fA-F]+' | head -1)")"
 chk "blob dim matches router.h RD" "$(od -An -tu4 -j4 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RD\s' c/src/router.h | grep -oE '[0-9]+')"
 # Assert the SHIPPED BINARY, not just the harness. Everything above measures
 # what compare computes; these two read the header of the file that gets
 # flashed. n_index is the fully-SRAM-resident size (30 chunks x 128) and the
 # threshold must equal router.h's - if either drifts, the device runs an
 # operating point nothing measured.
-chk "blob vectors 3840 (30 SRAM chunks)" "$(od -An -tu4 -j8 -N4 esp32_router/main/router.bin | tr -d ' ')" "3840"
+chk "blob vectors 3840 (15 SRAM chunks of 256)" "$(od -An -tu4 -j8 -N4 esp32_router/main/router.bin | tr -d ' ')" "3840"
 chk "blob threshold matches router.h RSHIP_TH" "$(od -An -tu4 -j16 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RSHIP_TH\s' c/src/router.h | grep -oE '[0-9]+')"
 
 # METHOD 19, generalised: if correctness depends on two files agreeing, do not
@@ -123,6 +129,18 @@ while IFS= read -r pair; do
     def=$(grep -E "^#define[[:space:]]+${nm}[[:space:]]" c/src/router.h | awk '{print $3}')
     [ -z "$def" ] && continue
     def=${def%%[uUlL]*}
+    # Only literals are comparable. RMASKB is `(RD / 8)` in the header, and
+    # feeding that to $(( )) expands RD as a shell variable and dies under
+    # set -u. An expression is not a doc-drift risk anyway: it cannot go stale
+    # against itself.
+    case "$def" in
+        0x[0-9a-fA-F]*|[0-9]*) : ;;
+        *) continue ;;
+    esac
+    case "$vl" in
+        0x[0-9a-fA-F]*|[0-9]*) : ;;
+        *) continue ;;
+    esac
     if [ $((def)) -ne $((vl)) ]; then bf_bad="$bf_bad ${nm}(doc=${vl},hdr=${def})"; fi
 done < <(grep -oE '`[A-Z][A-Z0-9_]*=(0x)?[0-9a-fA-F]+`' doc/BLOB_FORMAT.md | tr -d '`' | sort -u)
 chk "BLOB_FORMAT.md constants match router.h" "${bf_bad:-none}" "none"

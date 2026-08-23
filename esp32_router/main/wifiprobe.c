@@ -82,25 +82,22 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
 
 
 /* ---- lift the index, then prove TLS still works -------------------------- */
-/* Mirrors product.c's load(): header, names, centre, labels, ACT, index. The
-   probe never routes, so it needs only TI/ACT/n_index — enough to occupy memory
-   exactly as the product would, via the SAME lift_run() in lift.c. */
+/* Mirrors product.c's load() by calling the SAME validating parser and the SAME
+   lift_run(). The probe never routes, so it needs only the index geometry —
+   enough to occupy memory exactly as the product would. If the probe and the
+   product allocated differently, the measurement would be of nothing. */
 extern const uint8_t blob_start[] asm("_binary_router_bin_start");
+extern const uint8_t blob_end[]   asm("_binary_router_bin_end");
 static router_t R;
+static rindex2  IX;
 static lift_t   L;
 
 static void lift_the_index(void) {
-    const uint8_t *p = blob_start;
-    uint32_t hdr[5]; memcpy(hdr, p, 20); p += 20;
-    if (hdr[0] != RMAGIC || hdr[1] != RD) { printf("  BLOB PARSE FAILED\n"); return; }
-    R.n_index = hdr[2];
-    p += RNAMELEN * RMAXCLS;
-    p += sizeof(int32_t) * RD;
-    p += R.n_index;                                  /* labels */
-    const uint16_t *act = (const uint16_t *)p; p += (size_t)R.n_index * 2;
-    const tvec     *ti  = (const tvec *)p;
+    if (r_parse2(&R, &IX, blob_start, (size_t)(blob_end - blob_start))) {
+        printf("  BLOB PARSE FAILED\n"); return; }
 
-    lift_run(&L, ti, act, R.n_index, LIFT_RESERVE_TLS);
+    lift_run(&L, IX.mask, IX.act, IX.eoff, IX.epos, IX.nex,
+             R.n_index, LIFT_RESERVE_TLS);
     printf("  index %u/%u in SRAM (%u%%): %u DRAM + %u IRAM-only, %u MISMATCHED\n",
            (unsigned)(L.vec_dram + L.vec_iram), (unsigned)R.n_index,
            (unsigned)(R.n_index ? (L.vec_dram + L.vec_iram) * 100 / R.n_index : 0),
