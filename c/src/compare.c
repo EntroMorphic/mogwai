@@ -136,6 +136,82 @@ static hit score_cas(const char*txt){
     if(bi<0){ hit h={-(1<<28),-1}; return h; }
     hit h={best, veto(&q,aa,r_apply_polarity(&R,R.label[bi],txt))}; return h;
 }
+
+/* ---- rank oracle -------------------------------------------------------
+ * Before building a second tier, find out whether a second tier COULD help.
+ * For every dev error, where does the right answer sit in the current coarse
+ * ranking? If the correct class is at rank 37, no rerank over a shortlist
+ * saves it and the direction is dead. If it is at rank 2-4, the information
+ * survived the coarse scan and only the ORDERING is wrong.
+ *
+ * This is an upper bound on rerankability, not a result. The channel selector
+ * had an oracle of 94.3% and still failed held-out (eval #4). */
+static int RANKORACLE = 0;
+static int RO_S[MAXU];
+
+static void rankoracle(void) {
+    int th = FIXTH >= 0 ? FIXTH : RSHIP_TH;
+    const int Ks[7] = {1, 2, 4, 8, 16, 32, 64};
+    int hist[3][8]; memset(hist, 0, sizeof hist);
+    int tot[3] = {0,0,0};
+    const char *nm[3] = {"wrong-act", "missed", "UNBIDDEN"};
+
+    printf("\n  rank oracle at th=%d over %u index vectors\n", th, (unsigned)R.n_index);
+    printf("  for each error: rank of the best exemplar that would give the RIGHT answer\n");
+    printf("  (wrong-act/missed -> an exemplar of the true class; UNBIDDEN -> any negative)\n\n");
+
+    for (int i = 0; i < V_n; i++) {
+        const char *txt = V_t[i], *truth = V_l[i];
+        tvec q; t_encode(&R, txt, &q); int aa = t_active(&q);
+        int best = -(1 << 28); uint32_t bi = 0;
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            RO_S[j] = t_score(&q, &TI[j], aa);
+            if (RO_S[j] > best) { best = RO_S[j]; bi = j; }
+        }
+        int c = (best > th) ? r_apply_polarity(&R, R.label[bi], txt) : -1;
+        const char *p = c < 0 ? "none" : R.names[c];
+        if (!strcmp(p, truth)) continue;
+
+        int gn = !strcmp(truth, "none");
+        int kind = gn ? 2 : (!strcmp(p, "none") ? 1 : 0);
+        tot[kind]++;
+
+        int tbest = -(1 << 28);
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            const char *jn = gn ? R.names[R.label[j]]
+                                : R.names[r_apply_polarity(&R, R.label[j], txt)];
+            if (strcmp(jn, truth)) continue;
+            if (RO_S[j] > tbest) tbest = RO_S[j];
+        }
+        int rank = -1;
+        if (tbest > -(1 << 28)) {
+            rank = 1;
+            for (uint32_t j = 0; j < R.n_index; j++) if (RO_S[j] > tbest) rank++;
+        }
+
+        if (rank > 0) { int b = 0; while (b < 6 && Ks[b] < rank) b++;
+                        hist[kind][Ks[b] >= rank ? b : 7]++; }
+        else hist[kind][7]++;
+
+        if (rank > 0)
+            printf("  %-9s rank=%-5d gap=%-4d  said=%-20s truth=%-20s \"%s\"\n",
+                   nm[kind], rank, best - tbest, p, truth, txt);
+        else
+            printf("  %-9s rank=NONE          said=%-20s truth=%-20s \"%s\"\n",
+                   nm[kind], p, truth, txt);
+    }
+
+    printf("\n  cumulative errors whose correct answer is within top-K\n");
+    printf("  %-10s %6s %6s %6s %6s %6s %6s %6s %8s %6s\n",
+           "", "K=1", "K=2", "K=4", "K=8", "K=16", "K=32", "K=64", ">64/none", "total");
+    for (int t = 0; t < 3; t++) {
+        printf("  %-10s", nm[t]);
+        int cum = 0;
+        for (int b = 0; b < 7; b++) { cum += hist[t][b]; printf(" %6d", cum); }
+        printf(" %8d %6d\n", hist[t][7], tot[t]);
+    }
+}
+
 typedef struct{int fa,wa,ms,iok,in;} TX;
 static TX tally(hit*H,int th,char la[][RNAMELEN],int n){
     TX z={0,0,0,0,0};
@@ -631,6 +707,7 @@ static void usage(void) {
 "  --gatesize             what a compact prior table would need\n"
 "  --density              index vector sparsity — the footprint lever\n"
 "  --packbench            packed sign plane: cycles vs bytes, bit-exact check\n"
+"  --rankoracle           for each dev error, rank of the answer that would be right\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -1195,6 +1272,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--priorcls")) PRIORCLS=1;
         else if (!strcmp(a,"--priorcls2")) PRIORCLS=2;
         else if (!strncmp(a,"--selmargin=",12)) SELMARG=atoi(a+12);
+        else if (!strcmp(a,"--rankoracle")) RANKORACLE=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -1317,6 +1395,7 @@ int main(int argc,char**argv){
     if(GATESZ){ gatesize(); return 0; }
     if(DENSITY){ density(); return 0; }
     if(PACKBENCH){ packbench(); return 0; }
+    if(RANKORACLE){ rankoracle(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }
