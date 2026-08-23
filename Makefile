@@ -99,8 +99,12 @@ $(BIN)/blobfmt: c/test/blobfmt.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/router.
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/blobfmt.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
 
+$(BIN)/blobguard: c/test/blobguard.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/router.h $(SRC)/ternary.h
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -o $@ c/test/blobguard.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
+
 .PHONY: tools
-tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt
+tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard
 	@echo "  all tools + tests built: $$(ls $(BIN) | tr '\n' ' ')"
 
 # Full host regression. Run after any structural change.

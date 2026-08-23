@@ -175,10 +175,40 @@ int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have) {
      * read inside the scoring loop. At RD=256 a uint8 position cannot exceed
      * the mask, but a smaller RD build makes that reachable. */
     for (uint32_t i = 0; i < n; i++) if (ix->eoff[i] > ix->eoff[i + 1]) return -3;
+    /* Positions must ascend WITHIN each slice, not merely across slices.
+     * t_dot_ex MERGES the two exception lists, so an unsorted (or duplicated)
+     * slice silently under-counts the overlap and returns a wrong dot with no
+     * crash and no other symptom. Measured on a hand-corrupted blob: dot
+     * 6 -> 2, score 109 -> 36, while every other check still passed. The
+     * strict > also rejects duplicates, which would double-count. */
+    for (uint32_t i = 0; i < n; i++)
+        for (uint32_t k = (uint32_t)ix->eoff[i] + 1; k < ix->eoff[i + 1]; k++)
+            if (ix->epos[k - 1] >= ix->epos[k]) return -5;
 #if RD < 256
     /* Only reachable below RD=256: a uint8 position cannot exceed a 256-bit
        mask, and the compiler rightly rejects the comparison as dead there. */
     for (uint32_t i = 0; i < ix->nex; i++) if (ix->epos[i] >= RD) return -4;
 #endif
+    /* The reference records are the last section, and until now nothing bounded
+     * them: r_parse2 validated everything up to nref and then handed out refp.
+     * main.c's parity loop walks those records, so a blob truncated inside the
+     * final record sent it past the mapped region — a blob short by ONE byte
+     * passed every other check.
+     *
+     * Checked by OVERRUN, not by exact length: requiring the walk to land
+     * precisely on `have` would also reject any padding the linker puts after
+     * _binary_router_bin_end, and a false rejection here means the device does
+     * not boot. blobfmt enforces exactness offline, where being wrong is free.
+     * The per-record bound still catches the off-by-one, because the truncated
+     * final record cannot satisfy len+5. */
+    {
+        const uint8_t *rp = ix->refp;
+        for (uint32_t i = 0; i < ix->nref; i++) {
+            if ((size_t)(rp - base) + 1 > have) return -6;
+            uint8_t len = *rp++;
+            if ((size_t)(rp - base) + (size_t)len + 5 > have) return -6;
+            rp += (size_t)len + 4 + 1;
+        }
+    }
     return 0;
 }

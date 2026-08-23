@@ -129,6 +129,8 @@ typedef struct {
 /* Parse and VALIDATE a v2 blob. Returns 0, or:
  *   -1 bad magic or dim      -2 truncated / extent overflow
  *   -3 offsets not ascending -4 exception position out of range
+ *   -5 an exception slice is not strictly ascending
+ *   -6 the reference records overrun the blob
  * The extent check matters because magic and dim survive a truncated blob
  * while n_index does not describe what is really there. */
 int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have);

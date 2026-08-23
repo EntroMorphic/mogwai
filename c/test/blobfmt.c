@@ -49,6 +49,13 @@ int main(int argc, char **argv) {
             printf("  FAIL: eoff not ascending at %u (%u > %u)\n", i, eoff[i], eoff[i+1]);
             return 1; }
     uint32_t nex = eoff[n];
+    /* Within-slice ordering is load-bearing: t_dot_ex merges the exception
+       lists, so an unsorted or duplicated slice silently returns a wrong dot. */
+    for (uint32_t i = 0; i < n; i++)
+        for (uint32_t k = (uint32_t)eoff[i] + 1; k < eoff[i+1]; k++)
+            if (b[o + k - 1] >= b[o + k]) {
+                printf("  FAIL: exception slice %u not strictly ascending\n", i);
+                return 1; }
     printf("  epos        @%-8ld %u x uint8  (%.3f%% of %u dims are sign exceptions)\n",
            o, nex, 100.0*nex/((double)n*RD), n*RD);
     o += nex;

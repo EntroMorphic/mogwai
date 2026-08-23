@@ -31,7 +31,7 @@ chk "tools+tests build with zero warnings" "$BUILD_N" "0"
 if [ "$BUILD_N" != "0" ]; then
   printf '%s\n' "$BUILD_OUT" | grep -E 'warning|error' | head -20 | sed 's/^/        /'
 fi
-chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "11"
+chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "12"
 
 echo "=== CORPUS ==="
 chk "corpus checksums" "$(shasum -a 256 -c data/SHA256 2>/dev/null | grep -c OK)" "4"
@@ -64,6 +64,12 @@ chk "blobfmt REJECTS a truncated blob" "$TRUNC_RC" "1"
 # size-accounting one (o != size), so this is the input that isolates it.
 chk "blobfmt REJECTS a blob with trailing bytes" "$TRAIL_RC" "1"
 chk "layout matches doc/BLOB_FORMAT.md" "$(c/bin/blobfmt esp32_router/main/router.bin | grep -c 'OK: layout matches')" "1"
+# blobfmt checks the layout offline; blobguard checks that r_parse2 — the parser
+# the FIRMWARE runs — REFUSES a corrupt blob rather than misreading it. Both of
+# the gaps it covers were live: an unsorted exception slice returned a silently
+# wrong dot, and a blob short by one byte passed everything else.
+c/bin/blobguard esp32_router/main/router.bin >/dev/null 2>&1
+chk "blobguard: r_parse2 refuses every corruption" "$?" "0"
 c/bin/eval esp32_router/main/router.bin data/validation.json >/dev/null 2>&1
 chk "blob verifier (parity + index integrity)" "$?" "0"
 # Capture cmp's status IMMEDIATELY. This check silently passed for a while

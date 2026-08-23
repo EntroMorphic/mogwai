@@ -202,15 +202,28 @@ static int64_t reps(const char *label, int cores, uint32_t n) {
  *
  * Copy N vectors into DRAM and scan the same data both ways. */
 static void dram_vs_flash(void) {
-    const uint32_t N = 1800;                 /* 1800 * 64B = 115 KB, fits DRAM */
+    const uint32_t N = 1800;                 /* 1800 * 32B = 56 KB of masks */
     rvec *D = malloc((size_t)N * sizeof(rvec));
     if (!D) { printf("  DRAM alloc failed\n"); return; }
     memcpy(D, TI, (size_t)N * sizeof(rvec));
     uint16_t *A = malloc(N * 2);
     memcpy(A, IX.act, N * 2);
+    /* The sidecars must move too, or this measures nothing it claims to.
+       v2 scoring reads eoff[i] for EVERY vector to size the exception slice; if
+       that stays flash-mapped while the masks are in DRAM, the "DRAM" arm still
+       takes a flash hit per vector and the comparison is a chimera. The first
+       version of this conversion did exactly that and reported 2.23x where the
+       v1 measurement said 2.58x — the effect had not shrunk, the test had. */
+    uint32_t nexN = IX.eoff[N];
+    uint16_t *EO = malloc(((size_t)N + 1) * 2);
+    uint8_t  *EP = malloc(nexN ? nexN : 1);
+    if (!EO || !EP) { printf("  DRAM alloc failed (sidecars)\n"); free(D); free(A); return; }
+    memcpy(EO, IX.eoff, ((size_t)N + 1) * 2);
+    memcpy(EP, IX.epos, nexN);
     printf("\n  === where does the byte cost actually live? ===\n");
-    printf("    heap free: %u B, copied %u vectors (%u KB) into DRAM\n",
-           (unsigned)esp_get_free_heap_size(), (unsigned)N, (unsigned)(N*RMASKB/1024));
+    printf("    heap free: %u B, copied %u vectors (%u KB masks + %u B sidecars)\n",
+           (unsigned)esp_get_free_heap_size(), (unsigned)N,
+           (unsigned)(N * RMASKB / 1024), (unsigned)(((N + 1) * 2) + nexN));
     tvec q; t_encode(&R, "turn off the light in the bathroom", &q);
     int aa = t_active(&q);
     uint8_t Eq[RD]; int nq = t_exceptions(&q, Eq);
@@ -222,7 +235,8 @@ static void dram_vs_flash(void) {
         tf = esp_timer_get_time() - t0;
         t0 = esp_timer_get_time();
         for (int r = 0; r < 4; r++) for (uint32_t i = 0; i < N; i++)
-            sink += t_score_ex(q.m, Eq, nq, D[i].w, BEP(i), BEN(i), aa, A[i]);
+            sink += t_score_ex(q.m, Eq, nq, D[i].w, EP + EO[i],
+                               (int)(EO[i+1] - EO[i]), aa, A[i]);
         td = esp_timer_get_time() - t0;
         (void)sink;
         printf("    rep %d  flash-mapped %5lld ns/vec   DRAM %5lld ns/vec   speedup %.2fx\n",
@@ -238,7 +252,7 @@ static void dram_vs_flash(void) {
     int64_t td2 = esp_timer_get_time() - t0;
     printf("    touch-only   flash %5lld ns/vec   DRAM %5lld ns/vec   speedup %.2fx\n",
            tf2 * 1000 / (4 * N), td2 * 1000 / (4 * N), (double)tf2 / td2);
-    free(D); free(A);
+    free(D); free(A); free(EO); free(EP);
 }
 /* If per-vector flash reads cost ~40 cycles of MMU overhead each, BULK copies
  * should amortise it. That decides whether DMA double-buffering can work:

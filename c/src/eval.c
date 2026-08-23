@@ -43,7 +43,9 @@ static int load_blob(const char *path) {
         static const char *why[] = { "", "bad magic or dim (a v1 blob? rebuild)",
                                      "truncated / extent overflow",
                                      "exception offsets not ascending",
-                                     "exception position out of range" };
+                                     "exception position out of range",
+                                     "exception slice not ascending (or duplicated)",
+                                     "reference records overrun the blob" };
         fprintf(stderr, "  blob rejected: %s\n", why[-rc]);
         return 1;
     }

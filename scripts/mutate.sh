@@ -131,6 +131,14 @@ run_mut "doc check count goes stale"         "sed -i '' -E 's/[0-9]+ checks/40 c
 # --- checks added later that no mutation reached ---------------------------
 # Coverage is not retroactive: every check added after this file was written
 # arrived UNCOVERED. These five close that gap.
+# The v2 exception format has two invariants that fail SILENTLY when dropped —
+# no crash, no error, just a wrong score or a read past the blob. Both were live
+# gaps found by red-teaming, so both get a mutation.
+run_mut "slice-ordering guard removed" \
+  "sed -i '' 's|            if (ix->epos\\[k - 1\\] >= ix->epos\\[k\\]) return -5;|            if (0) return -5;|' c/src/router.c"
+run_mut "reference-record bound removed" \
+  "sed -i '' 's|            if ((size_t)(rp - base) + (size_t)len + 5 > have) return -6;|            if (0) return -6;|' c/src/router.c"
+
 run_mut "blob vector count changed"          "printf '\\377' | dd of=esp32_router/main/router.bin bs=1 seek=9 conv=notrunc"
 run_mut "a stray blob gets tracked"          "git add -f archive/superseded_blobs/router-d512-1805441.bin"
 run_mut "product firmware untracked"         "git rm -q --cached esp32_router/main/product.c"

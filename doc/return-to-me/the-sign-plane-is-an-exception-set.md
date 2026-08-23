@@ -201,3 +201,82 @@ alphabet; Zipf is closer to the language skew being reached for, and neither is
 needed. Measuring the actual distribution told us the coding model, and the
 data turned out to be a sparse binary mask with a tiny exception set. The "50%"
 was very nearly right, for a completely different reason.
+
+---
+
+# Red-team of the shipped v2 format (2026-08-23)
+
+Three findings, two of them live gaps in code that had already passed 71 checks,
+`PARITY EXACT` on hardware, and 5.86M host comparisons.
+
+## 1. An unsorted exception slice was accepted, and silently misrouted
+
+`t_dot_ex` **merges** the two exception lists, which is only correct if both
+ascend. `r_parse2` validated that the *offsets* ascend but never that the
+positions *within* a slice do. Reversing one slice on a real blob:
+
+    dot with ASCENDING slice : 6      (v1 ground truth: 6)
+    dot with DESCENDING slice: 2      DIVERGED
+    score ascending 109, descending 36
+
+No crash, no error, no other check disturbed — just wrong routing. `mkblob`
+always emits ascending order, so this was never live in a blob we produced; it
+was live in the *parser*, which is the thing whose job is to not trust the blob.
+
+Fixed with a strict `>` walk (which also rejects duplicate positions, since a
+duplicate would double-count). O(nex) = 1,539 at boot.
+
+## 2. A blob short by ONE byte was accepted
+
+`r_parse2` bounded every section up to `nref` and then handed out `refp` without
+ever walking the reference records. `main.c`'s parity loop walks them, so a blob
+truncated inside the final record read past the mapped region. Every other
+check passed.
+
+Fixed by walking the records and bounding each one. Deliberately checked by
+**overrun, not exact length**: requiring the walk to land precisely on `have`
+would also reject any padding after `_binary_router_bin_end`, and a false
+rejection means the device does not boot. The per-record bound still catches the
+off-by-one, because a truncated final record cannot satisfy `len+5`. Verified by
+reflashing: the board still boots.
+
+## 3. I made a chimera out of the DRAM-vs-flash benchmark
+
+Converting `main.c` to v2, I copied the masks into DRAM but left `eoff` and
+`epos` flash-mapped — and v2 scoring reads `eoff[i]` for **every** vector. So the
+"DRAM" arm still took a flash hit per vector:
+
+    contaminated : flash 2474  DRAM 1107 ns/vec   2.23x
+    corrected    : flash 2474  DRAM 1064 ns/vec   2.33x
+
+Both arms are faster than v1's 4168/1617; the *ratio* fell from 2.58x because
+the record halved, so fixed per-access cost dominates more. The danger was
+reading 2.23x as "the flash penalty shrank" when the test had changed, not the
+hardware. Same failure mode as the chimera comparison in the WiFi work.
+
+## What now guards this
+
+`c/test/blobguard.c` — a unit test for `r_parse2`, the parser the **firmware**
+runs, as distinct from `blobfmt` which checks the layout offline. Eleven cases:
+bad magic, wrong dim, zero and oversized `n_index`, truncation at every scale,
+the off-by-one, non-ascending offsets, unsorted and duplicated slices, and
+reference records past the end.
+
+Proven load-bearing by removing each validation and watching it fail:
+
+    slice-ordering guard removed   -> 2 failures
+    reference-record bound removed -> 2 failures
+
+Both are now permanent entries in `scripts/mutate.sh`.
+
+## Still not covered
+
+- **The IRAM-only path is now dead in practice.** v2 fits entirely in DRAM, so
+  `iram_only_malloc` never fires on the shipped index and that code is no longer
+  exercised by any run. It is still correct as far as anything shows, which is
+  not the same as tested.
+- **The WiFi latency figure has no associated radio.** 4.3 ms was measured with
+  the stack initialised and retrying association. Active RX/TX contention is not
+  in that number.
+- **`r_load`/`r_free`** are declared in `router.h` and neither defined nor
+  called. Dead declarations, noticed and not yet removed.
