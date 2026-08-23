@@ -84,6 +84,15 @@ rm -f /tmp/_regress.bin
 # residency. Pin the set; the numbers behind each are in the file itself.
 chk "sdkconfig.wifi pins the measured settings" \
     "$(grep -cE '^(CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192|CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=2048|CONFIG_ESP_WIFI_IRAM_OPT=n|CONFIG_ESP_WIFI_RX_IRAM_OPT=n)$' esp32_router/sdkconfig.wifi)" "4"
+# METHOD 19, enforced rather than remembered. Every decision-policy experiment
+# must compute its own baseline and hand it to control_or_die(), which aborts
+# before printing a single treatment number if it does not reproduce the
+# product. This check asserts the enforcement is WIRED; mutate.sh asserts it can
+# still fire. The rule was violated twice by hand before it was automated - once
+# inflating a claimed improvement from +3 to +38 commands.
+chk "decision experiments assert their control" \
+    "$(( $(c/bin/compare --ship --abstain 2>&1 | grep -c 'reproduces the product') + \
+         $(c/bin/compare --ship --corrob  2>&1 | grep -c 'reproduces the product') ))" "2"
 chk "firmware CMakeLists defines TPOPCNT and RD" \
     "$(grep -cE 'target_compile_definitions\(\$\{COMPONENT_LIB\} PRIVATE (TPOPCNT|RD)=' esp32_router/main/CMakeLists.txt)" "2"
 chk "product firmware source tracked" "$([ -f esp32_router/main/product.c ] && git ls-files esp32_router/main/product.c | wc -l | tr -d ' ')" "1"

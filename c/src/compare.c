@@ -28,6 +28,8 @@ static int DUMPERR = 0;   /* --errs: print the actual misclassified utterances *
 static int DIRDUMP = 0;   /* --dirdump: per-item score/pred/truth, for direction analysis */
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
 static prune_opt PRUNE = {0,0,0,0,0,0};
+/* METHOD 19 enforcement; defined below, used by every decision-policy experiment */
+static void control_or_die(const char *what, int fa, int wa, int ms, int ok, int th);
 static cue_t CUE; static int USECUE = 0;   /* --cue: index-derived hard word cues */
 static int CHANNELS = 0;   /* --channels: word vs n-gram error overlap */
 static int SELDUMP = 0;   /* --seldump: per-item signals a selector could use */
@@ -404,7 +406,20 @@ static void abstain(void) {
 
     printf("\n  abstention rule: accept iff P - N > margin\n");
     printf("  P = best command exemplar, N = best negative exemplar\n");
-    printf("  shipped rule for reference: fa=6 wa=13 missed=14 iot_ok=165 (th=136)\n\n");
+    {   /* computed, not asserted from memory: the previous version of this line
+           was a hardcoded string that was never evaluated against anything. */
+        int bfa=0,bwa=0,bms=0,bok=0;
+        for (int i = 0; i < V_n; i++) {
+            const char *p = (P[i] > RSHIP_TH && P[i] - N[i] > 0) ? R.names[C[i]] : "none";
+            int gn = !strcmp(V_l[i], "none");
+            if (!gn && !strcmp(p, V_l[i])) bok++;
+            if (!strcmp(p, V_l[i])) continue;
+            if (gn) bfa++; else if (!strcmp(p, "none")) bms++; else bwa++;
+        }
+        control_or_die("abstain", bfa, bwa, bms, bok, RSHIP_TH);
+    }
+    printf("\n");
+
     printf("  %7s %5s %5s %8s %8s\n", "margin", "fa", "wa", "missed", "iot_ok");
     for (int m = -40; m <= 80; m += 5) {
         int fa=0,wa=0,ms=0,ok=0;
@@ -807,8 +822,19 @@ static void corrob(void) {
     printf("  rescue a REJECTED command only when the word prior independently\n");
     printf("  names the SAME class the router already chose. No class override,\n");
     printf("  no rescue of a \"none\" verdict.\n\n");
+    {   int bfa=0,bwa=0,bms=0,bok=0;
+        for (int i = 0; i < V_n; i++) {
+            const char *p = (P[i] > th && P[i] > Nn[i]) ? R.names[C[i]] : "none";
+            int gn = !strcmp(V_l[i], "none");
+            if (!gn && !strcmp(p, V_l[i])) bok++;
+            if (!strcmp(p, V_l[i])) continue;
+            if (gn) bfa++; else if (!strcmp(p, "none")) bms++; else bwa++;
+        }
+        control_or_die("corrob", bfa, bwa, bms, bok, th);
+    }
     printf("  %-8s %-8s %5s %5s %8s %8s   %s\n",
            "band", "prmargin", "fa", "wa", "missed", "iot_ok", "note");
+
 
     const int Ds[7] = {0, 8, 16, 24, 32, 48, 1000};
     const int Ms[3] = {0, 64, 128};
@@ -873,6 +899,39 @@ static void corrob(void) {
     }
 
     free(P); free(Nn); free(C); free(PV); free(PM);
+}
+
+/* ---- METHOD 19, enforced ---------------------------------------------------
+ * "Does the baseline reproduce the product?" cost an order-of-magnitude
+ * inflated claim once (+38 commands instead of +3) and was violated a second
+ * time three experiments later, in the same way: thresholding the best positive
+ * while ignoring whether a negative outranked it, which silently deletes the
+ * none-check the router already has.
+ *
+ * Twice is not a discipline problem. So the rule is no longer a rule:
+ * a comparison CANNOT EXIST unless its control is valid. Any experiment that
+ * reports a treatment must first hand its own computed baseline to this
+ * function, and if the baseline does not reproduce the shipped numbers the
+ * process exits before a single treatment figure is printed. */
+static void control_or_die(const char *what, int fa, int wa, int ms, int ok, int th) {
+    if (FIXTH != RSHIP_TH || PRUNE.neg_top != RSHIP_NEGTOP || PRUNE.neg_bound
+        || PRUNE.neg_halo || PRUNE.cnn || PRUNE.dup || PRUNE.neg_k > 1) {
+        printf("  [control] not the shipped configuration — assertion skipped\n");
+        return;
+    }
+    if (fa == 6 && wa == 13 && ms == 14 && ok == 165 && th == RSHIP_TH) {
+        printf("  [control] %s baseline reproduces the product: "
+               "fa=6 wa=13 missed=14 iot_ok=165 th=%d\n", what, th);
+        return;
+    }
+    fprintf(stderr,
+        "\n  *** CONTROL FAILED (%s) — METHOD 19 ***\n"
+        "      this experiment's baseline gave  fa=%d wa=%d missed=%d ok=%d th=%d\n"
+        "      the shipped product gives        fa=6 wa=13 missed=14 ok=165 th=%d\n"
+        "      The control does not reproduce the product, so any treatment\n"
+        "      number computed against it is meaningless. Aborting before one\n"
+        "      is printed.\n\n", what, fa, wa, ms, ok, th, RSHIP_TH);
+    exit(2);
 }
 
 typedef struct{int fa,wa,ms,iok,in;} TX;

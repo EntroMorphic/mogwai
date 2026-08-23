@@ -53,6 +53,10 @@ run_mut "blobfmt stops rejecting bad blobs"  "sed -i '' 's|if (o != size) { prin
 # them leaves it rejected and the check unmoved. Only removing all three shows
 # the check can fail. Trailing bytes reach just the size-accounting guard, which
 # is why that separate control exists.
+# METHOD 19 was violated twice by hand before it was made structural. The
+# mutation reintroduces the exact error: threshold the best POSITIVE and ignore
+# whether a negative outranked it, silently deleting the none-check.
+run_mut "experiment control silently wrong" "sed -i '' 's|P\\[i\\] > th && P\\[i\\] > Nn\\[i\\]|P[i] > th|' c/src/compare.c"
 run_mut "blobfmt stops validating at all"    "sed -i '' -e 's|if (o + 1 > size) { printf(\"  FAIL: ran off the end|if (0) { printf(\"  FAIL: ran off the end|' -e 's|if (o + len + 5 > size) { printf(\"  FAIL: record %u overruns EOF|if (0) { printf(\"  FAIL: record %u overruns EOF|' -e 's|if (o != size) { printf(\"  FAIL: %ld bytes unaccounted|if (0) { printf(\"  FAIL: %ld bytes unaccounted|' c/test/blobfmt.c"
 # The negative control failing OPEN is the failure that actually happened, twice.
 # This reproduces it: the "truncated" file becomes a whole valid blob.
