@@ -125,3 +125,9 @@ product refuses to actuate the none class
 no remote points at the upstream clone
 product reports both rejection causes
 no remote points at the upstream clone
+no remote points at the upstream clone
+budget log reconciles with RESULTS.tsv
+firmware CMakeLists defines TPOPCNT and RD
+no remote points at the upstream clone
+sdkconfig.wifi pins the measured settings
+no remote points at the upstream clone

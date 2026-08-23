@@ -180,3 +180,12 @@
 === product loses a rejection cause
     product reports both rejection causes
     no remote points at the upstream clone
+=== budget log gains a phantom read
+    no remote points at the upstream clone
+    budget log reconciles with RESULTS.tsv
+=== firmware loses TPOPCNT definition
+    firmware CMakeLists defines TPOPCNT and RD
+    no remote points at the upstream clone
+=== sdkconfig.wifi reverts IRAM_OPT
+    sdkconfig.wifi pins the measured settings
+    no remote points at the upstream clone
