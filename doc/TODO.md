@@ -17,17 +17,6 @@ are specific to LX6 with no SIMD; S3/C6 would likely reorder them.
 
 ## P2 — worth doing, nothing blocked on it
 
-### P2-1 · CLOSED — the held-out cost of the 240 KB index is measured
-Test evaluation #6, budget entry 8, at `73a97fc`:
-
-    TEST baseline (656 KB)   recall 84.1% ±2.5   fa= 8   wa=15   missed=20
-    TEST SHIPPED  (240 KB)   recall 84.1% ±2.5   fa=12   wa=15   missed=20
-
-Four of four pre-registered predictions held and no falsifier fired. `missed` and
-`wa` are bit-identical to the unpruned index on held-out data, so the invariance
-the trade rested on is not dev-specific. The whole price is four extra false
-actuations in 2754 non-commands. The 240 KB index stands.
-
 ### P2-2 · `.git` is large, and will stay that way — WON'T FIX
 Python-era `.npy`/`.npz` blobs and seven copies of a 5.8 MB
 `compile_commands.json` remain in history. Gitignoring stopped the growth; only
@@ -55,6 +44,11 @@ near-duplicate explanation was tested and refuted. Every change therefore costs
 a budget unit to evaluate. No action known — recorded so it is not rediscovered.
 
 ## Closed
+- **P2-1 · The held-out cost of the 240 KB index.** Test evaluation #6, budget
+  entry 8: `recall 84.1% ±2.5, fa 12, wa 15, missed 20` against the unpruned
+  baseline's `84.1%, fa 8, wa 15, missed 20`. Four of four pre-registered
+  predictions held, no falsifier fired, `missed` and `wa` bit-identical. The
+  240 KB index stands.
 
 - **P0-1 · Three commits existed only on one disk.** The upstream `.git` and its
   own bundle were co-located on a disk at 95% capacity, and three commits were
