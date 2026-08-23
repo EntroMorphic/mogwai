@@ -56,6 +56,7 @@ not a discipline anyone has to remember.
 
 **Choosing the operating point**
 - [Raising the threshold does not buy precision](#raising-the-threshold-for-precision--the-knob-does-not-do-what-i-claimed)
+  - [The same knob on the shipped index](#the-same-knob-on-the-shipped-index--and-where-fa-actually-comes-from) — `fa=0` costs 31 points of recall; polarity is 13/13 clean, argmax owns everything
   - [Correcting my own claim](#correcting-my-own-claim)
   - [What the residual errors actually are](#what-the-residual-errors-actually-are) — the corpus ceiling
 - [Shipped threshold moved 136 → 126](#shipped-threshold-moved-136---126) — later reverted, see #3
@@ -686,6 +687,12 @@ made afterwards were re-derived on dev, but "never observed" is a stronger claim
 than the history supports. Budget: 2 used.
 
 ## Raising the threshold for precision — the knob does not do what I claimed
+
+> **The curve in this section is the UNPRUNED 656 KB index**, which has `fa=1`.
+> The shipped index is 240 KB with `fa=6`, so its curve is different and the
+> "flat at 1" observation below does not describe it. The conclusion survives on
+> the shipped index for a different reason — see
+> [the same knob on the shipped index](#the-same-knob-on-the-shipped-index--and-where-fa-actually-comes-from).
 
 Split `fa` (fires on a NON-command — unbidden actuation) from `wa` (acts wrongly
 on a genuine command). Collapsing them into "wrong" hid the safety-critical one.
@@ -1931,3 +1938,100 @@ A held session does not return it, so the arithmetic changes:
 So the one-connection design is the right one on memory grounds as well as
 security grounds, and OTA is the case that breaks it: tear the session down
 before starting an update.
+
+## The same knob on the shipped index — and where fa actually comes from
+
+The curve above was measured on the unpruned 656 KB index, where `fa=1` and is
+flat from 136 to 184. The shipped 240 KB index has `fa=6`, so the question
+deserved re-asking: with six false actuations instead of one, several of them
+sitting just above the bar, does raising the threshold now buy precision?
+
+Measured on the shipped configuration (`compare --ship --curve`, dev, 192 IoT /
+1335 non-commands). `th=136` reproduces the shipped row exactly, so the curve and
+the headline numbers agree:
+
+     th   fa   wa   missed   iot_ok
+    136    6   13    14   165
+    138    4   13    15   164
+    140    3   13    17   162
+    142    3   13    18   161
+    144    3   12    20   160
+    146    3   10    23   159
+    148    3   10    25   157
+    150    2   10    27   155
+    152    2   10    29   153
+    154    2   10    30   152
+    156    2   10    35   147
+    158    2   10    36   146
+    160    2   10    37   145
+    162    2    8    40   144
+    ...
+    186    1    2    83   107
+    188    0    1    86   105
+    190    0    1    91   100
+    192    0    0    98    94
+
+**`fa=0` requires `th=188`, where `iot_ok` falls from 165 to 105 — recall 85.9%
+to 54.7%.** The conclusion holds, for a different reason than before: not
+because `fa` is flat, but because it only reaches zero where recall collapses.
+Thirty-one points of recall to remove six events in 1335. The threshold is still
+the wrong knob.
+
+**One cheap trade is visible and has not been taken.** 136 -> 140 halves `fa`
+(6 -> 3) for three IoT items, 165 -> 162, about 1.6 points. That is a far better
+exchange rate than anything further along the curve. It is dev-only, and
+[test evaluation #3](#test-evaluation-3--result-the-dev-gain-did-not-transfer-126-reverted-to-136)
+is the standing warning that a dev threshold gain need not transfer — 126 looked
+better on dev too. Recorded as a candidate, not a recommendation.
+
+### Which stage produces which error
+
+`route()` is argmax, then three gates: threshold, label lookup with polarity,
+and the `none` check. Attributing the errors:
+
+- **`fa`** — a non-command where argmax lands on a POSITIVE and clears
+  threshold. Both must happen.
+- **`missed`** — an IoT item where argmax lands on a NEGATIVE (-> "none" ->
+  reject), or fails threshold.
+- **`wa`** — argmax lands on the wrong positive, **or** argmax was right and
+  polarity flipped it.
+
+That last one is worth separating, because polarity swaps only *within* a
+sibling pair (`on`<->`off`, `up`<->`dim`). Inspecting all 13 dev `wa` at th=136:
+
+    said lightup    truth lightchange    said lightdim  truth lightoff
+    said lightchange truth lightup       said wemo_off  truth hue_lightoff
+    said lightoff   truth lightup        said lighton   truth lightdim
+    said lightdim   truth lightchange    said lightup   truth lighton
+    said lightdim   truth lightoff       said lightdim  truth lightchange
+    said lightoff   truth lightchange    said hue_lighton truth wemo_on
+    said lightup    truth lightoff
+
+**Not one is a same-pair error.** Every one is cross-family (`off` said as
+`dim`) or cross-device. A cross-family error cannot be produced or repaired by
+polarity, so the cue system is 13/13 clean on the errors that remain. **Argmax
+decides essentially all of it.**
+
+### `fa` is six nameable pairs, not a diffuse property
+
+    188  iot_coffee     "make me happy"
+    169  iot_cleaning   "can you please put on music"
+    149  iot_cleaning   "can you put this on facebook"
+    140  hue_lightoff   "i need you to put walk the dog on my list to do"
+    138  iot_coffee     "i would like to talk about it"
+    137  iot_cleaning   "please restart the handmaid's tale"
+
+**Four of six are "put … on".** The encoder keys on `on` and `put` n-grams that
+"put on music" shares with "turn on the light". That is a representation
+collision, not a confidence failure — which is exactly why the threshold cannot
+fix it, and why five of the six sit within 33 points of the bar.
+
+The actionable form of this: negatives need no labels, so they can be mined from
+any text source, and mining a *phrasing family* ("put on {media, list, social}")
+covers the observed collision directly rather than hoping blind negative-count
+scaling reaches it. The sweep already showed `fa` is monotone in negative count
+and that negatives never cost `missed` or `wa`; this says where to spend them.
+
+Two caveats. Mining against the dev errors themselves would be fitting to dev —
+the legitimate version mines the phrasing family from an independent corpus.
+And verifying any of it costs a budget unit, of which few remain.
