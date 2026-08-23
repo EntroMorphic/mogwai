@@ -750,8 +750,17 @@ error. Chasing 100% here would be fitting the labeller, not the task.
 
 ## Shipped threshold moved 136 -> 126
 
+> **REVERTED. This section is history, not current state.** 126 shipped for one
+> day and was reverted to 136 by
+> [test evaluation #3](#test-evaluation-3--result-the-dev-gain-did-not-transfer-126-reverted-to-136),
+> which found the dev gain did not transfer. **`RSHIP_TH` is 136.** Everything
+> below is preserved as written, because the reasoning is the point and this
+> repo archives rather than edits — but three statements in it are now false and
+> are marked inline.
+
+
     th=136 (tune's choice)   85.9% +-2.5   fa=1  wa=13  missed=14
-    th=126 (shipped)         88.0% +-2.3   fa=3  wa=15  missed= 8
+    th=126 (shipped AT THE TIME)  88.0% +-2.3   fa=3  wa=15  missed= 8
 
 +2.1 points accuracy and 6 fewer missed commands, for 2 additional unbidden
 actuations — 1 -> 3 of 1335 negatives, 0.07% -> 0.22%.
@@ -766,13 +775,19 @@ exporter) and `compare --ship` (the harness). Previously the threshold was
 hardcoded in `mkblob` alone, which is exactly how the cnn+2 blob shipped at the
 wrong operating point with PARITY still passing.
 
-**Hardware verified:** blob header `threshold=126`, PARITY EXACT (64/64 class and
+**Hardware verified** (of its time; the shipped blob header now reads
+`threshold=136`)**:** blob header `threshold=126`, PARITY EXACT (64/64 class and
 score), 1-core 43498 us / 2-core 26670 us — latency unchanged, as expected, since
 the threshold is a comparison applied after the scan.
 
 **Scope, stated plainly: 126 was chosen on DEV.** The held-out test number at
 this threshold is unmeasured, as is the test fa/wa split. The last measured test
 figure (84.1% +-2.5) is at th=136 and does NOT describe the shipped config.
+
+> No longer true, twice over: 136 was restored, and
+> [test evaluation #6](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted)
+> measured the shipped 240 KB index directly at 84.1% +-2.5, fa 12, wa 15,
+> missed 20.
 
 ## The accuracy metric is blind to false actuations — read every number above with this in mind
 

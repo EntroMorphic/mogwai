@@ -1,7 +1,8 @@
 # Quickstart
 
 Two dependencies on the host: a C compiler and `curl`. No package manager, no
-lockfile, no virtualenv. A clone is 8 MB.
+lockfile, no virtualenv. The tracked tree is 2.6 MB; a full clone is ~85 MB,
+nearly all of it history (see doc/TODO.md P2-2).
 
 ## 60 seconds
 

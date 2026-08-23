@@ -203,7 +203,7 @@ LIVE=$((P + F + S + 1))   # +1 for this check itself; skipped still count as che
 # `sort -u | head -1` took the LOWEST number rather than requiring agreement, so
 # a README quoting 55, 48 and 61 in three places passed. It did exactly that.
 # doc/METHOD.md is excluded on purpose - it narrates past counts in past tense.
-DOCN=$(grep -ohE '[0-9]+[- ]checks?\b' README.md doc/QUICKSTART.md esp32_router/README.md \
+DOCN=$(grep -ohE '[0-9]+[- ]checks?\b' README.md doc/QUICKSTART.md esp32_router/README.md .github/workflows/regress.yml \
        | grep -oE '^[0-9]+' | sort -u)
 chk "docs quote the live check count" "$(echo $DOCN)" "$LIVE"
 
