@@ -112,6 +112,20 @@ chk "blob dim matches router.h RD" "$(od -An -tu4 -j4 -N4 esp32_router/main/rout
 # operating point nothing measured.
 chk "blob vectors 3840 (30 SRAM chunks)" "$(od -An -tu4 -j8 -N4 esp32_router/main/router.bin | tr -d ' ')" "3840"
 chk "blob threshold matches router.h RSHIP_TH" "$(od -An -tu4 -j16 -N4 esp32_router/main/router.bin | tr -d ' ')" "$(grep -E '^#define RSHIP_TH\s' c/src/router.h | grep -oE '[0-9]+')"
+
+# METHOD 19, generalised: if correctness depends on two files agreeing, do not
+# ask a human to keep them agreeing. BLOB_FORMAT.md quotes constants out of
+# router.h, and a stale `RSHIP_TH=126` sat there against the header's 136 until
+# it was caught by eye during an unrelated review. Derive it instead.
+bf_bad=""
+while IFS= read -r pair; do
+    nm=${pair%%=*}; vl=${pair#*=}
+    def=$(grep -E "^#define[[:space:]]+${nm}[[:space:]]" c/src/router.h | awk '{print $3}')
+    [ -z "$def" ] && continue
+    def=${def%%[uUlL]*}
+    if [ $((def)) -ne $((vl)) ]; then bf_bad="$bf_bad ${nm}(doc=${vl},hdr=${def})"; fi
+done < <(grep -oE '`[A-Z][A-Z0-9_]*=(0x)?[0-9a-fA-F]+`' doc/BLOB_FORMAT.md | tr -d '`' | sort -u)
+chk "BLOB_FORMAT.md constants match router.h" "${bf_bad:-none}" "none"
 chk "blob reproducible byte-identical" "$BLOB_RC" "0"
 
 echo "=== SHIPPED CONFIG (ROW: 1=ROW 2=split 3=variant 4=acc 5=se 6=fa 7=wa 8=missed 9=kb 10=th 11=n) ==="

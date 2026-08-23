@@ -525,6 +525,198 @@ static void signplane(void) {
 }
 
 
+/* --exstream: the sign plane is not 122,880 arbitrary bits, it is 1,539
+ * exceptions to a rule that holds 99.84% of the time.  Represent it as what it
+ * is: the 32-byte active mask, plus a stream of uint8 dimension positions where
+ * the sign is BELOW centre.  `+1` becomes the implicit case.
+ *
+ * This is lossless, so it does NOT ask whether the sign plane matters -- a
+ * question --condcentre already answered expensively (65.6% vs 85.9%, twenty
+ * points, because the asymmetry is a length signal).  A lossless re-layout
+ * sidesteps the whole argument.
+ *
+ * The algebra.  With s = m & ~E and sign bits clean outside the mask (verified:
+ * zero words with s & ~m), inside `both` we have q.s = ~Eq and b.s = ~Eb, so
+ * diff there is Eq ^ Eb.  Hence
+ *
+ *     disagree = |Eq & bm| + |Eb & qm| - 2*|Eq & Eb|
+ *
+ * which is exact for every input -- an identity, not an approximation.  Eight
+ * popcounts instead of sixteen, plus a few bit tests on sets that are empty for
+ * 89.3% of vectors.
+ *
+ * Score identity follows by construction: t_score is a pure function of
+ * (dot, aa, ab), and aa/ab depend only on the mask, which is preserved
+ * byte-for-byte.  So proving dot identity proves routing identity. */
+static int EXSTREAM = 0;
+
+
+static inline int ex_dot(const uint32_t *qm, const uint8_t *Eq, int nq,
+                         const uint32_t *bm, const uint8_t *Eb, int nb) {
+    int both = 0;
+    for (int i = 0; i < RWORDS; i++) both += __builtin_popcount(qm[i] & bm[i]);
+    int dis = 0;
+    for (int k = 0; k < nq; k++) { int d = Eq[k]; if ((bm[d>>5] >> (d&31)) & 1) dis++; }
+    for (int k = 0; k < nb; k++) { int d = Eb[k]; if ((qm[d>>5] >> (d&31)) & 1) dis++; }
+    for (int k = 0; k < nq; k++)
+        for (int l = 0; l < nb; l++) if (Eq[k] == Eb[l]) dis -= 2;
+    return both - 2 * dis;
+}
+
+static void exstream(void) {
+    _Static_assert(RD <= 256, "exception positions are uint8; RD must be <= 256");
+
+    /* build the exception representation from the shipped index */
+    uint8_t  *EP  = malloc((size_t)R.n_index * RD);      /* generous, trimmed below */
+    uint32_t *EO  = malloc(((size_t)R.n_index + 1) * sizeof(uint32_t));
+    uint32_t  ne  = 0;
+    int hist[9]; memset(hist, 0, sizeof hist);
+    int maxex = 0, vec_with = 0;
+    for (uint32_t j = 0; j < R.n_index; j++) {
+        EO[j] = ne;
+        int c = 0;
+        for (int d = 0; d < RD; d++) {
+            int m = (TI[j].m[d>>5] >> (d&31)) & 1;
+            int s = (TI[j].s[d>>5] >> (d&31)) & 1;
+            if (m && !s) { EP[ne++] = (uint8_t)d; c++; }
+        }
+        if (c) vec_with++;
+        if (c > maxex) maxex = c;
+        hist[c > 8 ? 8 : c]++;
+    }
+    EO[R.n_index] = ne;
+
+    printf("\n  === exception distribution over the shipped index ===\n");
+    printf("  total exceptions      : %u\n", ne);
+    printf("  vectors with >=1      : %d of %u (%.1f%%)\n",
+           vec_with, R.n_index, 100.0*vec_with/R.n_index);
+    printf("  max in one vector     : %d\n", maxex);
+    printf("\n  exceptions  vectors\n");
+    for (int i = 0; i < 9; i++)
+        if (hist[i]) printf("   %s%d %10d\n", i==8?">=":"  ", i, hist[i]);
+
+    /* ACCEPTANCE TEST: every dev query x every index vector, dot must be equal */
+    printf("\n  === bit-identity: every DEV query x every index vector ===\n");
+    uint64_t pairs = 0, bad = 0;
+    int first_bad = -1;
+    for (int i = 0; i < V_n; i++) {
+        tvec q; t_encode(&R, V_t[i], &q);
+        uint8_t Eq[RD]; int nq = 0;
+        for (int d = 0; d < RD; d++) {
+            int m = (q.m[d>>5] >> (d&31)) & 1, s = (q.s[d>>5] >> (d&31)) & 1;
+            if (m && !s) Eq[nq++] = (uint8_t)d;
+        }
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            int ref = t_dot(&q, &TI[j]);
+            int mine = ex_dot(q.m, Eq, nq, TI[j].m, EP + EO[j], (int)(EO[j+1]-EO[j]));
+            pairs++;
+            if (ref != mine) { if (first_bad < 0) first_bad = (int)j; bad++; }
+        }
+    }
+    printf("  pairs compared        : %llu\n", (unsigned long long)pairs);
+    printf("  dot mismatches        : %llu\n", (unsigned long long)bad);
+    if (bad) { printf("  *** NOT BIT-IDENTICAL (first at index %d) ***\n", first_bad); exit(2); }
+    printf("  => IDENTICAL. Score identity follows: t_score is a pure function of\n");
+    printf("     (dot, aa, ab), and aa/ab read only the mask, which is preserved.\n");
+
+    /* byte accounting */
+    size_t vec_now = (size_t)R.n_index * sizeof(tvec);
+    size_t masks   = (size_t)R.n_index * RD / 8;
+    size_t seq     = masks + R.n_index + ne;                       /* count byte  */
+    size_t rnd     = masks + 2*((size_t)R.n_index + 1) + ne;       /* u16 offsets */
+    long   file    = 261036;
+    /* Coverage of the correction term.  A cross product that never makes
+     * |Eq & Eb| nonzero would leave the -2*inter branch unexercised, and the
+     * "0 mismatches" above would prove nothing about it. */
+    printf("\n  === did the test exercise the correction term? ===\n");
+    {
+        uint64_t q_has = 0, b_has = 0, both_has = 0, inter_nz = 0, inter_tot = 0;
+        for (int i = 0; i < V_n; i++) {
+            tvec q; t_encode(&R, V_t[i], &q);
+            uint8_t Eq[RD]; int nq = 0;
+            for (int d = 0; d < RD; d++) {
+                int m = (q.m[d>>5] >> (d&31)) & 1, s = (q.s[d>>5] >> (d&31)) & 1;
+                if (m && !s) Eq[nq++] = (uint8_t)d;
+            }
+            for (uint32_t j = 0; j < R.n_index; j++) {
+                int nb = (int)(EO[j+1] - EO[j]);
+                const uint8_t *Eb = EP + EO[j];
+                if (nq) q_has++;
+                if (nb) b_has++;
+                if (nq && nb) {
+                    both_has++;
+                    int in = 0;
+                    for (int k = 0; k < nq; k++)
+                        for (int l = 0; l < nb; l++) if (Eq[k] == Eb[l]) in++;
+                    if (in) { inter_nz++; inter_tot += in; }
+                }
+            }
+        }
+        printf("  pairs with query exceptions   : %llu\n", (unsigned long long)q_has);
+        printf("  pairs with vector exceptions  : %llu\n", (unsigned long long)b_has);
+        printf("  pairs with BOTH               : %llu\n", (unsigned long long)both_has);
+        printf("  pairs with |Eq & Eb| > 0      : %llu  (total overlaps %llu)\n",
+               (unsigned long long)inter_nz, (unsigned long long)inter_tot);
+        if (!inter_nz)
+            printf("  ** the -2*inter branch was NEVER exercised by dev **\n");
+    }
+
+    /* Randomised differential test over the whole input space, including the
+     * dense/heavy-overlap corners real data never reaches.  Deterministic LCG
+     * so a failure is reproducible. */
+    printf("\n  === randomised differential test (dense corners) ===\n");
+    {
+        uint32_t st = 0x9E3779B9u;
+        uint64_t n = 0, bad = 0, hit_inter = 0;
+        for (int t = 0; t < 200000; t++) {
+            tvec a, b; uint8_t Ea[RD], Eb2[RD]; int na = 0, nb = 0;
+            /* density varies so we sweep sparse -> dense, and signs split
+               evenly rather than 99.84% positive, to hammer the corrections */
+            st = st*1664525u + 1013904223u; int dens = (int)(st >> 24) | 1;
+            for (int w = 0; w < RWORDS; w++) {
+                uint32_t m1 = 0, m2 = 0, s1 = 0, s2 = 0;
+                for (int k = 0; k < 32; k++) {
+                    st = st*1664525u + 1013904223u; if (((st>>16)&255) < (uint32_t)dens) m1 |= 1u<<k;
+                    st = st*1664525u + 1013904223u; if (((st>>16)&255) < (uint32_t)dens) m2 |= 1u<<k;
+                    st = st*1664525u + 1013904223u; if ((st>>16)&1) s1 |= 1u<<k;
+                    st = st*1664525u + 1013904223u; if ((st>>16)&1) s2 |= 1u<<k;
+                }
+                a.m[w] = m1; a.s[w] = s1 & m1;   /* planes clean: s subset of m */
+                b.m[w] = m2; b.s[w] = s2 & m2;
+            }
+            for (int d = 0; d < RD; d++) {
+                if (((a.m[d>>5]>>(d&31))&1) && !((a.s[d>>5]>>(d&31))&1)) Ea[na++] = (uint8_t)d;
+                if (((b.m[d>>5]>>(d&31))&1) && !((b.s[d>>5]>>(d&31))&1)) Eb2[nb++] = (uint8_t)d;
+            }
+            int in = 0;
+            for (int k = 0; k < na; k++) for (int l = 0; l < nb; l++) if (Ea[k]==Eb2[l]) in++;
+            if (in) hit_inter++;
+            if (t_dot(&a,&b) != ex_dot(a.m,Ea,na,b.m,Eb2,nb)) bad++;
+            n++;
+        }
+        printf("  random pairs compared         : %llu\n", (unsigned long long)n);
+        printf("  of which |Ea & Eb| > 0        : %llu (%.1f%%)\n",
+               (unsigned long long)hit_inter, 100.0*hit_inter/n);
+        printf("  dot mismatches                : %llu\n", (unsigned long long)bad);
+        if (bad) { printf("  *** IDENTITY BROKEN ***\n"); exit(2); }
+        printf("  => identity holds on dense, sign-balanced, heavy-overlap inputs too\n");
+    }
+
+    printf("\n  === vector payload ===\n");
+    printf("  today  (m + s planes)          %7zu B\n", vec_now);
+    printf("  masks only                     %7zu B\n", masks);
+    printf("  + 1 count byte/vector + posns  %7zu B  (%.1f%% smaller, sequential only)\n",
+           seq, 100.0*(vec_now-seq)/vec_now);
+    printf("  + u16 offset table + posns     %7zu B  (%.1f%% smaller, RANDOM ACCESS)\n",
+           rnd, 100.0*(vec_now-rnd)/vec_now);
+    printf("\n  whole file: %ld -> %zu B sequential (%.1f%%), %zu B random (%.1f%%)\n",
+           file, file - vec_now + seq, 100.0*(vec_now-seq)/file,
+           file - vec_now + rnd, 100.0*(vec_now-rnd)/file);
+    printf("  mean bytes/vector: %.1f (was %zu)\n",
+           (double)rnd / R.n_index, sizeof(tvec));
+    free(EP); free(EO);
+}
+
 static void abstain(void) {
     int *P = malloc((size_t)V_n * sizeof(int));
     int *N = malloc((size_t)V_n * sizeof(int));
@@ -1619,6 +1811,7 @@ static void usage(void) {
 "  --condcentre           per-dim centre conditioned on firing, not diluted by zeros\n"
 "  --abstain              accept on P-N margin instead of an absolute threshold\n"
 "  --signplane            cost of dropping the sign plane: 1 bit/dim, half the blob\n"
+"  --exstream             lossless: sign plane as a sparse exception stream\n"
 "  --faprobe              the negatives that pin the zero-FA frontier, forensically\n"
 "  --contrast             rescore top-2 on the dims where they disagree\n"
 "  --coverage             for failing commands, where does their vocabulary live?\n"
@@ -2197,6 +2390,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--condcentre")) CONDCENTRE=1;
         else if (!strcmp(a,"--abstain")) ABSTAIN=1;
         else if (!strcmp(a,"--signplane")) SIGNPLANE=1;
+        else if (!strcmp(a,"--exstream")) EXSTREAM=1;
         else if (!strcmp(a,"--faprobe")) FAPROBE=1;
         else if (!strcmp(a,"--contrast")) CONTRAST=1;
         else if (!strcmp(a,"--coverage")) COVERAGE=1;
@@ -2340,6 +2534,7 @@ int main(int argc,char**argv){
     if(RERANK){ rerankoracle(); return 0; }
     if(ABSTAIN){ abstain(); return 0; }
     if(SIGNPLANE){ signplane(); return 0; }
+    if(EXSTREAM){ exstream(); return 0; }
     if(FAPROBE){ faprobe(); return 0; }
     if(CONTRAST){ contrast(); return 0; }
     if(COVERAGE){ coverage(); return 0; }
