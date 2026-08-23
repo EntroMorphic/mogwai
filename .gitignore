@@ -64,3 +64,7 @@ esp32_router/sdkconfig
 # c/router.bin was a tracked 830 KB d=512 blob from the first C commit that
 # nothing referenced. The only tracked blob is the shipped one.
 c/*.bin
+
+# WiFi credentials for the wifiprobe measurement build. NEVER commit these.
+# Copy esp32_router/main/wifi_creds.h.example and fill it in locally.
+esp32_router/main/wifi_creds.h

@@ -63,6 +63,37 @@ printed only when class **and** bit-exact score match on all 64 references.
 Anything else means the device and host disagree — see
 [../doc/BLOB_FORMAT.md](../doc/BLOB_FORMAT.md).
 
+## `MOGWAI_PROBE=1` — measuring what a WiFi stack costs
+
+    MOGWAI_PROBE=1 idf.py build flash monitor
+
+Not shipped. `wifiprobe.c` answers one question with a number: if the index is
+lifted into SRAM *after* WiFi is up, how much heap must stay in reserve so the
+stack does not run out later? It prints free heap at each stage —
+`boot -> nvs -> netif+lwIP -> wifi_init -> wifi_start -> associated -> TCP ->
+TLS` — and, critically, `esp_get_minimum_free_heap_size()`, because a TLS
+handshake allocates tens of KB transiently and frees it. **The low-water mark
+sets the reserve, not the steady state.**
+
+Unassociated, stock buffers, measured:
+
+    boot            free 275224
+    nvs_flash_init  free 273648   (-1576)
+    netif + lwIP    free 264136   (-9512)
+    esp_wifi_init   free 229120   (-35016)   <- the radio driver
+    esp_wifi_start  free 227200   (-1920)
+
+Association, DHCP and TLS need credentials. Copy `main/wifi_creds.h.example` to
+`main/wifi_creds.h` and fill it in — that file is **gitignored and must never be
+committed**. A throwaway phone hotspot is ideal. Without credentials the probe
+still runs and reports the unassociated case.
+
+**Note the env var.** `PROBE` is an environment variable while `PRODUCT` is a
+`-D`, and that is not a style choice: ESP-IDF evaluates `main/CMakeLists.txt`
+twice, and `-D` cache variables are invisible in the early pass that collects
+component requirements. A `-D`-conditional `REQUIRES` silently takes the wrong
+branch. See the comment at the top of that file.
+
 ## Build
 
     idf.py -DRD=256 -DTPOPCNT=1 build flash monitor

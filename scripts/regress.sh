@@ -73,6 +73,13 @@ chk "blob verifier (parity + index integrity)" "$?" "0"
 c/bin/mkblob $D /tmp/_regress.bin >/dev/null 2>&1
 cmp -s /tmp/_regress.bin esp32_router/main/router.bin; BLOB_RC=$?
 rm -f /tmp/_regress.bin
+# Dropping these from esp32_router/main/CMakeLists.txt fails ASYMMETRICALLY:
+# main.c stops compiling (TPOPCNT undeclared) but product.c builds clean and
+# silently runs `#if TPOPCNT == 1` as false - shipping the SWAR path instead of
+# the popcount table, with nothing in the banner to say so. A loud failure in
+# the build nobody flashes, a silent one in the build that ships.
+chk "firmware CMakeLists defines TPOPCNT and RD" \
+    "$(grep -cE 'target_compile_definitions\(\$\{COMPONENT_LIB\} PRIVATE (TPOPCNT|RD)=' esp32_router/main/CMakeLists.txt)" "2"
 chk "product firmware source tracked" "$([ -f esp32_router/main/product.c ] && git ls-files esp32_router/main/product.c | wc -l | tr -d ' ')" "1"
 chk "product refuses to actuate the none class" "$(grep -c 'if (!strcmp(R.names\[cls\], "none")) return -2;' esp32_router/main/product.c)" "1"
 chk "product reports both rejection causes" "$(grep -cE 'cls == -1|cls == -2' esp32_router/main/product.c)" "2"

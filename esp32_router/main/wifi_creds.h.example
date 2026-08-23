@@ -1,0 +1,9 @@
+/* Copy to wifi_creds.h and fill in. wifi_creds.h is GITIGNORED — do not commit
+ * it, and do not paste credentials into any tracked file, commit message, or
+ * issue. A phone hotspot is ideal for this: throwaway, and you can turn it off
+ * afterwards.
+ *
+ * Used only by wifiprobe.c, which is a measurement build and is never shipped.
+ */
+#define WIFI_SSID "your-ssid"
+#define WIFI_PASS "your-password"
