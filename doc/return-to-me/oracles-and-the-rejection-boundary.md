@@ -723,3 +723,54 @@ which is the byte budget we spent the session buying back.
 
 `neghalo` is kept as a measured negative rather than deleted, alongside the
 other retained negative results.
+
+---
+
+# The negative-budget curve: the boring fallback is not cheap
+
+*`compare --prune-negbound=N --fixth=136`. Latency from the fitted cost model,
+with 3840 vectors resident (30 chunks) and the remainder flash-mapped.*
+
+The unpruned index reaches `fa=1`, so the missing rejection witnesses exist. The
+obvious fallback is to stop being clever and spend bytes on them. Measured:
+
+    negatives  vectors  index    fa   SRAM   latency    vs shipped
+         2685     3840   240KB    4   100%    6209 us     +0
+         3069     4224   264KB    4    90%    7809 us    +1600
+         3325     4480   280KB    3    85%    8876 us    +2667
+         3709     4864   304KB    3    78%   10477 us    +4268
+         4245     5400   337KB    3    71%   12711 us    +6502
+         5000     6155   384KB    3    62%   15858 us    +9649
+         6000     7155   447KB    3    53%   20026 us   +13817
+         9345    10500   656KB    1    36%   33968 us   +27759
+
+Model check against hardware: 6209 predicted vs 6465 measured at the shipped
+size, 33968 vs 34300 at the unpruned size. Both within 4%, so the latency column
+is trustworthy.
+
+**`wa`, `missed` and recall are constant at 13 / 14 / 85.9% across the entire
+range** — a third independent confirmation that negatives touch only rejection.
+
+## The shape kills the fallback as a cheap option
+
+- **A few hundred more negatives buys nothing.** 2685 -> 3069 is +384 vectors,
+  +24 KB, +1.6 ms, and `fa` stays at 4.
+- **`fa` 4 -> 3 costs +2.7 ms** and 15 points of residency.
+- **Then it plateaus.** From 3325 to 6000 negatives — 2675 more vectors, 167 KB,
+  11 more milliseconds — `fa` does not move off 3.
+- **`fa` 3 -> 1 costs +25 ms**, which is the whole 240 KB decision reversed.
+
+So the honest read of "spend more bytes on negatives" is: the first step is
+affordable if 2.7 ms is affordable, the second step does not exist, and the
+third costs everything the session spent reclaiming.
+
+## What that says about the residual
+
+Guard coverage is already 100% for every class at `fa=4`. Adding 3315 more
+negatives — more than doubling the population — moves `fa` by one. The remaining
+witnesses are not merely absent; they are **thinly distributed across a region
+the stored positives do not anchor**, so buying them requires buying most of the
+negative population rather than a targeted slice.
+
+The boundary extends beyond the exemplars that define it, and it turns out to
+extend a long way.
