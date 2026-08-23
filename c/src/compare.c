@@ -566,9 +566,42 @@ static int cnt_ng(const char *a, const char *b) {   /* shared distinct 3/4-grams
     return sh;
 }
 
+/* A whole-word channel. The character channel sees "please start the vacuum"
+ * and "please start the podcast" as nearly the same sentence, which is correct
+ * and useful elsewhere. What it cannot say loudly enough is that the OBJECT
+ * differs. Token identity says it very loudly and costs nothing: no weights, no
+ * learning, no free parameters, same normaliser the encoder already uses. */
+static int wordsim(const char *a, const char *b) {
+    char na[512], nb[512];
+    int la = r_norm(a, na, sizeof na), lb = r_norm(b, nb, sizeof nb);
+    char *wa[128], *wb[128]; int ca = 0, cb = 0;
+    for (int i = 0; i < la && ca < 128; ) {
+        while (i < la && na[i] == ' ') i++;
+        if (i >= la) break;
+        wa[ca++] = na + i;
+        while (i < la && na[i] != ' ') i++;
+        if (i < la) na[i++] = 0;
+    }
+    for (int i = 0; i < lb && cb < 128; ) {
+        while (i < lb && nb[i] == ' ') i++;
+        if (i >= lb) break;
+        wb[cb++] = nb + i;
+        while (i < lb && nb[i] != ' ') i++;
+        if (i < lb) nb[i++] = 0;
+    }
+    int sh = 0;
+    for (int i = 0; i < ca; i++) {
+        int dup = 0;
+        for (int k = 0; k < i && !dup; k++) if (!strcmp(wa[k], wa[i])) dup = 1;
+        if (dup) continue;
+        for (int j = 0; j < cb; j++) if (!strcmp(wa[i], wb[j])) { sh++; break; }
+    }
+    return (ca + cb) ? (2 * sh * 1000) / (ca + cb) : 0;
+}
+
 static void contrast(void) {
     int th = FIXTH >= 0 ? FIXTH : RSHIP_TH;
-    int w1=0,w2=0,w3=0,w4=0,skip=0,tot=0;
+    int w1=0,w2=0,w3=0,w4=0,skip=0,tot=0,wW=0,wW3=0;
     printf("\n  contrastive rescoring on the disagreement mask, K=8, th=%d\n", th);
     printf("  A = coarse winner (wrong)   B = best candidate that would be right\n\n");
 
@@ -615,6 +648,9 @@ static void contrast(void) {
         int sA = nD ? (2*dotA*RD)/(aaD+abA+8) : 0;
         int sB = nD ? (2*dotB*RD)/(aaD+abB+8) : 0;
         int ngA = cnt_ng(V_t[i], U_t[A]), ngB = cnt_ng(V_t[i], U_t[B]);
+        int wsA = wordsim(V_t[i], U_t[A]), wsB = wordsim(V_t[i], U_t[B]);
+        if (wsB > wsA) wW++;
+        if (sB <= sA && dotB <= dotA && ngB <= ngA && wsB > wsA) wW3++;
 
         /* Two normalisations, because "rescore on D" does not specify one and
            that choice is exactly where the previous oracle went wrong. Dice-on-D
@@ -628,6 +664,7 @@ static void contrast(void) {
         printf("  gap=%-4d |D|=%-4d  diceD A=%-5d B=%-5d  dotD A=%-4d B=%-4d  ng A=%-3d B=%-3d %s%s\n",
                ts[0]-ts[1], nD, sA, sB, dotA, dotB, ngA, ngB,
                sB > sA ? "DICE-FIX " : "", dotB > dotA ? "DOT-FIX" : "");
+        printf("      word-channel A=%-5d B=%-5d %s\n", wsA, wsB, wsB > wsA ? "WORD-FIX" : "");
         printf("      q \"%s\"\n      A \"%s\"\n      B \"%s\"\n", V_t[i], U_t[A], U_t[B]);
     }
     printf("\n  of %d ordering errors with B in top-8 (%d had none):\n", tot-skip, skip);
@@ -635,6 +672,8 @@ static void contrast(void) {
     printf("    raw dot-on-D puts it first              : %d\n", w2);
     printf("    neither; exact n-grams DO separate      : %d  (hash/dimensionality)\n", w4);
     printf("    neither; exact n-grams do not either    : %d  (features lack it)\n", w3);
+    printf("\n    WHOLE-WORD channel puts it first        : %d  of %d\n", wW, tot - skip);
+    printf("    ...of the cases nothing else fixed      : %d\n", wW3);
 }
 
 typedef struct{int fa,wa,ms,iok,in;} TX;

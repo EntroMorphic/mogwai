@@ -437,3 +437,71 @@ the answer.** "Rescore on the disagreement dimensions" does not specify a metric
 and picking one silently would have produced either a weak positive or a
 stronger one depending on a decision made in passing. Both are reported for the
 same reason METHOD 19 exists.
+
+---
+
+# The whole-word channel, and why IDF is retired too
+
+*`compare --ship --contrast`, word channel added. Dev only.*
+
+World 3 said the limit is the features, so the next candidate was a lexical
+channel beside the character one: no weights, no learning, no free parameters —
+just whole-word token identity, Dice over normalised token sets.
+
+    WHOLE-WORD channel puts the right answer first : 3 of 16
+    ...of the cases nothing else fixed             : 2
+
+Weak. And the reason is more useful than the number.
+
+    q "start brewing please"
+    A "please start the podcast"   word A=571
+    B "please start the coffee"    word B=571     TIE
+
+    q "turn out the lights"
+    A "put out the lights"         word A=750
+    B "turn the lights up"         word B=750     TIE
+
+**The query's discriminative token is absent from both candidates.** Shared
+words are `{start, please}` either way; `brewing` appears in neither. The
+decision is made on carrier evidence because there *is* no object evidence on
+either side — not because the object evidence is underweighted.
+
+## This retires IDF as well
+
+The expected mechanism was that rare object words would outvote the common
+carrier: `vacuum` against `podcast` through a shared frame of `please start the`.
+But that requires the query to **share** its rare word with one candidate.
+Here it shares its rare word with neither. Inverse document frequency reweights
+*shared* terms; it cannot manufacture a match that does not exist.
+
+    "start brewing please"     -> needs brewing ~ coffee
+    "please restart the handmaid's tale" -> needs handmaid's tale ~ media
+
+Those are **semantic** bridges, not lexical ones. Closing them needs a synonym
+resource or a learned model, and this project has neither by design.
+
+## What the failure actually is
+
+Not encoding (world 4 empty). Not metric (world 3, 12 of 16). Not lexical
+weighting (3 of 16, and the ties explain why). What remains:
+
+> **The index contains no exemplar that uses the query's vocabulary.**
+
+That is a **coverage** problem, and it is the one failure mode this architecture
+makes cheap to fix. Adding exemplars is appending vectors — no retraining, no
+gradient, no new representation, and the sweep already showed positives cost
+`fa` nothing while negatives cost only `fa`. A hundred utterances is ~6 KB.
+
+It is also why the earlier personalisation observation matters more than any
+metric work: a nearest-neighbour router's errors concentrate on "no stored
+utterance talks like this", and the remedy is stored utterances that do.
+
+## Where that leaves the four candidate directions
+
+    richer quantisation / MTF7 sidecar   RETIRED  world 3
+    hashing or larger dimension          RETIRED  world 4 empty
+    lexical channel (whole-word)         RETIRED  3 of 16, ties explain it
+    IDF / rarity weighting               RETIRED  no shared rare terms to weight
+    ------------------------------------------------------------------
+    index coverage                       the remaining live hypothesis
+    abstention policy (P-N margin)       live, +32 commands at fa<=1
