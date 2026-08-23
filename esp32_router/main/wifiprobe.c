@@ -30,8 +30,10 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include <stdlib.h>
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "esp_tls.h"
 #include "router.h"
 #include "ternary.h"
 #include "lift.h"
@@ -51,6 +53,7 @@
 
 static EventGroupHandle_t EG;
 static int retries = 0;
+static int may_connect = 0;   /* scan first: the radio refuses a scan while connecting */
 
 /* The low-water mark is the number that sets the reserve. esp_get_minimum_
    free_heap_size() is maintained by the allocator across the whole run, so it
@@ -66,9 +69,9 @@ static void stage(const char *label) {
 
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
+        if (may_connect) esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (++retries <= 8) { esp_wifi_connect(); }
+        if (may_connect && ++retries <= 8) { esp_wifi_connect(); }
         else { xEventGroupSetBits(EG, FAILED_BIT); }
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
@@ -126,6 +129,73 @@ static void fetch(const char *url, int tls, const char *label) {
     stage(label);
 }
 
+
+/* A HELD-OPEN TLS session, which is what a one-connection device actually has.
+ *
+ * Every TLS measurement before this was connect-then-CLOSE, so it captured the
+ * handshake spike and the residue after teardown — not what a live session
+ * retains while it is up. mbedTLS holds record buffers for the life of the
+ * connection, sized by MBEDTLS_SSL_IN/OUT_CONTENT_LEN, and IDF defaults those
+ * to full 16 KB TLS records. If that is held continuously it comes straight off
+ * the headroom the lift reserve was sized against. */
+
+/* Is the SSID even on the air? Association failing and the AP being switched
+ * off look identical from the retry counter, so ask the radio directly before
+ * blaming the code. */
+static void scan_for_ssid(void) {
+    wifi_scan_config_t sc = { 0 };
+    if (esp_wifi_scan_start(&sc, true) != ESP_OK) { printf("  scan failed\n"); return; }
+    uint16_t n = 0; esp_wifi_scan_get_ap_num(&n);
+    if (n == 0) { printf("  scan: NO access points visible at all\n"); return; }
+    wifi_ap_record_t *ap = calloc(n, sizeof *ap);
+    if (!ap) { printf("  scan: out of memory\n"); return; }
+    esp_wifi_scan_get_ap_records(&n, ap);
+    int found = 0;
+    printf("  scan: %u AP(s) visible\n", (unsigned)n);
+    for (uint16_t i = 0; i < n; i++) {
+        if (!strcmp((char *)ap[i].ssid, WIFI_SSID)) {
+            printf("  scan: TARGET \"%s\" present, rssi %d, ch %u\n",
+                   ap[i].ssid, ap[i].rssi, (unsigned)ap[i].primary);
+            found = 1;
+        }
+    }
+    if (!found) printf("  scan: TARGET \"%s\" NOT PRESENT — the AP is off or out of range\n",
+                       WIFI_SSID);
+    free(ap);
+}
+static void hold_tls_open(void) {
+    const char *host = "www.howsmyssl.com";
+    printf("  MBEDTLS_SSL_IN_CONTENT_LEN=%d  OUT=%d\n",
+           CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN, CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN);
+    unsigned before = esp_get_free_heap_size();
+    esp_tls_cfg_t cfg = { .crt_bundle_attach = esp_crt_bundle_attach };
+    esp_tls_t *tls = esp_tls_init();
+    if (!tls) { printf("  esp_tls_init FAILED\n"); return; }
+    if (esp_tls_conn_new_sync(host, strlen(host), 443, &cfg, tls) != 1) {
+        printf("  held TLS: connect FAILED\n"); esp_tls_conn_destroy(tls); return;
+    }
+    unsigned after_hs = esp_get_free_heap_size();
+    char req[160];
+    int rl = snprintf(req, sizeof req,
+                      "GET / HTTP/1.1\r\nHost: %s\r\nConnection: keep-alive\r\n\r\n", host);
+    esp_tls_conn_write(tls, req, rl);
+    char buf[512]; int total = 0, n;
+    do { n = esp_tls_conn_read(tls, buf, sizeof buf); if (n > 0) total += n; }
+    while (n > 0 && total < 2000);
+    unsigned held = esp_get_free_heap_size();
+    printf("  session OPEN: %d bytes read\n", total);
+    printf("  free %u -> %u after handshake -> %u with session held\n",
+           before, after_hs, held);
+    printf("  HELD SESSION COSTS %d B (steady, while open)\n", (int)before - (int)held);
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    printf("  after 3 s still held: free %u   min-ever %u\n",
+           (unsigned)esp_get_free_heap_size(),
+           (unsigned)esp_get_minimum_free_heap_size());
+    esp_tls_conn_destroy(tls);
+    printf("  after close:          free %u   min-ever %u\n",
+           (unsigned)esp_get_free_heap_size(),
+           (unsigned)esp_get_minimum_free_heap_size());
+}
 void app_main(void) {
     esp_log_level_set("*", ESP_LOG_WARN);   /* the log itself allocates; quiet it */
     vTaskDelay(pdMS_TO_TICKS(500));
@@ -159,6 +229,7 @@ void app_main(void) {
         esp_wifi_set_config(WIFI_IF_STA, &sta);
     }
     esp_wifi_start();                       stage("esp_wifi_start");
+    if (WIFI_SSID[0]) { scan_for_ssid(); may_connect = 1; esp_wifi_connect(); }
 
     if (WIFI_SSID[0]) {
         EventBits_t b = xEventGroupWaitBits(EG, CONNECTED_BIT | FAILED_BIT,
@@ -170,6 +241,9 @@ void app_main(void) {
             fetch("http://neverssl.com/",        0, "plain TCP + HTTP");
             fetch("https://www.howsmyssl.com/",  1, "TLS handshake + HTTPS");
             fetch("https://www.howsmyssl.com/",  1, "second TLS (warm)");
+            printf("\n  ---- a HELD-OPEN session, not connect-then-close ----\n");
+            hold_tls_open();
+            stage("after held session closed");
         } else {
             printf("  association FAILED or timed out after %d retries\n", retries);
         }
