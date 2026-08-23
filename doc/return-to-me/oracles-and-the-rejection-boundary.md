@@ -904,3 +904,54 @@ as available rather than run.
 process would make it one touch instead of two. Deliberately not built that way
 now — a tool that evaluates the held-out set twice inside one invocation would
 spend budget without it appearing in the audit log as two touches.)*
+
+## Red-team of the transition analysis
+
+Four findings against the section above. Two of the claims do not survive.
+
+**1. I applied METHOD 19 to the diagnostic only after publishing it.** The dump
+does reproduce the product — `fa=6 wa=13 missed=14 ok=165`, and the two dumps are
+row-aligned on both index and text, 0 mismatches of 1527 — but I checked *after*
+reporting the transition table, not before. The rule exists because a control is
+worthless once you already believe the treatment.
+
+**2. The McNemar p-value was reported without specifying its tail.** `p=0.3125`
+is **one-sided**. The conventional two-sided exact McNemar on A=3, B=1 is
+**p = 0.625**. Neither is significant, so the conclusion is unchanged, but a
+p-value without its tail is not a statistic.
+
+**3. "Dev churn predicts test churn" is unsupported.** Dev net is 2 on 1335
+negatives; scaled to 2754 that predicts a test net near 4. Observed test net is
+**1**. So the held-out result is *further* from monotonic than dev, not similar
+to it — A and B are closer together there, not the same ratio. The transition
+could still plausibly read `2/1` or `5/4`, and those differ against the adoption
+criterion. **My stated reason for not spending a budget unit was wrong.** The
+sound reason is that the decision it informs is nearly stakes-free: both
+selectors cost identical bytes, latency, recall, `wa` and `missed`, so adopting
+or not adopting changes nothing measurable either way.
+
+**4. The mechanistic claim is close to vacuous, and the ordering refutes it.**
+I wrote that `negbound` "repairs exactly the carrier-phrase family the forensics
+named". But **five of the six dev false actuations are already of that family**,
+so repairing three of them carries almost no information — a selector repairing
+three at random would look the same.
+
+Worse, the repairs are perfectly rank-ordered by score:
+
+    repaired  P=140 (gap 13)   "i need you to put walk the dog on my list to do"
+              P=138 (gap  1)   "i would like to talk about it"
+              P=137 (gap  3)   "please restart the handmaid's tale"
+
+    survived  P=188 (gap 72)   "make me happy"
+              P=169 (gap 24)   "can you please put on music"
+              P=149 (gap 23)   "can you put this on facebook"
+
+The three lowest-margin false actuations flipped; the three highest did not.
+That is exactly what a **modest uniform lift of the best-negative score** would
+produce, and it is not evidence of semantic targeting. Any change that put
+slightly stronger negatives near the boundary would repair the same three.
+
+**Revised reading:** `negbound` raises the rejection floor a little. It does not
+demonstrably understand carrier phrases, and the earlier claim that it "repairs
+the cases it was designed for" should be read as coincidence with the margin
+ordering until something distinguishes the two explanations.
