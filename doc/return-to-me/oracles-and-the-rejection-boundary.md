@@ -852,6 +852,13 @@ The corrected baseline reproduces `th=136 ok=165 fa=6 wa=13 missed=14` exactly.
 
 # Paired FA transition: `negbound` repairs three and breaks one
 
+> **Two claims in this section were refuted by the red-team below it.** The
+> transition counts are sound; the *interpretation* is not. In particular
+> "repairs exactly the carrier-phrase family" is close to vacuous, and the
+> repairs turn out to be perfectly rank-ordered by score. Read
+> [the red-team](#red-team-of-the-transition-analysis) before quoting anything
+> here.
+
 *`compare --dumpdisp` under each selector, diffed. **Dev only — no budget
 spent.** The test-set version would cost two more touches.*
 

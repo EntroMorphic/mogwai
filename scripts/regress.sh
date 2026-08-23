@@ -90,9 +90,11 @@ chk "sdkconfig.wifi pins the measured settings" \
 # product. This check asserts the enforcement is WIRED; mutate.sh asserts it can
 # still fire. The rule was violated twice by hand before it was automated - once
 # inflating a claimed improvement from +3 to +38 commands.
-chk "decision experiments assert their control" \
-    "$(( $(c/bin/compare --ship --abstain 2>&1 | grep -c 'reproduces the product') + \
-         $(c/bin/compare --ship --corrob  2>&1 | grep -c 'reproduces the product') ))" "2"
+CTL=0
+for m in "--ship --abstain" "--ship --corrob" "--prune-negtop=2685 --fixth=136 --dumpdisp"; do
+  CTL=$(( CTL + $(c/bin/compare $m 2>&1 | grep -c 'reproduces the product') ))
+done
+chk "decision experiments assert their control" "$CTL" "3"
 chk "firmware CMakeLists defines TPOPCNT and RD" \
     "$(grep -cE 'target_compile_definitions\(\$\{COMPONENT_LIB\} PRIVATE (TPOPCNT|RD)=' esp32_router/main/CMakeLists.txt)" "2"
 chk "product firmware source tracked" "$([ -f esp32_router/main/product.c ] && git ls-files esp32_router/main/product.c | wc -l | tr -d ' ')" "1"

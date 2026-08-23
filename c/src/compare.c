@@ -955,6 +955,25 @@ static void dumpdisp(void) {
     char **T = USE_TEST ? T_t : V_t;
     char (*L)[RNAMELEN] = USE_TEST ? T_l : V_l;
     int   N = USE_TEST ? T_n : V_n;
+    /* This dump feeds a treatment/control comparison, so it is subject to
+       METHOD 19 like any other. Under the shipped selector it must reproduce
+       the product; under a treatment selector control_or_die skips with an
+       explicit message, which is the correct behaviour for the treatment arm.
+       Asserted BEFORE any line is emitted - checking a control after you
+       already believe the treatment is not checking it. */
+    if (!USE_TEST) {
+        int bfa=0,bwa=0,bms=0,bok=0;
+        for (int i = 0; i < N; i++) {
+            hit h = score_ter(T[i]);
+            int c = (h.score > th) ? h.cls : -1;
+            const char *p = c < 0 ? "none" : R.names[c];
+            int gn = !strcmp(L[i], "none");
+            if (!gn && !strcmp(p, L[i])) bok++;
+            if (!strcmp(p, L[i])) continue;
+            if (gn) bfa++; else if (!strcmp(p, "none")) bms++; else bwa++;
+        }
+        control_or_die("dumpdisp", bfa, bwa, bms, bok, th);
+    }
     for (int i = 0; i < N; i++) {
         hit h = score_ter(T[i]);
         int c = (h.score > th) ? h.cls : -1;
@@ -1022,7 +1041,7 @@ static void mcnemar(hit *A, int ta, hit *B, int tb, char la[][RNAMELEN], int n) 
     double p = m ? s / tot : 1.0;
     printf("      vs %-18s wrong: fixed %-3d broke %-3d %s\n",
            LAST_NAME, fixed, broke, broke == 0 ? "(non-destructive)" : "");
-    printf("      %-21s overall: fixed %-3d broke %-3d  p=%.4f %s\n", "",
+    printf("      %-21s overall: fixed %-3d broke %-3d  p=%.4f (two-sided exact) %s\n", "",
            cfix, cbrk, p, p < 0.05 ? "SIGNIFICANT" : "not significant");
     printf("PAIR\t%s\t%d\t%d\t%.6f\n", LAST_NAME, cfix, cbrk, p);
 }
