@@ -45,6 +45,7 @@ static int GATECHK = 0;   /* --gatecheck: gate must equal prior bit-exactly */
 static gate_t GATE; static int USEGATE = 0;  /* --gatesel: selector reads the compact table */
 static int SELSIG = 0;    /* --selsig: paired significance of the dev selector gain */
 static const char *ROUTE1 = 0;  /* --route="..." */
+static int PRUNEDIAG = 0;       /* --prune-diag: guard-coverage table, internal */
 static int REPL = 0;            /* --repl */
 static int PRIORCLS = 0;  /* --priorcls: router accepts/rejects, prior picks the class */
 static int SELMARG = 0;   /* --selmargin=N: prior votes only when its margin >= N */
@@ -1489,6 +1490,10 @@ static void usage(void) {
 "  --dumpdisp             one line per item: truth, prediction. Diff two runs\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
+"  --prune-diag           per-class guard coverage of the surviving negatives\n"
+"  --asym                 asymmetric threshold (126 up / 136 down) ... rejected\n"
+"  --footprint            LMM footprint cycle: where the 656 KB actually goes\n"
+"  --lmm-raw[3]           LMM cycle artifacts, raw capture\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
 "\n"
 "See also: make ship | make regress | make testset | doc/TOOLS.md\n", RSHIP_TH);
@@ -2060,6 +2065,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--coverage")) COVERAGE=1;
         else if (!strcmp(a,"--corrob")) CORROB=1;
         else if (!strcmp(a,"--dumpdisp")) DUMPDISP=1;
+        else if (!strcmp(a,"--prune-diag")) PRUNEDIAG=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -2157,7 +2163,12 @@ int main(int argc,char**argv){
     /* Pruning runs AFTER encoding with the full-index centre, so every surviving
        code is bit-identical to the unpruned run: this isolates "fewer stored
        vectors" from "different encoder". Shared with mkblob (see prune.h). */
-    U_n = prune_index(U_t, U_l, &R, TI, R.index, U_n, PRUNE, 1);
+    /* verbose: 0 for the single-query user tools (route/repl) - their output is
+       quoted in the README and must be the answer, nothing else; 2 only when
+       --prune-diag asks for the guard-coverage table, which is an internal
+       diagnostic and was leaking into `make demo` and `make route`. */
+    U_n = prune_index(U_t, U_l, &R, TI, R.index, U_n, PRUNE,
+                      (ROUTE1 || REPL) ? 0 : (PRUNEDIAG ? 2 : 1));
     static int base[RD]; memset(base,0,sizeof base);
     for(int i=0;i<U_n;i++) for(int d=0;d<RD;d++)
         if(TI[i].m[d>>5]&(1u<<(d&31))) base[d]++;

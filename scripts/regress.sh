@@ -157,7 +157,22 @@ NC_LINE='    decision               none  (nearest match is not a command — no
 BT_LINE='    decision               none  (score below threshold — no action)'
 chk "--route declines a non-command" "$(c/bin/compare --ship --route='what time does the train leave' 2>/dev/null | grep -Fxc "$NC_LINE")" "1"
 chk "--route declines nonsense below threshold" "$(c/bin/compare --ship --route='zzz qqq xyzzy' 2>/dev/null | grep -Fxc "$BT_LINE")" "1"
-chk "--route output is clean (no corpus chatter)" "$(c/bin/compare --ship --route=x 2>&1 | grep -c '\[inv\]')" "0"
+# The single-query user tools are quoted verbatim in the README, so their output
+# must be the answer and nothing else. This previously grepped only for '[inv]',
+# which was narrow enough to miss two real regressions: making --ship prune
+# started leaking a '[prune]' line, and a guard-coverage diagnostic added later
+# leaked nine more. Assert NO bracketed diagnostic line survives, whatever it is.
+chk "--route output is clean (no diagnostics at all)" \
+    "$(c/bin/compare --ship --route=x 2>&1 | grep -cE '^\s*\[')" "0"
+# Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
+# --help is the single source of truth for flags; three were missing when that
+# claim was first checked.
+UNDOC=0
+for fl in $(grep -oE '!strn?cmp\(a, ?"--[a-z-]+' c/src/compare.c | grep -oE '\-\-[a-z-]+' | sort -u); do
+  [ "$fl" = "--help" ] && continue
+  c/bin/compare --help 2>&1 | grep -q -- "$fl" || { echo "    undocumented: $fl"; UNDOC=$((UNDOC+1)); }
+done
+chk "every accepted flag is in --help" "$UNDOC" "0"
 chk "LICENSE present and tracked" "$([ -f LICENSE ] && git ls-files LICENSE | wc -l | tr -d ' ')" "1"
 chk "LICENSE is MIT" "$(grep -c '^MIT License$' LICENSE)" "1"
 chk "README states the licence" "$(grep -c '\[MIT\](LICENSE)' README.md)" "1"

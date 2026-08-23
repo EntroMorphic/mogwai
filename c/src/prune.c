@@ -247,7 +247,7 @@ int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
        still have at least one of their nearest negatives in the index? That is
        the property the halo idea was meant to protect, so measure it rather
        than assume the selection criterion delivered it. */
-    if (verbose && (o.neg_top > 0 || o.neg_bound > 0 || o.neg_halo > 0)) {
+    if (verbose > 1 && (o.neg_top > 0 || o.neg_bound > 0 || o.neg_halo > 0)) {
         const int KG = 4;
         int *gact = malloc(U_n * sizeof(int));
         for (int i = 0; i < U_n; i++) gact[i] = t_active(&TI[i]);
