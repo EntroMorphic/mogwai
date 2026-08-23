@@ -141,7 +141,11 @@ static int load(void) {
      * Adaptive rather than compile-time: try, and fall back to flash-mapped if
      * the allocation fails. A device that boots slower is better than one that
      * does not boot. */
+#ifdef MOGWAI_WIFI
+    return lift_run(&L, TI, ACT, R.n_index, LIFT_RESERVE_TLS);
+#else
     return lift_run(&L, TI, ACT, R.n_index, LIFT_RESERVE_BARE);
+#endif
 }
 
 static int route(const char *txt, int *score_out) {
@@ -168,9 +172,110 @@ static int route(const char *txt, int *score_out) {
     return cls;
 }
 
+
+#ifdef MOGWAI_WIFI
+/* ---- optional network, MOGWAI_WIFI=1 -------------------------------------
+ * Off by default and absent from the default build entirely. With it on, the
+ * stack comes up and associates BEFORE the index is lifted, so the lift sees
+ * the heap a connected product actually has - and the reserve switches to
+ * LIFT_RESERVE_TLS, which is sized from a measured handshake rather than by eye.
+ *
+ * Status is stashed rather than printed: a printf here would sit in stdout's
+ * buffer and be lost when uart_param_config reconfigures the console.
+ */
+#include "freertos/event_groups.h"
+#include "esp_wifi.h"
+#include "esp_netif.h"
+#include "esp_event.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+#include "esp_http_client.h"
+#include "esp_crt_bundle.h"
+#if __has_include("wifi_creds.h")
+#include "wifi_creds.h"
+#endif
+#ifndef WIFI_SSID
+#define WIFI_SSID ""
+#endif
+#ifndef WIFI_PASS
+#define WIFI_PASS ""
+#endif
+
+static char wifi_status[64] = "not attempted";
+static EventGroupHandle_t WEG;
+static int wretry = 0;
+
+static void wifi_ev(void *a, esp_event_base_t base, int32_t id, void *data) {
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) esp_wifi_connect();
+    else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (++wretry <= 8) esp_wifi_connect(); else xEventGroupSetBits(WEG, BIT1);
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
+        snprintf(wifi_status, sizeof wifi_status, "connected, IP " IPSTR,
+                 IP2STR(&e->ip_info.ip));
+        xEventGroupSetBits(WEG, BIT0);
+    }
+}
+
+static void wifi_up(void) {
+    esp_log_level_set("*", ESP_LOG_WARN);
+    if (WIFI_SSID[0] == '\0') {
+        snprintf(wifi_status, sizeof wifi_status, "NO CREDENTIALS (wifi_creds.h)");
+        return;
+    }
+    nvs_flash_init();
+    esp_netif_init();
+    esp_event_loop_create_default();
+    esp_netif_create_default_wifi_sta();
+    WEG = xEventGroupCreate();
+    esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_ev, NULL, NULL);
+    esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_ev, NULL, NULL);
+    wifi_init_config_t wc = WIFI_INIT_CONFIG_DEFAULT();
+    esp_wifi_init(&wc);
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    wifi_config_t sta = { 0 };
+    snprintf((char *)sta.sta.ssid,     sizeof sta.sta.ssid,     "%s", WIFI_SSID);
+    snprintf((char *)sta.sta.password, sizeof sta.sta.password, "%s", WIFI_PASS);
+    esp_wifi_set_config(WIFI_IF_STA, &sta);
+    esp_wifi_start();
+    EventBits_t b = xEventGroupWaitBits(WEG, BIT0 | BIT1, pdFALSE, pdFALSE,
+                                        pdMS_TO_TICKS(30000));
+    if (!(b & BIT0)) snprintf(wifi_status, sizeof wifi_status,
+                              "association FAILED after %d retries", wretry);
+}
+
+static esp_err_t tls_sink(esp_http_client_event_t *e) { (void)e; return ESP_OK; }
+
+/* `!tls` at the prompt. The point is not the fetch, it is that a handshake and
+ * a resident index coexist - and that routing still works afterwards. */
+static void do_tls(void) {
+    unsigned before = esp_get_free_heap_size();
+    esp_http_client_config_t cfg = { .url = "https://www.howsmyssl.com/",
+        .event_handler = tls_sink, .timeout_ms = 15000,
+        .crt_bundle_attach = esp_crt_bundle_attach };
+    esp_http_client_handle_t c = esp_http_client_init(&cfg);
+    if (!c) { printf("  TLS: client init failed\n"); return; }
+    int64_t t0 = esp_timer_get_time();
+    esp_err_t r = esp_http_client_perform(c);
+    int64_t us = esp_timer_get_time() - t0;
+    if (r == ESP_OK)
+        printf("  TLS  HTTP %d, %d bytes in %lld us\n",
+               esp_http_client_get_status_code(c),
+               (int)esp_http_client_get_content_length(c), (long long)us);
+    else
+        printf("  TLS  FAILED: %s\n", esp_err_to_name(r));
+    esp_http_client_cleanup(c);
+    printf("  heap free %u -> %u   min-ever %u\n", before,
+           (unsigned)esp_get_free_heap_size(),
+           (unsigned)esp_get_minimum_free_heap_size());
+}
+#endif  /* MOGWAI_WIFI */
 void app_main(void) {
     t_popcnt_init();
     io_init();
+#ifdef MOGWAI_WIFI
+    wifi_up();          /* before load(): the lift must see a connected heap */
+#endif
     if (load()) { printf("BLOB PARSE FAILED\n"); return; }
 
     uart_config_t uc = { .baud_rate = 115200, .data_bits = UART_DATA_8_BITS,
@@ -199,6 +304,11 @@ void app_main(void) {
            (unsigned)R.n_index, (unsigned)L.bad);
     printf("  needs %u B | largest contiguous block %u B | total free %u B\n",
            (unsigned)L.need, (unsigned)L.largest, (unsigned)esp_get_free_heap_size());
+#ifdef MOGWAI_WIFI
+    printf("wifi: %s   (reserve %u B, sized from a measured TLS handshake)\n",
+           wifi_status, (unsigned)LIFT_RESERVE_TLS);
+    printf("type !tls to fetch over HTTPS and see the heap move\n");
+#endif
     fflush(stdout);
 
     char line[256]; int n = 0;
@@ -209,6 +319,9 @@ void app_main(void) {
         if (ch == '\r' || ch == '\n') {
             if (!n) continue;              /* bare newline: no prompt, no noise */;
             line[n] = 0;
+#ifdef MOGWAI_WIFI
+            if (!strcmp(line, "!tls")) { printf("\n"); do_tls(); n = 0; printf("\n> "); fflush(stdout); continue; }
+#endif
             int score; int64_t t0 = esp_timer_get_time();
             int cls = route(line, &score);
             int64_t us = esp_timer_get_time() - t0;

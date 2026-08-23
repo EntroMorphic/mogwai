@@ -1841,3 +1841,41 @@ returned `ESP_ERR_HTTP_CONNECT` (`select()` timeout). That is a reachability
 problem with that host, not a heap problem — the TLS fetch to a different host
 succeeded immediately afterwards with *less* heap available. Recorded rather
 than retried into a clean-looking run.
+
+### End to end: one firmware that routes AND talks WiFi
+
+The measurements above proved the memory arrangement. They did not prove a
+device: `product.c` had no network and `wifiprobe.c` never routed. `MOGWAI_WIFI=1`
+builds `product.c` with the stack, associating **before** the lift so it sees a
+connected heap, and switching the reserve to `LIFT_RESERVE_TLS`.
+
+    index 2816/3840 vectors in SRAM (73%), 30 chunks of 128
+      2432 in DRAM, 384 in the IRAM-only pool, 0 MISMATCHED
+    wifi: connected, IP 10.148.218.2   (reserve 61440 B)
+
+    "turn the lights on"   ACTUATED  light -> ON      9186 us
+    !tls                   HTTP 200, 15566 bytes      min-ever 15188
+    "turn the lights off"  ACTUATED  light -> OFF     9211 us
+    "make some coffee"     ACTUATED  coffee -> BREW   9079 us
+    "asdf qwer zxcv"       REJECTED  score 67         9042 us
+
+**Routing and TLS coexist, and routing is unaffected by having done a
+handshake.** Every score is identical to the no-network build — 227, 207, 225,
+67, 222 — which is the partial-residency claim confirmed where it matters:
+chunks left in flash score exactly as chunks in SRAM.
+
+    no network, 100% resident    6465 us
+    WiFi + TLS,  73% resident    9186 us
+
+The cost model predicts 8.82 ms at f=0.733; measured 9.19 ms, **4% over**. The
+gap is not memory — it is that the scan now shares a core with the WiFi task.
+That is the first time in this project a measurement has exceeded the model, and
+the reason is plausible rather than proven.
+
+Low-water mark across the whole session was **15,188 B**, with two handshakes.
+The reserve is doing exactly what it was sized to do.
+
+**Reproducibility:** the trimmed WiFi buffers live in tracked
+`esp32_router/sdkconfig.wifi`, not in a `/tmp` fragment. The first run of this
+measurement used an untracked overlay and was therefore not reproducible; it was
+re-run from the tracked file and produced identical figures.

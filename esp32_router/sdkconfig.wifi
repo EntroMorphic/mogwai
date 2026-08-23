@@ -1,0 +1,13 @@
+# Overlay for the MOGWAI_WIFI build. Use alongside sdkconfig.defaults:
+#   MOGWAI_WIFI=1 idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.wifi" build
+#
+# Trims the WiFi driver's buffers. Measured: this recovers ~1 chunk of index
+# residency with the full netif+lwIP stack present. It is NOT free — fewer
+# buffers means packet loss under sustained throughput. Fine for a device that
+# receives occasional short utterances; validate before using it under load.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_TX_BUFFER_TYPE=0
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n

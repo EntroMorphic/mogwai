@@ -63,6 +63,23 @@ printed only when class **and** bit-exact score match on all 64 references.
 Anything else means the device and host disagree — see
 [../doc/BLOB_FORMAT.md](../doc/BLOB_FORMAT.md).
 
+## `MOGWAI_WIFI=1` — the device with a network
+
+    MOGWAI_WIFI=1 idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.wifi" \
+                         -DRD=256 -DTPOPCNT=1 build flash monitor
+
+Builds `product.c` **with** the WiFi stack: it associates before the index is
+lifted, so the lift sees the heap a connected device actually has, and the
+reserve switches from `LIFT_RESERVE_BARE` (40,960) to `LIFT_RESERVE_TLS`
+(61,440) — sized from a measured handshake, not by eye.
+
+Needs `main/wifi_creds.h` (gitignored — see the probe section). Type `!tls` at
+the prompt to fetch over HTTPS and watch the heap move.
+
+Measured: 73% resident (2432 DRAM + 384 IRAM-only), 9.19 ms per query against
+6.47 ms with no network, low-water 15,188 B across two handshakes. Scores are
+identical to the no-network build.
+
 ## `MOGWAI_PROBE=1` — measuring what a WiFi stack costs
 
     MOGWAI_PROBE=1 idf.py build flash monitor
