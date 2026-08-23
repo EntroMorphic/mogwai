@@ -67,6 +67,7 @@
 #define DUTY_STEP     64            /* up/dim move a quarter of full scale */
 
 extern const uint8_t blob_start[] asm("_binary_router_bin_start");
+extern const uint8_t blob_end[]   asm("_binary_router_bin_end");
 
 static router_t R;
 static const tvec *TI;
@@ -148,6 +149,22 @@ static int load(void) {
     const uint8_t *p = blob_start;
     uint32_t hdr[5]; memcpy(hdr, p, 20); p += 20;
     if (hdr[0] != RMAGIC || hdr[1] != RD) return -1;
+    /* Validate the body against the blob's actual extent, not just the header.
+     *
+     * magic and dim survive a TRUNCATED blob - a partial flash write, an
+     * interrupted `idf.py flash` - while n_index does not describe what is
+     * really there. Without this the firmware would compute TI/ACT pointers
+     * past the mapped region and lift_run would memcpy from unmapped flash.
+     * blobfmt performs exactly this check offline; the firmware did not.
+     *
+     * Layout per doc/BLOB_FORMAT.md: 20 header + names + centre + n labels
+     * + 2n act + 64n index + 4 nref. */
+    {
+        size_t have = (size_t)(blob_end - blob_start);
+        size_t need = 20 + RNAMELEN * RMAXCLS + sizeof(int32_t) * RD
+                    + (size_t)hdr[2] * (1 + 2 + sizeof(tvec)) + 4;
+        if (hdr[2] == 0 || need > have) return -1;
+    }
     R.magic=hdr[0]; R.dim=hdr[1]; R.n_index=hdr[2]; R.n_class=hdr[3]; R.threshold=(int32_t)hdr[4];
     memcpy(R.names, p, RNAMELEN * RMAXCLS); p += RNAMELEN * RMAXCLS;
     memcpy(R.centre, p, sizeof(int32_t) * RD); p += sizeof(int32_t) * RD;

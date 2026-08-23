@@ -22,7 +22,9 @@ restore(){ rm -rf "$1"; cp -R "$SNAP/$1" "$1" 2>/dev/null; }
 # verified - that has to be structural, not remembered.
 MPATHS="c/src c/test doc README.md LICENSE scripts/regress.sh Makefile
         data/SHA256 esp32_router/main/router.bin esp32_router/README.md
-        journal/README.md provenance .gitignore esp32_router/main/product.c"
+        journal/README.md provenance .gitignore esp32_router/main/product.c
+        esp32_router/main/CMakeLists.txt esp32_router/sdkconfig.wifi
+        results/TEST_BUDGET results/RESULTS.tsv"
 
 for f in $MPATHS; do save "$f"; done
 
@@ -134,6 +136,14 @@ run_mut "a stray blob gets tracked"          "git add -f archive/superseded_blob
 run_mut "product firmware untracked"         "git rm -q --cached esp32_router/main/product.c"
 run_mut "product actuates the none class"    "sed -i '' 's|if (!strcmp(R.names\\[cls\\], \"none\")) return -2;|if (0) return -2;|' esp32_router/main/product.c"
 run_mut "product loses a rejection cause"    "sed -i '' 's|cls == -2|cls == -9|g' esp32_router/main/product.c"
+
+# --- checks that were hand-verified but never automated ---------------------
+# All three fired when tested by hand and then sat UNCOVERED, which is the
+# "coverage is not retroactive" lesson recurring in my own behaviour: adding a
+# check and hand-mutating it once is not the same as adding the mutation.
+run_mut "budget log gains a phantom read"    "echo 'evaluation 99: 2026-08-23T09:00:00Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test' >> results/TEST_BUDGET"
+run_mut "firmware loses TPOPCNT definition"  "sed -i '' '/target_compile_definitions(\${COMPONENT_LIB} PRIVATE TPOPCNT=\${TPOPCNT})/d' esp32_router/main/CMakeLists.txt"
+run_mut "sdkconfig.wifi reverts IRAM_OPT"    "sed -i '' 's|^CONFIG_ESP_WIFI_IRAM_OPT=n|CONFIG_ESP_WIFI_IRAM_OPT=y|' esp32_router/sdkconfig.wifi"
 
 git reset -q 2>/dev/null; git remote remove origin2 2>/dev/null
 

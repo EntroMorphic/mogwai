@@ -5,6 +5,7 @@ corpus checksums
 popcount table exact over all 2^32 words
 t_dot algebraic rewrite exact
 blob verifier (parity + index integrity)
+decision experiments assert their control
 blob reproducible byte-identical
 recall 85.9
 fa 6
@@ -14,6 +15,7 @@ t_dot algebraic rewrite exact
 blob verifier (parity + index integrity)
 blob reproducible byte-identical
 blobfmt REJECTS a blob with trailing bytes
+decision experiments assert their control
 blobfmt REJECTS a truncated blob
 blobfmt REJECTS a blob with trailing bytes
 blob controls are really -1/+1 byte
@@ -22,6 +24,7 @@ blob verifier (parity + index integrity)
 blob reproducible byte-identical
 layout matches doc/BLOB_FORMAT.md
 blob verifier (parity + index integrity)
+decision experiments assert their control
 blob dim matches router.h RD
 blob reproducible byte-identical
 recall 85.9
@@ -29,6 +32,7 @@ fa 6
 wa 13
 missed 14
 index 240 KB
+decision experiments assert their control
 blob threshold matches router.h RSHIP_TH
 blob reproducible byte-identical
 recall 85.9
@@ -38,12 +42,14 @@ missed 14
 threshold 136
 --route reports score vs threshold
 blob verifier (parity + index integrity)
+decision experiments assert their control
 blob reproducible byte-identical
 recall 85.9
 fa 6
 wa 13
 missed 14
 leak guard ABORTS on a deliberate leak
+decision experiments assert their control
 recall 85.9
 fa 6
 wa 13
@@ -59,9 +65,11 @@ leaktest reproduces 75.6% leak
 leakchk dev/test near-dup
 cuemine mines colour from index
 --help documents --route
+every accepted flag is in --help
 --help groups retained negative results
 --help exits 0
 unknown flag refused with rc=1
+decision experiments assert their control
 paths default to data/ (no positional args)
 --route decision line names the class
 --route shows nearest stored utterances
@@ -74,7 +82,7 @@ paths default to data/ (no positional args)
 --route shows nearest stored utterances
 --route reports score vs threshold
 --route declines a non-command
---route output is clean (no corpus chatter)
+--route output is clean (no diagnostics at all)
 LICENSE present and tracked
 LICENSE is MIT
 markdown links resolve
