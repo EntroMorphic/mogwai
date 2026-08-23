@@ -25,7 +25,7 @@ correct.*
 
 Constants live in `c/src/router.h`: `RMAGIC=0x52545231` ('RTR1'), `RD=256`,
 `RWORDS=RD/32=8` words **per bit-plane** (a `tvec` holds two, so 16 words = 64
-bytes), `RMAXCLS=16`, `RNAMELEN=32`, `RSCALE=16384`, `RSHIP_TH=126`.
+bytes), `RMAXCLS=16`, `RNAMELEN=32`, `RSCALE=16384`, `RSHIP_TH=136`.
 
 ## Why `act[]` is stored
 

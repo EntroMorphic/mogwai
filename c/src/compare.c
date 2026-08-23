@@ -389,6 +389,141 @@ static void rerankoracle(void) {
  * be catching different things. Integer, deterministic, no new storage — both
  * quantities already exist inside the same scan. */
 static int ABSTAIN = 0;
+/* --signplane: the sign bit-plane is 32 of every 64 vector bytes, but only
+ * 0.16% of active index dims sit below centre (1,539 of 983,040), and 83% of
+ * those live in `none`. Dropping the plane halves the blob to ~138 KB and
+ * keeps popcount-in-place — unlike entropy coding, which would save flash we
+ * are not short of while costing a decode step we cannot afford.
+ *
+ * The binary arm is NOT a reimplementation. Setting s := m on both sides makes
+ * diff = a.m ^ b.m, so (both & diff) == 0 and t_dot collapses to pc(a.m & b.m).
+ * The shipped scorer computes the binary case unmodified — no second Dice, no
+ * second TSMOOTH, nothing to drift.
+ *
+ * Dropping signs removes the -2*disagree penalty, so every score RISES. The
+ * comparison is therefore threshold-swept: judging the binary arm at the
+ * ternary arm's threshold would be a strawman (METHOD 19). */
+static int SIGNPLANE = 0;
+
+static void sp_flatten(tvec *d, const tvec *v) {
+    for (int i = 0; i < RWORDS; i++) { d->m[i] = v->m[i]; d->s[i] = v->m[i]; }
+}
+
+static void sp_tally(const int *P, const int *N, const int *C, int th,
+                     int *fa, int *wa, int *ms, int *ok) {
+    *fa = *wa = *ms = *ok = 0;
+    for (int i = 0; i < V_n; i++) {
+        const char *p = (P[i] > th && P[i] - N[i] > 0) ? R.names[C[i]] : "none";
+        int gn = !strcmp(V_l[i], "none");
+        if (!gn && !strcmp(p, V_l[i])) (*ok)++;
+        if (!strcmp(p, V_l[i])) continue;
+        if (gn) (*fa)++; else if (!strcmp(p, "none")) (*ms)++; else (*wa)++;
+    }
+}
+
+static void signplane(void) {
+    long qd_c = 0, qa_c = 0, qd_n = 0, qa_n = 0;
+    int nc = 0, nn = 0;
+    for (int i = 0; i < V_n; i++) {
+        tvec q; t_encode(&R, V_t[i], &q);
+        int act = 0, down = 0;
+        for (int w = 0; w < RWORDS; w++) {
+            act  += __builtin_popcount(q.m[w]);
+            down += __builtin_popcount(q.m[w] & ~q.s[w]);
+        }
+        if (!strcmp(V_l[i], "none")) { qd_n += down; qa_n += act; nn++; }
+        else                         { qd_c += down; qa_c += act; nc++; }
+    }
+    printf("\n  === query-side sign census (DEV) ===\n");
+    printf("  the encoder thresholds on centre[i]*total, and `total` grows with\n");
+    printf("  text length, so longer text should push more dims below centre.\n\n");
+    printf("  %-10s %5s %10s %8s  %s\n", "gold", "n", "active", "downs", "rate");
+    printf("  %-10s %5d %10ld %8ld  %6.3f%%\n", "command", nc, qa_c, qd_c,
+           qa_c ? 100.0 * qd_c / qa_c : 0.0);
+    printf("  %-10s %5d %10ld %8ld  %6.3f%%\n", "none", nn, qa_n, qd_n,
+           qa_n ? 100.0 * qd_n / qa_n : 0.0);
+
+    tvec *TIB = malloc((size_t)R.n_index * sizeof *TIB);
+    for (uint32_t j = 0; j < R.n_index; j++) sp_flatten(&TIB[j], &TI[j]);
+
+    int *Pa = malloc((size_t)V_n*sizeof(int)), *Na = malloc((size_t)V_n*sizeof(int));
+    int *Ca = malloc((size_t)V_n*sizeof(int)), *Pb = malloc((size_t)V_n*sizeof(int));
+    int *Nb = malloc((size_t)V_n*sizeof(int)), *Cb = malloc((size_t)V_n*sizeof(int));
+
+    for (int i = 0; i < V_n; i++) {
+        tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+        tvec qb; sp_flatten(&qb, &q);
+        int bp = -(1<<28), bn = -(1<<28); uint32_t bpi = 0;
+        int cp = -(1<<28), cn = -(1<<28); uint32_t cpi = 0;
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            int isnone = !strcmp(R.names[R.label[j]], "none");
+            int s1 = t_score(&q,  &TI[j],  aa);
+            int s2 = t_score(&qb, &TIB[j], aa);
+            if (isnone) { if (s1 > bn) bn = s1; if (s2 > cn) cn = s2; }
+            else {
+                if (s1 > bp) { bp = s1; bpi = j; }
+                if (s2 > cp) { cp = s2; cpi = j; }
+            }
+        }
+        Pa[i] = bp; Na[i] = bn; Ca[i] = r_apply_polarity(&R, R.label[bpi], V_t[i]);
+        Pb[i] = cp; Nb[i] = cn; Cb[i] = r_apply_polarity(&R, R.label[cpi], V_t[i]);
+    }
+
+    int fa, wa, ms, ok;
+    sp_tally(Pa, Na, Ca, RSHIP_TH, &fa, &wa, &ms, &ok);
+    control_or_die("signplane", fa, wa, ms, ok, RSHIP_TH);
+    printf("\n  === arm A: shipped twin-ternary, th=%d ===\n", RSHIP_TH);
+    printf("  fa %d  wa %d  missed %d  ok %d   errors %d\n", fa, wa, ms, ok, fa+wa+ms);
+
+    printf("\n  === arm B: sign plane dropped (1 bit/dim), threshold swept ===\n");
+    printf("  %6s %5s %5s %7s %5s %8s\n", "th", "fa", "wa", "missed", "ok", "errors");
+    int bestth = 0, besterr = 1<<30, bf=0, bw=0, bm=0, bo=0;
+    int mth = -1, mf=0, mw=0, mm=0, mo=0;
+    for (int th = 0; th <= 400; th += 2) {
+        int f, w, m, o; sp_tally(Pb, Nb, Cb, th, &f, &w, &m, &o);
+        if (f + w + m < besterr) { besterr = f+w+m; bestth = th; bf=f; bw=w; bm=m; bo=o; }
+        if (mth < 0 && f <= fa) { mth = th; mf=f; mw=w; mm=m; mo=o; }
+        if (th % 20 == 0)
+            printf("  %6d %5d %5d %7d %5d %8d\n", th, f, w, m, o, f+w+m);
+    }
+    printf("\n  best total errors : th=%d  fa %d  wa %d  missed %d  ok %d   errors %d\n",
+           bestth, bf, bw, bm, bo, besterr);
+    if (mth >= 0)
+        printf("  fa matched to arm A: th=%d  fa %d  wa %d  missed %d  ok %d   errors %d\n",
+               mth, mf, mw, mm, mo, mf+mw+mm);
+    else
+        printf("  fa matched to arm A: UNREACHABLE — binary never gets fa down to %d\n", fa);
+
+    /* Aggregate parity can hide churn: two arms can disagree on many items and
+     * still net to +1.  Count the paired disagreements and put an exact p on
+     * them, same two-sided convention as mcnemar() above.  Arm A sits at the
+     * shipped threshold; arm B at the threshold matching its fa count. */
+    if (mth >= 0) {
+        int fixed = 0, broke = 0, moved = 0;
+        for (int i = 0; i < V_n; i++) {
+            const char *pa = (Pa[i] > RSHIP_TH && Pa[i]-Na[i] > 0) ? R.names[Ca[i]] : "none";
+            const char *pb = (Pb[i] > mth      && Pb[i]-Nb[i] > 0) ? R.names[Cb[i]] : "none";
+            if (strcmp(pa, pb)) moved++;
+            int oa = !strcmp(pa, V_l[i]), ob = !strcmp(pb, V_l[i]);
+            if (ob && !oa) fixed++; else if (oa && !ob) broke++;
+        }
+        int m = fixed + broke; double s = 0, tot = 0;
+        int lo = fixed < broke ? fixed : broke, hi = fixed > broke ? fixed : broke;
+        for (int k = 0; k <= m; k++) {
+            double w = 1; for (int j = 0; j < k; j++) w = w * (m - j) / (j + 1);
+            tot += w; if (k <= lo || k >= hi) s += w;
+        }
+        double p = m ? s / tot : 1.0;
+        printf("\n  === paired: arm A (th=%d) vs arm B (th=%d) ===\n", RSHIP_TH, mth);
+        printf("  decisions that changed at all : %d of %d\n", moved, V_n);
+        printf("  overall correctness: fixed %d  broke %d  p=%.4f (two-sided exact) %s\n",
+               fixed, broke, p, p < 0.05 ? "SIGNIFICANT" : "not significant");
+    }
+    printf("\n  blob if adopted: 261036 -> %d bytes (%.1f%% smaller)\n",
+           261036 - (int)(R.n_index * 32), 100.0 * (R.n_index * 32) / 261036.0);
+    free(TIB); free(Pa); free(Na); free(Ca); free(Pb); free(Nb); free(Cb);
+}
+
 
 static void abstain(void) {
     int *P = malloc((size_t)V_n * sizeof(int));
@@ -1483,6 +1618,7 @@ static void usage(void) {
 "  --rerankoracle         can the discarded per-dim magnitude reorder the top-K?\n"
 "  --condcentre           per-dim centre conditioned on firing, not diluted by zeros\n"
 "  --abstain              accept on P-N margin instead of an absolute threshold\n"
+"  --signplane            cost of dropping the sign plane: 1 bit/dim, half the blob\n"
 "  --faprobe              the negatives that pin the zero-FA frontier, forensically\n"
 "  --contrast             rescore top-2 on the dims where they disagree\n"
 "  --coverage             for failing commands, where does their vocabulary live?\n"
@@ -2060,6 +2196,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--rerankoracle")) RERANK=1;
         else if (!strcmp(a,"--condcentre")) CONDCENTRE=1;
         else if (!strcmp(a,"--abstain")) ABSTAIN=1;
+        else if (!strcmp(a,"--signplane")) SIGNPLANE=1;
         else if (!strcmp(a,"--faprobe")) FAPROBE=1;
         else if (!strcmp(a,"--contrast")) CONTRAST=1;
         else if (!strcmp(a,"--coverage")) COVERAGE=1;
@@ -2202,6 +2339,7 @@ int main(int argc,char**argv){
     if(RANKORACLE){ rankoracle(); return 0; }
     if(RERANK){ rerankoracle(); return 0; }
     if(ABSTAIN){ abstain(); return 0; }
+    if(SIGNPLANE){ signplane(); return 0; }
     if(FAPROBE){ faprobe(); return 0; }
     if(CONTRAST){ contrast(); return 0; }
     if(COVERAGE){ coverage(); return 0; }
