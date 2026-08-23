@@ -505,3 +505,102 @@ utterance talks like this", and the remedy is stored utterances that do.
     ------------------------------------------------------------------
     index coverage                       the remaining live hypothesis
     abstention policy (P-N margin)       live, +32 commands at fa<=1
+
+---
+
+# Coverage audit: where does the failing vocabulary live?
+
+*`compare --prune-negtop=0 --fixth=136 --coverage` and `--rankoracle`. Dev only.*
+
+Prompted by SSTT (`../sstt/`), whose headline is the **mirror image** of this
+one: *"zero retrieval failures — every correct class is retrievable from 60,000
+training images; all 237 remaining errors are ranking failures."* In SSTT
+retrieval is perfect and ranking is the problem. Here ranking is acquitted
+(world 3) and coverage is the problem. Same architecture family, opposite
+bottleneck.
+
+## Split 1 — false actuations are an INDEX-SELECTION failure
+
+Pruning removed **only negatives**: `10500 -> 3840 (negtop 6660), iot 1155/1155
+retained`. So the positives are bit-identical pre- and post-prune, and `wa` and
+`missed` cannot be index-selection failures by construction. Re-running the rank
+oracle against the unpruned 10500-vector index at the same threshold:
+
+                   shipped (3840)     unpruned (10500)
+    UNBIDDEN             6                   1
+    wrong-act           13                  13
+    missed              14                  14
+
+**Five of the six false actuations exist only because the negative that would
+have rejected them was pruned away.** Not "we need more negatives" — we had
+them, and `--prune-negtop` discarded the useful ones.
+
+That is a sharper statement of the earlier sweep result (fa monotone in negative
+count) and it indicts the *selection criterion*: `negtop` keeps negatives with
+the highest index-internal NN-coverage, and those turn out not to be the ones
+that do rejection work on unseen queries. **Index-internal coverage is a poor
+proxy for rejection utility.**
+
+## Split 2 — for failing commands, the vocabulary is in the corpus
+
+For each failing command, for each token of length >= 4, how many index
+exemplars of the TRUE class contain it, and how many exemplars contain it at all:
+
+    of 27 failing commands:
+      discriminative token present in the true class : 15
+      word exists in corpus but never for that class : 12
+      absent from the corpus entirely                :  0
+
+**Zero open-vocabulary failures.** Every failing command's vocabulary is
+somewhere in the corpus. And the strongest single case:
+
+    brighten the lamp next to the sofa      said=none  truth=iot_hue_lightup
+      brighten(20/20)  lamp(2/14)  next(0/325)  sofa(0/0)
+
+**`brighten` occurs 20 times in the corpus and all 20 are `iot_hue_lightup`** —
+perfect class purity, information gain of 1 — and the router rejects the query,
+because Dice dilutes that one signal across "next to the sofa".
+
+## Why this is not a new idea, and that matters
+
+A class-conditioned word channel is exactly what SSTT's information gain is, and
+the distinction from IDF is real: IG can vote `iot_coffee` for `brewing` even
+when no candidate exemplar contains `brewing`. IDF cannot.
+
+**But this project has tried that family three times.**
+
+- signature prior — **inert**
+- word prior (lift, text-derived) — 3 tie / 2 lose / 3 win by 1-2
+- the gate/selector — **failed held-out and was cut** (test evaluation #4:
+  recall 84.1% -> 82.7%, `wa` 15 -> 18)
+
+And the signal is not in doubt. The word prior measures **89.6% vs the router's
+85.9%** on dev IoT — it is genuinely better at *which* class. What failed every
+time was the **combiner**: deciding when to trust which channel, using a rule
+fitted on dev or on index cross-validation, which did not transfer.
+
+So the finding is not "there is a semantic signal we have not exploited". It is:
+
+> **The semantic signal exists and is measured. Three attempts to combine it
+> with the router have failed, one of them on held-out data. The open problem is
+> channel combination, not channel discovery.**
+
+One thing genuinely differs in the current proposal: the trigger. Previous
+attempts gated on the *prior's* confidence (`--selmargin`). Gating instead on
+the *router's* candidate gap — invoke the second channel only when the coarse
+scan reports a near-tie — is a deterministic trigger derived from the router's
+own uncertainty rather than a fitted parameter. That is a different mechanism.
+It is also the fourth attempt in a family with a 0-for-3 record, and it deserves
+index-internal cross-validation and a pre-registration before it sees the test
+set.
+
+## The error space, fully decomposed
+
+    false actuations (6)     5 index-selection (pruned the useful negative)
+                             1 corpus defect ("make me happy juice")
+    failing commands (27)   15 discriminative token IS in the true class
+                            12 word exists but never for that class
+                             0 open vocabulary
+
+Nothing here is a representation failure. That was the question the session
+opened with, and the answer is no.

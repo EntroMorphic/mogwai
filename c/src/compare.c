@@ -676,6 +676,89 @@ static void contrast(void) {
     printf("    ...of the cases nothing else fixed      : %d\n", wW3);
 }
 
+
+/* ---- coverage audit -------------------------------------------------------
+ * World 3 said the features do not separate these, and the whole-word tie
+ * showed why: the query's discriminative token is absent from BOTH candidates.
+ * So ask the question directly, against the FULL index rather than the top-K:
+ *
+ *   for each token of a failing query, does it occur in ANY exemplar of the
+ *   true class? anywhere in the index at all?
+ *
+ * Three outcomes, and they are different problems:
+ *   df_true > 0   the vocabulary IS in the class - a selection/ranking failure,
+ *                 and the one case where a class-conditioned channel (SSTT's
+ *                 information gain, not IDF) could vote correctly without any
+ *                 candidate containing the token
+ *   df_true = 0, df_all > 0   the word exists but never for this class
+ *   df_all  = 0   open vocabulary: no exemplar set contains it, and no
+ *                 statistic over the corpus can bridge it */
+static int COVERAGE = 0;
+
+static int tok_split(const char *s, char *buf, int cap, char **w, int maxw) {
+    int l = r_norm(s, buf, cap), c = 0;
+    for (int i = 0; i < l && c < maxw; ) {
+        while (i < l && buf[i] == ' ') i++;
+        if (i >= l) break;
+        w[c++] = buf + i;
+        while (i < l && buf[i] != ' ') i++;
+        if (i < l) buf[i++] = 0;
+    }
+    return c;
+}
+
+static void coverage(void) {
+    int th = FIXTH >= 0 ? FIXTH : RSHIP_TH;
+    int nsel = 0, ncorp = 0, nopen = 0, ncase = 0;
+    printf("\n  coverage audit against the FULL %u-vector index, th=%d\n", (unsigned)R.n_index, th);
+    printf("  for each failing command, where does its vocabulary live?\n\n");
+    for (int i = 0; i < V_n; i++) {
+        if (!strcmp(V_l[i], "none")) continue;              /* commands only */
+        tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+        int best = -(1<<28); uint32_t bi = 0;
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            int s = t_score(&q, &TI[j], aa);
+            if (s > best) { best = s; bi = j; }
+        }
+        int c = (best > th) ? r_apply_polarity(&R, R.label[bi], V_t[i]) : -1;
+        const char *p = c < 0 ? "none" : R.names[c];
+        if (!strcmp(p, V_l[i])) continue;
+        ncase++;
+
+        char buf[512]; char *w[64];
+        int nw = tok_split(V_t[i], buf, sizeof buf, w, 64);
+        int any_all = 0, rare_in_class = 0;
+        char rep[256]; rep[0] = 0;
+        for (int t = 0; t < nw; t++) {
+            if (strlen(w[t]) < 4) continue;                 /* skip carrier scaffolding */
+            int dt = 0, da = 0;
+            char eb[512]; char *ew[64];
+            for (uint32_t j = 0; j < R.n_index; j++) {
+                int ne = tok_split(U_t[j], eb, sizeof eb, ew, 64), hit = 0;
+                for (int k = 0; k < ne && !hit; k++) if (!strcmp(ew[k], w[t])) hit = 1;
+                if (!hit) continue;
+                da++;
+                if (!strcmp(R.names[R.label[j]], V_l[i])) dt++;
+            }
+            if (da) any_all = 1;
+            if (dt && da <= 40) rare_in_class = 1;
+            char one[64];
+            snprintf(one, sizeof one, "%s(%d/%d) ", w[t], dt, da);
+            if (strlen(rep) + strlen(one) < sizeof rep - 1) strcat(rep, one);
+        }
+        const char *verdict;
+        if (rare_in_class)      { verdict = "SELECTION/RANKING - discriminative token IS in class"; nsel++; }
+        else if (any_all)       { verdict = "CORPUS - word exists, never for this class";           ncorp++; }
+        else                    { verdict = "OPEN VOCAB - absent from the corpus entirely";         nopen++; }
+        printf("  %-52s said=%-20s truth=%s\n", V_t[i], p, V_l[i]);
+        printf("      tokens(in-class/anywhere): %s\n      -> %s\n", rep, verdict);
+    }
+    printf("\n  of %d failing commands:\n", ncase);
+    printf("    discriminative token present in the true class : %d\n", nsel);
+    printf("    word exists in corpus but never for that class : %d\n", ncorp);
+    printf("    absent from the corpus entirely                : %d\n", nopen);
+}
+
 typedef struct{int fa,wa,ms,iok,in;} TX;
 static TX tally(hit*H,int th,char la[][RNAMELEN],int n){
     TX z={0,0,0,0,0};
@@ -1177,6 +1260,7 @@ static void usage(void) {
 "  --abstain              accept on P-N margin instead of an absolute threshold\n"
 "  --faprobe              the negatives that pin the zero-FA frontier, forensically\n"
 "  --contrast             rescore top-2 on the dims where they disagree\n"
+"  --coverage             for failing commands, where does their vocabulary live?\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -1747,6 +1831,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--abstain")) ABSTAIN=1;
         else if (!strcmp(a,"--faprobe")) FAPROBE=1;
         else if (!strcmp(a,"--contrast")) CONTRAST=1;
+        else if (!strcmp(a,"--coverage")) COVERAGE=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -1880,6 +1965,7 @@ int main(int argc,char**argv){
     if(ABSTAIN){ abstain(); return 0; }
     if(FAPROBE){ faprobe(); return 0; }
     if(CONTRAST){ contrast(); return 0; }
+    if(COVERAGE){ coverage(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }
