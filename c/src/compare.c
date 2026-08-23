@@ -304,10 +304,15 @@ static void rerankoracle(void) {
         long nact=0, npos=0; long long amin=1LL<<60, amax=-(1LL<<60), asum=0;
         for (uint32_t j = 0; j < n; j++) {
             const int32_t *d = RR_D + (size_t)j * RD;
-            for (int t = 0; t < RD; t++) { if (!d[t]) continue; nact++;
+            for (int t = 0; t < RD; t++) {
+                if (!d[t]) continue;
+                nact++;
                 if (d[t] > 0) npos++;
                 long long v = d[t] < 0 ? -d[t] : d[t];
-                if (v < amin) amin = v; if (v > amax) amax = v; asum += v; }
+                if (v < amin) amin = v;
+                if (v > amax) amax = v;
+                asum += v;
+            }
         }
         printf("\n  residual stats over %ld active dims of %u index vectors\n", nact, (unsigned)n);
         printf("    delta > 0 (sign bit set): %ld  (%.1f%%)\n", npos, 100.0*npos/nact);
