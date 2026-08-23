@@ -24,3 +24,23 @@ of which four produced usable measurements. The counter reads 7 and is therefore
 an upper bound, not a count.
 evaluation 8: 2026-08-22T23:42:52Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test --ship
 evaluation 9: 2026-08-23T06:09:46Z  argv: data/train.json data/validation.json data/test.json data/nlu_home.csv --test --fixth=136 --prune-negbound=2685
+
+--- audit note, 2026-08-23 ---
+The 2026-08-22 note above is superseded but kept, per the same principle it
+states. It described a 7-entry state; the counter now reads 9.
+
+Reconciliation as of this note:
+  entries naming data/test.json with --test : 3, 4, 7, 8, 9   (five)
+  entry 2 (2026-08-20) also real, but predates results/RESULTS.tsv
+  entry 1 VOID, no timestamp
+  entries 5, 6 spurious, do not name data/test.json
+
+  real touches           7
+  recorded in RESULTS.tsv 5   (13:57:45, 17:52:23, 13:38:13, 23:42:52, 06:09:46)
+  unrecorded             2    (entry 1 VOID; entry 2 predates the file)
+
+Entries 8 and 9 are test evaluations #6 and #7. This reconciliation is now
+enforced by regress.sh rather than done by hand: "budget log reconciles with
+RESULTS.tsv" asserts that every logged read naming the held-out split, dated
+after RESULTS.tsv begins, has a matching TEST row. The hand-done version went
+stale within a day, which is why it is a check now.

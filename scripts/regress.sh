@@ -232,6 +232,17 @@ chk "doc/ARCHIVE.md present and tracked" "$([ -f doc/ARCHIVE.md ] && git ls-file
 # ever pointing back at the upstream clone it was separated from.
 chk "no remote points at the upstream clone" "$(git remote -v 2>/dev/null | grep -ci 'anjaustin/needle')" "0"
 
+# The budget log and the results table must tell the same story. Every logged
+# read that names the held-out split, and is dated after RESULTS.tsv begins,
+# must have a matching TEST row. Nothing checked this before; the reconciliation
+# was done by hand once and the audit note went stale immediately after.
+FIRST=$(awk -F'\t' 'NR==2{print $1}' results/RESULTS.tsv)
+LOGGED=$(grep '^evaluation' results/TEST_BUDGET | grep -c "data/test.json.*--test")
+PRIOR=$(grep '^evaluation' results/TEST_BUDGET | grep "data/test.json.*--test" \
+        | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z' | awk -v f="$FIRST" '$0 < f' | wc -l | tr -d ' ')
+ROWS=$(awk -F'\t' 'NR>1 && $4=="TEST"{print $1}' results/RESULTS.tsv | sort -u | wc -l | tr -d ' ')
+chk "budget log reconciles with RESULTS.tsv" "$((LOGGED - PRIOR))" "$ROWS"
+
 # The docs quote this suite's size. That number went stale the moment the
 # suite grew, and nothing noticed. Check it against reality.
 LIVE=$((P + F + S + 1))   # +1 for this check itself; skipped still count as checks
