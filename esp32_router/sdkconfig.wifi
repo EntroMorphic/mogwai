@@ -31,3 +31,23 @@ CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
 # the max_fragment_length extension, which needs server support most lack.
 CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192
 CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=2048
+
+# ---- WiFi IRAM speed optimisation: OFF ---------------------------------------
+# These copy WiFi/RX code into IRAM to raise throughput. On this device IRAM is
+# worth more as INDEX STORAGE than as WiFi speed: the index is uint32_t
+# throughout, so lift.c can place chunks in the 32-bit-only pool that malloc
+# cannot reach — and packet buffers, which need byte access, never could.
+# Measured, WiFi associated, full netif+lwIP+TLS:
+#
+#   IRAM_OPT on    2944/3840 resident (76%)   2432 DRAM + 512 IRAM   9.19 ms
+#   IRAM_OPT off   3200/3840 resident (83%)   2432 DRAM + 768 IRAM   8.42 ms
+#
+# DRAM is IDENTICAL either way. The whole gain is IRAM that WiFi was holding for
+# speed, handed to a workload that can physically use it. TLS unaffected:
+# worst-case free 27,644 B, handshake still returns HTTP 200.
+#
+# NOT free: WiFi code now runs from flash cache, so ISR latency is higher and
+# throughput is lower. Measured under light traffic only — validate before using
+# it on a device that moves real data.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
