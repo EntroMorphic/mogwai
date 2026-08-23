@@ -1879,3 +1879,55 @@ The reserve is doing exactly what it was sized to do.
 `esp32_router/sdkconfig.wifi`, not in a `/tmp` fragment. The first run of this
 measurement used an untracked overlay and was therefore not reproducible; it was
 re-run from the tracked file and produced identical figures.
+
+### A HELD-OPEN TLS session costs 34.6 KB, not 1 KB
+
+Every TLS figure above was connect-then-**close**. That is the wrong measurement
+for a device with one long-lived connection, and the difference is not small.
+
+mbedTLS holds its record buffers for the life of a connection, sized by
+`MBEDTLS_SSL_IN_CONTENT_LEN` / `OUT_CONTENT_LEN`, which IDF defaults to full
+16 KB TLS records. Measured with `esp_tls`, session opened, read on, and **held**:
+
+    MBEDTLS_SSL_IN_CONTENT_LEN=16384  OUT=4096
+    free 66000 -> 31760 after handshake -> 31368 with session held
+    HELD SESSION COSTS 34632 B (steady, while open)
+    after 3 s still held: free 22964
+    after close:          free 66012
+
+**34,632 B held, not the ~1 KB the connect-then-close runs implied.** It is also
+not static: free drifted down a further 8.4 KB over three idle seconds, so a
+held session keeps allocating after it settles. Everything returns on close.
+
+Sweeping the buffer that dominates it:
+
+| `IN_CONTENT_LEN` | handshake | held cost | worst-case free |
+|---|---|---|---|
+| 16384 (IDF default) | OK | 34,632 B | 17,972 B |
+| **8192** | OK | **27,056 B** | **28,776 B** |
+| 4096 | **FAILS**, `mbedtls_ssl_handshake -0x7200` | — | — |
+
+**4096 is not a tuning choice, it is a broken build** — the server sends records
+larger than the buffer and every handshake is rejected, including the plain
+`esp_tls` one. 8192 works and buys 7.6 KB of held memory plus 10.8 KB of
+worst-case headroom, and is now `esp32_router/sdkconfig.tls`.
+
+**This is server-dependent and the caveat is load-bearing.** 8192 worked against
+the endpoint measured here; a server emitting full 16 KB records will fail
+exactly as 4096 did. Validate against the endpoint you actually talk to.
+
+### What it means for the reserve
+
+`LIFT_RESERVE_TLS` was sized for a **transient** 46.7 KB handshake that returns.
+A held session does not return it, so the arithmetic changes:
+
+- **connect-then-close**: reserve ≥ handshake transient. 61,440 covers it.
+- **one held session**: reserve ≥ held cost, permanently, and the handshake that
+  creates it peaks higher. Measured worst case 17,972 B free at IN=16384 and
+  28,776 B at IN=8192 — both survive, the first uncomfortably.
+- **a second handshake while holding** — an OTA, or a reconnect before teardown —
+  needs held + transient ≈ 82 KB. **61,440 does not cover that.**
+
+So the one-connection design is the right one on memory grounds as well as
+security grounds, and OTA is the case that breaks it: tear the session down
+before starting an update.
