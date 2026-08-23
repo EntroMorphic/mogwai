@@ -1910,7 +1910,7 @@ Sweeping the buffer that dominates it:
 **4096 is not a tuning choice, it is a broken build** — the server sends records
 larger than the buffer and every handshake is rejected, including the plain
 `esp_tls` one. 8192 works and buys 7.6 KB of held memory plus 10.8 KB of
-worst-case headroom, and is now `esp32_router/sdkconfig.tls`.
+worst-case headroom, and now ships in `esp32_router/sdkconfig.wifi`.
 
 **This is server-dependent and the caveat is load-bearing.** 8192 worked against
 the endpoint measured here; a server emitting full 16 KB records will fail

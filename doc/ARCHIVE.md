@@ -49,6 +49,13 @@ Compared `t_score` against a candidate `dice()`; Dice was then adopted **as**
 was TRACKED and referenced by nothing; `blobfmt` rejects it against the current
 format. Untracked and moved here — see that directory's README.
 
+## `archive/superseded_config/` — `sdkconfig.tls`
+
+Held `MBEDTLS_SSL_IN_CONTENT_LEN=8192` as a separate opt-in overlay for one
+commit. Folded into `esp32_router/sdkconfig.wifi`: 8192 is what ships for every
+networked build, and a second overlay a build could forget to include was the
+wrong shape for a setting whose absence costs 7.6 KB of held memory.
+
 ## The one deliberate exception
 
 A copy of the upstream bundle is tracked at `provenance/needle-upstream.bundle`.
