@@ -281,3 +281,85 @@ better evidence than a peak.
 What would make it trustworthy, in order: cross-validate the *mechanism* inside
 the index rather than tuning the pair on dev; pre-register a single (th, m) with
 falsifiers; then spend one budget unit. Not before.
+
+---
+
+# Forensics: what pins the zero-FA frontier
+
+*`compare --ship --faprobe`. Dev only.*
+
+The margin rule moved the `fa<=1` frontier by 32 commands and the `fa=0`
+frontier by nothing, so at zero something other than weak evidence or a nearby
+negative sets the boundary. A negative is a false actuation at threshold `th`
+iff `P > th` and `P > N`, so the negatives with `P > N`, sorted by `P`
+descending, **are** the frontier.
+
+34 of 1527 dev negatives qualify. The top one:
+
+    [1] P=188  N=116  gap=72  active=25  ngrams=25  -> iot_coffee
+        query    "make me happy"
+        nearest+ "make me happy juice"
+        nearest- "make me laugh"
+
+**That is a corpus artifact, not a representational collision.** An index entry
+reading *"make me happy juice"* is labelled `iot_coffee`, and *"make me happy"*
+is a literal prefix of it. A character 3/4-gram encoder must score that highly;
+the router is behaving correctly given a defective exemplar. **This is a
+benchmark floor.**
+
+## The rest have a nameable structure
+
+    [2] gap=24  "can you please put on music"        vs "can you please put the vacuum on"
+    [3] gap=23  "can you put this on facebook"       vs "can you put the vacuum on"
+    [5] gap= 1  "i would like to talk about it"      vs "I would like to have a cup of coffee"
+    [6] gap= 3  "please restart the handmaid's tale" vs "please start the vacuum"
+    [9] gap=25  "i need a taxi ride now"             vs "yo i need a coffee now"
+    [11] gap=37 "twenty questions you start"         vs "Can you start the coffee?"
+
+**The carrier phrase dominates the object.** *"can you please put ___ on"* is
+five common words; the discriminative content is one rare word contributing a
+handful of n-grams against dozens from the frame. The encoder is measuring the
+frame, not the filling. This is the same "put ... on" family that accounts for
+four of the six false actuations at the shipped threshold.
+
+## Nothing is confidently wrong except the artifact
+
+Gap distribution over all 34 blockers:
+
+    <10: 20    10-24: 9    25-49: 4    50-74: 1    >=75: 0
+
+Twenty of thirty-four sit within 10 points of their nearest negative. The
+"representation has put a negative deep inside positive territory" case occurs
+**once**, and it is the labelling defect.
+
+That is the useful split: the zero-FA frontier is pinned by a corpus defect, and
+everything behind it is a set of narrow margins on shared phrasing.
+
+## The P-ladder
+
+    188  169  149  140  138  137  136  136  135  134  133  129 ...
+
+Removing the one defective index entry moves the `fa=0` threshold from 188 to
+170 — recall roughly 105 -> 127 commands (+22), pending an index rebuild to
+confirm, since removing an entry perturbs other queries' scores too.
+
+**The lever stops there.** Blockers 2 onward have legitimate command exemplars
+as their nearest positive ("can you please put the vacuum on" is a real cleaning
+command). Pruning those would trade false actuations for missed commands
+directly, which is the trade the threshold already makes.
+
+## What this makes the tight problem
+
+Not "make ranking better". Specifically:
+
+> Separate a query from an index exemplar that shares its entire carrier phrase
+> and differs only in the object word, **without disturbing the geometry that
+> already works** — noting that `--condcentre`, an obvious attempt to make the
+> representation more informative, cost 20 points.
+
+And the honest caveat on the artifact: it was found *via* dev. Removing an index
+entry because it causes a dev error is fitting to dev. The principled version is
+index-internal — a leave-one-out pass over the index alone, finding positives
+that are the nearest neighbour of many unrelated entries, which is what
+`--prune-cnn` already does in the opposite direction and what `cuemine`'s
+index-only discipline exists for. That has not been run.

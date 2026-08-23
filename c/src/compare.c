@@ -474,6 +474,60 @@ static void abstain(void) {
     free(P); free(N); free(C);
 }
 
+
+/* ---- zero-FA forensics ---------------------------------------------------
+ * The margin rule moved the fa<=1 frontier by 32 commands and the fa=0 frontier
+ * by nothing. So at fa=0 something other than "weak evidence" or "a negative is
+ * nearby" is setting the boundary. Find it.
+ *
+ * A negative is a false actuation at threshold th (margin 0) iff P > th and
+ * P > N. So the negatives with P > N, sorted by P descending, ARE the frontier:
+ * th must exceed the topmost one for fa=0. Dump them with everything that could
+ * explain why the router believes they are commands. */
+static int FAPROBE = 0;
+
+static void faprobe(void) {
+    typedef struct { int P, N, pi, ni, qi, aa, tot; } B;
+    B *b = malloc((size_t)V_n * sizeof(B)); int nb = 0;
+    for (int i = 0; i < V_n; i++) {
+        if (strcmp(V_l[i], "none")) continue;             /* negatives only */
+        tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+        int16_t acc[RD]; int32_t tot; r_counts(V_t[i], acc, &tot);
+        int bp = -(1 << 28), bn = -(1 << 28); int bpi = 0, bni = 0;
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            int s = t_score(&q, &TI[j], aa);
+            if (!strcmp(R.names[R.label[j]], "none")) { if (s > bn) { bn = s; bni = (int)j; } }
+            else if (s > bp) { bp = s; bpi = (int)j; }
+        }
+        if (bp <= bn) continue;                            /* negative wins: safe */
+        b[nb++] = (B){bp, bn, bpi, bni, i, aa, tot};
+    }
+    for (int i = 0; i < nb; i++)                           /* sort by P desc */
+        for (int j = i + 1; j < nb; j++)
+            if (b[j].P > b[i].P) { B t = b[i]; b[i] = b[j]; b[j] = t; }
+
+    printf("\n  %d of %d dev negatives have P > N (a command exemplar outranks\n", nb, V_n);
+    printf("  every negative). Sorted by P: the top one sets the fa=0 frontier,\n");
+    printf("  because th must exceed it. Shipped th=136; fa=0 needs th=188.\n\n");
+    int shown = nb < 12 ? nb : 12;
+    for (int k = 0; k < shown; k++) {
+        B *x = &b[k];
+        printf("  [%2d] P=%-4d N=%-4d gap=%-4d  active=%-3d ngrams=%-4d  -> %s\n",
+               k + 1, x->P, x->N, x->P - x->N, x->aa, x->tot,
+               R.names[r_apply_polarity(&R, R.label[x->pi], V_t[x->qi])]);
+        printf("       query    \"%s\"\n", V_t[x->qi]);
+        printf("       nearest+ \"%s\"\n", U_t[x->pi]);
+        printf("       nearest- \"%s\"\n", U_t[x->ni]);
+    }
+    printf("\n  gap distribution over all %d: ", nb);
+    { int g0=0,g10=0,g25=0,g50=0,gbig=0;
+      for (int k = 0; k < nb; k++) { int g = b[k].P - b[k].N;
+        if (g < 10) g0++; else if (g < 25) g10++; else if (g < 50) g25++;
+        else if (g < 75) g50++; else gbig++; }
+      printf("<10:%d  10-24:%d  25-49:%d  50-74:%d  >=75:%d\n", g0,g10,g25,g50,gbig); }
+    free(b);
+}
+
 typedef struct{int fa,wa,ms,iok,in;} TX;
 static TX tally(hit*H,int th,char la[][RNAMELEN],int n){
     TX z={0,0,0,0,0};
@@ -973,6 +1027,7 @@ static void usage(void) {
 "  --rerankoracle         can the discarded per-dim magnitude reorder the top-K?\n"
 "  --condcentre           per-dim centre conditioned on firing, not diluted by zeros\n"
 "  --abstain              accept on P-N margin instead of an absolute threshold\n"
+"  --faprobe              the negatives that pin the zero-FA frontier, forensically\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -1541,6 +1596,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--rerankoracle")) RERANK=1;
         else if (!strcmp(a,"--condcentre")) CONDCENTRE=1;
         else if (!strcmp(a,"--abstain")) ABSTAIN=1;
+        else if (!strcmp(a,"--faprobe")) FAPROBE=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -1672,6 +1728,7 @@ int main(int argc,char**argv){
     if(RANKORACLE){ rankoracle(); return 0; }
     if(RERANK){ rerankoracle(); return 0; }
     if(ABSTAIN){ abstain(); return 0; }
+    if(FAPROBE){ faprobe(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }

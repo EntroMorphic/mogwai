@@ -379,3 +379,30 @@ every single-guard mutation looked inert until all three were disabled at once.
 And on a `make` that rebuilds by mtime, always `rm -f` the binary before
 re-measuring — three conclusions in this pass were drawn from builds that had
 not actually happened, one of them the exact opposite of the truth.
+
+## 19. Does the baseline reproduce the product?
+
+**Incident.** Testing a margin-based acceptance rule against a "threshold only"
+control produced a beautiful number: **+38 commands**. The control thresholded
+the best *positive* exemplar and ignored whether a negative outranked it — which
+silently deleted the `none` check the router already has. The real shipped rule
+is `P > th AND P - N > 0`, because "a negative won the argmax" *is* a
+zero-margin test. Against the correct baseline the gain was **+3**.
+
+The claim was not wrong by a little. It was wrong by an order of magnitude, in
+the flattering direction, and it would have been reported.
+
+**Rule.** Any experiment comparing an alternative decision rule against the
+current one must first show that **the control reproduces the shipped numbers**.
+Not approximately — exactly. In this case the check is one row: the baseline
+column at `fa<=6` must read `th=136 ok=165`, and it did not until the control
+was fixed.
+
+It is astonishingly easy to improve a system by comparing it against a
+simplified caricature of itself, because the caricature is usually the version
+you would have designed if you had not already learned better. Every part of the
+shipped rule is there for a reason someone found the hard way; a control that
+drops one of them is measuring a system that was never deployed.
+
+This generalises past decision rules. A "before" measurement is a claim about
+the product, and it deserves the same scepticism as the "after".
