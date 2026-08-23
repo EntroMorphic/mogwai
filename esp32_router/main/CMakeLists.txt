@@ -60,6 +60,16 @@ if(NOT DEFINED TPOPCNT)
 endif()
 target_compile_definitions(${COMPONENT_LIB} PRIVATE TPOPCNT=${TPOPCNT})
 
+
+# Actuator pins, overridable so a WROVER user can move off GPIO16/17 (which are
+# that module's PSRAM CS and CLK). Only emitted when asked for, so the default
+# build is unchanged.
+foreach(P PIN_LIGHT_NUM PIN_WEMO_NUM PIN_CLEANING_NUM PIN_COFFEE_NUM)
+  if(DEFINED ${P})
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ${P}=${${P}})
+  endif()
+endforeach()
+
 # router dimension; blob and firmware must agree or parity is meaningless
 if(NOT DEFINED RD)
   set(RD 256)

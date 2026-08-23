@@ -5,16 +5,30 @@
  * host, this proves the arithmetic drives a pin.
  *
  * The safety property measured throughout this project is enforced here in one
- * place: **nothing actuates unless the router accepts.** Held-out, that is 8
- * false actuations in 2754 non-commands (0.29%). A rejected utterance leaves
- * every output exactly as it was.
+ * place: **nothing actuates unless the router accepts.** Held-out, on the
+ * SHIPPED 240 KB index, that is 12 false actuations in 2754 non-commands
+ * (0.44%) — test evaluation #6. A rejected utterance leaves every output
+ * exactly as it was.
  *
- * Pins (ESP32 devkit defaults; strapping pins avoided except GPIO2, which is
- * the onboard LED on most boards and is only driven after boot):
+ * Pins. Overridable at build time:
+ *     idf.py -DPRODUCT=1 -DPIN_LIGHT_NUM=2 -DPIN_CLEANING_NUM=25 ... build
+ *
+ * WROVER WARNING. The defaults below use GPIO16 and GPIO17, which on any
+ * WROVER-class module (ESP32-D0WD *with PSRAM*) are the PSRAM chip-select and
+ * clock lines — IDF's own defaults are D0WD_PSRAM_CS_IO=16, CLK_IO=17. The
+ * board this was developed on is a plain WROOM with no PSRAM, so the collision
+ * never appeared. On a WROVER, MOVE THESE PINS. GPIO25/26/27 are safe choices
+ * on both.
+ *
+ * GPIO2 is a strapping pin: it must be low or floating at boot for the ROM
+ * download mode, which is why it is only driven after boot. It is also the
+ * onboard LED on most devkits, which makes the light channel visible with no
+ * wiring.
+ *
  *   GPIO2   light      LEDC PWM, so on/off/up/dim/change all drive one channel
  *   GPIO4   wemo       plain level
- *   GPIO16  cleaning   250 ms pulse
- *   GPIO17  coffee     250 ms pulse
+ *   GPIO16  cleaning   250 ms pulse   <- PSRAM CS on WROVER
+ *   GPIO17  coffee     250 ms pulse   <- PSRAM CLK on WROVER
  */
 #include <stdio.h>
 #include <string.h>
@@ -31,10 +45,22 @@
 #include "ternary.h"
 #include "lift.h"
 
-#define PIN_LIGHT     GPIO_NUM_2
-#define PIN_WEMO      GPIO_NUM_4
-#define PIN_CLEANING  GPIO_NUM_16
-#define PIN_COFFEE    GPIO_NUM_17
+#ifndef PIN_LIGHT_NUM
+#define PIN_LIGHT_NUM     2
+#endif
+#ifndef PIN_WEMO_NUM
+#define PIN_WEMO_NUM      4
+#endif
+#ifndef PIN_CLEANING_NUM
+#define PIN_CLEANING_NUM 16
+#endif
+#ifndef PIN_COFFEE_NUM
+#define PIN_COFFEE_NUM   17
+#endif
+#define PIN_LIGHT     ((gpio_num_t)PIN_LIGHT_NUM)
+#define PIN_WEMO      ((gpio_num_t)PIN_WEMO_NUM)
+#define PIN_CLEANING  ((gpio_num_t)PIN_CLEANING_NUM)
+#define PIN_COFFEE    ((gpio_num_t)PIN_COFFEE_NUM)
 #define LEDC_CH       LEDC_CHANNEL_0
 #define LEDC_TIM      LEDC_TIMER_0
 #define DUTY_MAX      255           /* 8-bit resolution: integer, no float */

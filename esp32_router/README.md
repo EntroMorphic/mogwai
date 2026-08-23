@@ -40,7 +40,10 @@ returns the class index when the score clears the bar, and the `none` class is a
 valid index. The firmware printed **ACTUATED** for "what time does the train
 leave". No pin moved, because the table has no `none` case — but reporting an
 actuation for a non-command is the one thing this system must never do.
-Held-out, false actuations are **8 in 2754 non-commands (0.29%)**.
+Held-out, on the **shipped 240 KB index**, false actuations are **12 in 2754
+non-commands (0.44%)** — test evaluation #6. The unpruned 656 KB index measures
+8 (0.29%); the 240 KB index trades those four for full SRAM residency and a
+5.4x faster scan. See doc/EXPERIMENTS.md.
 
 GPIO2 is the onboard LED on most ESP32 devkits, so the light intents are
 visible without wiring anything.
