@@ -528,6 +528,115 @@ static void faprobe(void) {
     free(b);
 }
 
+
+/* ---- contrastive rescoring on the disagreement mask ----------------------
+ * The blockers share an entire carrier phrase with their nearest command and
+ * differ in one object word: "can you please put ON MUSIC" against "can you
+ * please put THE VACUUM on". The shared frame contributes most of the n-grams,
+ * so the whole-sentence similarity is dominated by what the two candidates have
+ * in common — precisely the part that cannot distinguish them.
+ *
+ * So cancel it. Given the coarse winner A and a challenger B, let
+ *     D = { i : (mask,sign) of A differs from B at i }
+ * and rescore the query against each candidate over D alone. The question stops
+ * being "which sentence does the query resemble" and becomes "given these two
+ * readings, what in the query actually chooses between them".
+ *
+ * Four worlds, and the diagnostic tells us which:
+ *   1. B wins on coarse-over-D            -> carrier dilution, nothing more
+ *   2. B loses coarse-D, wins fine-D      -> magnitude IS the missing tier,
+ *                                            and this is where it may speak
+ *   3. B loses both                       -> the features do not encode it
+ *   4. exact n-grams separate but hashed  -> hash collision / dimensionality,
+ *      vectors do not                        not a scoring problem at all
+ * World 4 matters: it would mean no metric over these vectors can help. */
+static int CONTRAST = 0;
+
+static int cnt_ng(const char *a, const char *b) {   /* shared distinct 3/4-grams */
+    char na[512], nb[512];
+    int la = r_norm(a, na, sizeof na), lb = r_norm(b, nb, sizeof nb);
+    int sh = 0;
+    for (int g = 3; g <= 4; g++)
+        for (int i = 0; i + g <= la; i++) {
+            int dup = 0;
+            for (int k = 0; k < i && !dup; k++) if (!strncmp(na+k, na+i, g)) dup = 1;
+            if (dup) continue;
+            for (int j = 0; j + g <= lb; j++) if (!strncmp(na+i, nb+j, g)) { sh++; break; }
+        }
+    return sh;
+}
+
+static void contrast(void) {
+    int th = FIXTH >= 0 ? FIXTH : RSHIP_TH;
+    int w1=0,w2=0,w3=0,w4=0,skip=0,tot=0;
+    printf("\n  contrastive rescoring on the disagreement mask, K=8, th=%d\n", th);
+    printf("  A = coarse winner (wrong)   B = best candidate that would be right\n\n");
+
+    for (int i = 0; i < V_n; i++) {
+        tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+        int ts[8], ti[8];
+        for (int k = 0; k < 8; k++) { ts[k] = -(1<<28); ti[k] = 0; }
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            int s = t_score(&q, &TI[j], aa);
+            if (s <= ts[7]) continue;
+            int k = 7; while (k > 0 && ts[k-1] < s) { ts[k]=ts[k-1]; ti[k]=ti[k-1]; k--; }
+            ts[k] = s; ti[k] = (int)j;
+        }
+        int c = (ts[0] > th) ? r_apply_polarity(&R, R.label[ti[0]], V_t[i]) : -1;
+        const char *p = c < 0 ? "none" : R.names[c];
+        if (!strcmp(p, V_l[i])) continue;
+        int gn = !strcmp(V_l[i], "none");
+        if (!gn && !strcmp(p, "none") && ts[0] <= th) continue;  /* threshold reject, not ordering */
+        tot++;
+
+        int B = -1;
+        for (int k = 1; k < 8 && B < 0; k++) {
+            const char *jn = gn ? R.names[R.label[ti[k]]]
+                                : R.names[r_apply_polarity(&R, R.label[ti[k]], V_t[i])];
+            if (!strcmp(jn, V_l[i])) B = ti[k];
+        }
+        if (B < 0) { skip++; continue; }
+        int A = ti[0];
+
+        /* D = dims where A and B differ; rescore query over D only */
+        int dotA=0, dotB=0, aaD=0, abA=0, abB=0, nD=0;
+        for (int d = 0; d < RD; d++) {
+            int am = (TI[A].m[d>>5] >> (d&31)) & 1, as = (TI[A].s[d>>5] >> (d&31)) & 1;
+            int bm = (TI[B].m[d>>5] >> (d&31)) & 1, bs = (TI[B].s[d>>5] >> (d&31)) & 1;
+            if (am == bm && (!am || as == bs)) continue;      /* agree: cancel */
+            nD++;
+            int qm = (q.m[d>>5] >> (d&31)) & 1, qs = (q.s[d>>5] >> (d&31)) & 1;
+            if (qm) aaD++;
+            if (am) abA++;
+            if (bm) abB++;
+            if (qm && am) dotA += (qs == as) ? 1 : -2;
+            if (qm && bm) dotB += (qs == bs) ? 1 : -2;
+        }
+        int sA = nD ? (2*dotA*RD)/(aaD+abA+8) : 0;
+        int sB = nD ? (2*dotB*RD)/(aaD+abB+8) : 0;
+        int ngA = cnt_ng(V_t[i], U_t[A]), ngB = cnt_ng(V_t[i], U_t[B]);
+
+        /* Two normalisations, because "rescore on D" does not specify one and
+           that choice is exactly where the previous oracle went wrong. Dice-on-D
+           divides by each candidate's own active count WITHIN D, which is
+           asymmetric when candidates differ in length; raw dot does not
+           normalise at all. Report both rather than quietly pick one. */
+        if (sB > sA) w1++;
+        if (dotB > dotA) w2++;
+        if (sB <= sA && dotB <= dotA) { if (ngB > ngA) w4++; else w3++; }
+
+        printf("  gap=%-4d |D|=%-4d  diceD A=%-5d B=%-5d  dotD A=%-4d B=%-4d  ng A=%-3d B=%-3d %s%s\n",
+               ts[0]-ts[1], nD, sA, sB, dotA, dotB, ngA, ngB,
+               sB > sA ? "DICE-FIX " : "", dotB > dotA ? "DOT-FIX" : "");
+        printf("      q \"%s\"\n      A \"%s\"\n      B \"%s\"\n", V_t[i], U_t[A], U_t[B]);
+    }
+    printf("\n  of %d ordering errors with B in top-8 (%d had none):\n", tot-skip, skip);
+    printf("    Dice-on-D puts the right answer first   : %d\n", w1);
+    printf("    raw dot-on-D puts it first              : %d\n", w2);
+    printf("    neither; exact n-grams DO separate      : %d  (hash/dimensionality)\n", w4);
+    printf("    neither; exact n-grams do not either    : %d  (features lack it)\n", w3);
+}
+
 typedef struct{int fa,wa,ms,iok,in;} TX;
 static TX tally(hit*H,int th,char la[][RNAMELEN],int n){
     TX z={0,0,0,0,0};
@@ -1028,6 +1137,7 @@ static void usage(void) {
 "  --condcentre           per-dim centre conditioned on firing, not diluted by zeros\n"
 "  --abstain              accept on P-N margin instead of an absolute threshold\n"
 "  --faprobe              the negatives that pin the zero-FA frontier, forensically\n"
+"  --contrast             rescore top-2 on the dims where they disagree\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -1597,6 +1707,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--condcentre")) CONDCENTRE=1;
         else if (!strcmp(a,"--abstain")) ABSTAIN=1;
         else if (!strcmp(a,"--faprobe")) FAPROBE=1;
+        else if (!strcmp(a,"--contrast")) CONTRAST=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -1729,6 +1840,7 @@ int main(int argc,char**argv){
     if(RERANK){ rerankoracle(); return 0; }
     if(ABSTAIN){ abstain(); return 0; }
     if(FAPROBE){ faprobe(); return 0; }
+    if(CONTRAST){ contrast(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }

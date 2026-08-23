@@ -363,3 +363,77 @@ index-internal — a leave-one-out pass over the index alone, finding positives
 that are the nearest neighbour of many unrelated entries, which is what
 `--prune-cnn` already does in the opposite direction and what `cuemine`'s
 index-only discipline exists for. That has not been run.
+
+---
+
+# Carrier cancellation: which of four worlds are we in?
+
+*`compare --ship --contrast`. Dev only.*
+
+The blockers share an entire carrier phrase with their nearest command and
+differ in one object word. The shared frame contributes most of the n-grams, so
+whole-sentence similarity is dominated by exactly the part that cannot
+distinguish them. So cancel it: given coarse winner `A` and challenger `B`, let
+
+    D = { i : (mask,sign) of A differs from B at i }
+
+and rescore the query against each candidate over `D` alone. The question stops
+being *"which sentence does the query resemble"* and becomes *"given these two
+readings, what in the query chooses between them"*.
+
+Four worlds, and the diagnostic says which:
+
+1. `B` wins on coarse-over-`D` — carrier dilution, nothing deeper
+2. `B` loses coarse-`D` but wins on magnitude-over-`D` — magnitude is the
+   missing tier, and `D` is where it may legitimately speak
+3. `B` loses both — the features do not encode the distinction
+4. exact n-grams separate them but the hashed vectors do not — a hash-collision
+   or dimensionality problem, in which case **no metric over these vectors can
+   help**
+
+## Result, 16 ordering errors with `B` in top-8
+
+    Dice-on-D puts the right answer first   :  2
+    raw dot-on-D puts it first              :  4
+    neither; exact n-grams DO separate      :  0   (hash / dimensionality)
+    neither; exact n-grams do not either    : 12   (features lack it)
+
+**World 4 is empty.** The hashed 256-dim vectors preserve what the exact
+character n-grams say. Hashing and dimensionality are not the problem, and that
+hypothesis is cleanly dead — worth knowing, because it would have been the
+expensive one to fix.
+
+**World 1 is 4 of 16**, and only with the right normalisation. Carrier
+cancellation genuinely helps a minority.
+
+**World 3 is 12 of 16.** For three quarters of these, the *exact* 3/4-character
+n-gram overlap does not favour the right answer either:
+
+    q "please restart the handmaid's tale"
+    A "please start the vacuum"     shared n-grams = 34
+    B "please start the podcast"    shared n-grams = 33
+
+Thirty-four against thirty-three. At the feature level these are a coin flip.
+**The limit is not the encoding, not the quantisation, not the scoring — it is
+the features.** No second tier over these vectors can recover twelve of sixteen,
+because the information is not in them to recover.
+
+### The precise claim, and its limit
+
+World 3 means *unweighted* 3/4-gram overlap does not separate them. It does
+**not** mean no feature scheme could. A representation that weighted rare
+n-grams above common ones would see "vacuum" and "podcast" against a shared
+frame of "please start the" quite differently. That is the IDF-shaped idea, and
+this diagnostic is the first evidence that *features* rather than *metric* is
+where the remaining signal has to come from.
+
+It remains a change to the encoding, and `--condcentre` is the standing warning
+about obvious global improvements to load-bearing geometry: 20 points lost.
+
+### A methodological note that keeps recurring
+
+Dice-on-`D` fixes 2; raw dot-on-`D` fixes 4. **The normalisation choice doubled
+the answer.** "Rescore on the disagreement dimensions" does not specify a metric,
+and picking one silently would have produced either a weak positive or a
+stronger one depending on a decision made in passing. Both are reported for the
+same reason METHOD 19 exists.
