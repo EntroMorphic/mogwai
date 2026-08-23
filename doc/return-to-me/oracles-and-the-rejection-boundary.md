@@ -774,3 +774,76 @@ negative population rather than a targeted slice.
 
 The boundary extends beyond the exemplars that define it, and it turns out to
 extend a long way.
+
+---
+
+# Program B: uncertainty-gated lexical corroboration
+
+*`compare --ship --corrob`. Dev only.*
+
+Three previous attempts to combine the word channel with the router failed
+(signature prior inert; word prior 3 tie / 2 lose / 3 win; the gate/selector
+failed **held-out** and was cut in eval #4). The signal is not in doubt — the
+prior scores 89.6% against the router's 85.9% on dev IoT. What failed was
+**authority**: a useful classifier is not automatically a useful arbiter.
+
+So give it less, with two asymmetries:
+
+1. **The router decides when the specialist speaks.** The gate is the router's
+   own uncertainty — how far its best score sits below its own threshold — not a
+   confidence the auxiliary channel reports about itself. That is the structural
+   difference from `--gatesel`, which gated on the prior's margin.
+2. **The specialist may only corroborate.** It can rescue a command the router
+   already identified and was too timid to actuate. It cannot propose a
+   different class, and it can never turn a `none` verdict into an actuation —
+   the failure that took `fa` from 1 to 824 when the prior last had that power.
+
+Targets the largest error class directly: nine of fourteen dev misses are
+rank-1 correct and rejected by the threshold alone.
+
+## Result, at matched `fa`
+
+Comparing against one shipped point would be the wrong question — corroboration
+buys commands and costs false actuations, and so does simply lowering the
+threshold. So: best `iot_ok` at each `fa` budget, both mechanisms free to tune.
+
+    fa<=      threshold alone          threshold + corroboration
+       6   th=136 ok=165           th=136 D=  0 M= 0 ok=165   tie
+       8   th=136 ok=165           th=138 D= 16 M=64 ok=167   +2
+      10   th=134 ok=166           th=140 D= 16 M= 0 ok=170   +4
+      12   th=128 ok=166           th=138 D= 16 M= 0 ok=172   +6
+      14   th=124 ok=173           th=124 D=  0 M= 0 ok=173   tie
+      16   th=122 ok=174           th=122 D=  0 M= 0 ok=174   tie
+      18   th=114 ok=174           th=114 D=  0 M= 0 ok=174   tie
+
+**At the shipped `fa <= 6` budget, corroboration does nothing.** It wins only in
+a narrow band at `fa` 8-12, by 2 to 6 commands — that is, only if the
+false-actuation budget is roughly doubled. Outside that band the optimiser
+selects `D=0`, which is corroboration switched off.
+
+The winning band is `D=16`: rescue commands scoring within 16 points below the
+threshold. That is the near-boundary region the design targeted, so the
+mechanism does what it was built to do. It simply does not do it where this
+project needs it.
+
+## The honest verdict
+
+This is the first combiner in the family that **never makes anything worse** —
+it ties or wins at every budget, where the previous three degraded. The
+asymmetry was the right idea and the design is sound.
+
+But for a system whose stated priority is minimising false actuations, a
+mechanism that only pays when you increase the `fa` budget is not a mechanism
+this project can use. **0-for-4 at the operating point that matters.**
+
+Compare the `P - N` abstention margin, which bought **+32 commands at `fa <= 1`**
+— a larger effect, in the safer direction, using only the router's own geometry
+and no second channel at all.
+
+## And METHOD 19 fired again
+
+The first version of this experiment reported a baseline of `fa=24` against the
+shipped `fa=6`, because it thresholded the best *positive* while ignoring
+whether a negative outranked it — dropping the none-check, the exact strawman
+METHOD 19 was written for two days earlier. Caught by the rule, not by judgement.
+The corrected baseline reproduces `th=136 ok=165 fa=6 wa=13 missed=14` exactly.

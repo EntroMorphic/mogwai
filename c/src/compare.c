@@ -759,6 +759,122 @@ static void coverage(void) {
     printf("    absent from the corpus entirely                : %d\n", nopen);
 }
 
+
+/* ---- Program B: uncertainty-gated lexical corroboration -------------------
+ * Three previous attempts to combine the word channel with the router failed
+ * (signature prior inert; word prior 3 tie/2 lose/3 win; the gate/selector
+ * failed HELD-OUT and was cut in eval #4). The signal is not in doubt - the
+ * prior scores 89.6% against the router's 85.9% on dev IoT. What failed was
+ * authority: a useful classifier is not automatically a useful arbiter.
+ *
+ * So give it less. Two asymmetries:
+ *
+ *   1. THE ROUTER DECIDES WHEN THE SPECIALIST SPEAKS. The gate is the router's
+ *      own uncertainty - how far its best score sits below its own threshold -
+ *      not a confidence the auxiliary channel reports about itself. That is the
+ *      structural difference from --gatesel, which gated on the prior's margin.
+ *
+ *   2. THE SPECIALIST MAY ONLY CORROBORATE. It can rescue a command the router
+ *      already identified and was too timid to actuate. It cannot propose a
+ *      different class, and it can never turn a "none" into an actuation - the
+ *      failure that took fa from 1 to 824 when the prior was given that power.
+ *
+ * Targets the largest error class directly: nine of fourteen dev misses are
+ * rank-1 correct and rejected by the threshold alone. */
+static int CORROB = 0;
+
+static void corrob(void) {
+    int th = FIXTH >= 0 ? FIXTH : RSHIP_TH;
+    int *P = malloc((size_t)V_n * sizeof(int));
+    int *Nn = malloc((size_t)V_n * sizeof(int));
+    int *C = malloc((size_t)V_n * sizeof(int));
+    int *PV = malloc((size_t)V_n * sizeof(int));
+    int *PM = malloc((size_t)V_n * sizeof(int));
+    for (int i = 0; i < V_n; i++) {
+        tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+        int bp = -(1 << 28), bn = -(1 << 28); uint32_t bpi = 0;
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            int s = t_score(&q, &TI[j], aa);
+            if (!strcmp(R.names[R.label[j]], "none")) { if (s > bn) bn = s; }
+            else if (s > bp) { bp = s; bpi = j; }
+        }
+        P[i] = bp; Nn[i] = bn;
+        C[i] = r_apply_polarity(&R, R.label[bpi], V_t[i]);
+        int mg = 0; PV[i] = pr_vote(&PR, V_t[i], &mg); PM[i] = mg;
+    }
+
+    printf("\n  Program B: uncertainty-gated lexical corroboration, th=%d\n", th);
+    printf("  rescue a REJECTED command only when the word prior independently\n");
+    printf("  names the SAME class the router already chose. No class override,\n");
+    printf("  no rescue of a \"none\" verdict.\n\n");
+    printf("  %-8s %-8s %5s %5s %8s %8s   %s\n",
+           "band", "prmargin", "fa", "wa", "missed", "iot_ok", "note");
+
+    const int Ds[7] = {0, 8, 16, 24, 32, 48, 1000};
+    const int Ms[3] = {0, 64, 128};
+    for (int mi = 0; mi < 3; mi++) {
+        for (int di = 0; di < 7; di++) {
+            int D = Ds[di], M = Ms[mi];
+            int fa=0,wa=0,ms=0,ok=0;
+            for (int i = 0; i < V_n; i++) {
+                /* The SHIPPED rule: argmax over everything, reject if a
+                   negative won, else reject if below th. "A negative won" is
+                   P <= N. Thresholding the best positive alone would drop the
+                   none-check and is the strawman METHOD 19 exists for. */
+                int acc = (P[i] > th) && (P[i] > Nn[i]);
+                /* Rescue ONLY the timid case: the router had a command in hand
+                   (it outranked every negative) and merely sat below its own
+                   bar. A "none" verdict is a different rejection and is never
+                   overridden - that is the arbitration this design refuses. */
+                if (!acc && P[i] > Nn[i] && P[i] <= th && P[i] > th - D
+                    && PV[i] == C[i] && PM[i] >= M)
+                    acc = 1;
+                const char *p = acc ? R.names[C[i]] : "none";
+                int gn = !strcmp(V_l[i], "none");
+                if (!gn && !strcmp(p, V_l[i])) ok++;
+                if (!strcmp(p, V_l[i])) continue;
+                if (gn) fa++; else if (!strcmp(p, "none")) ms++; else wa++;
+            }
+            printf("  %-8d %-8d %5d %5d %8d %8d   %s\n", D, M, fa, wa, ms, ok,
+                   (di == 0 && mi == 0) ? "<- shipped (no rescue)" : "");
+        }
+    }
+    /* The raw table above compares against ONE shipped point. That is not the
+       question. Corroboration buys commands and costs false actuations, and so
+       does simply lowering the threshold - so the honest test is at MATCHED fa
+       against the best the existing mechanism can reach. METHOD 19. */
+    printf("\n  FRONTIER - best iot_ok at each fa budget\n");
+    printf("  %6s   %22s   %28s\n", "fa<=", "threshold alone", "threshold + corroboration");
+    for (int bud = 6; bud <= 20; bud += 2) {
+        int b1 = -1, b1t = 0, b2 = -1, b2t = 0, b2d = 0, b2m = 0;
+        for (int t = 90; t <= 200; t += 2) {
+            for (int di = -1; di < 7; di++) {
+                for (int mi = 0; mi < 3; mi++) {
+                    if (di < 0 && mi > 0) continue;
+                    int D = di < 0 ? 0 : Ds[di], M = di < 0 ? 0 : Ms[mi];
+                    int fa=0,ok=0;
+                    for (int i = 0; i < V_n; i++) {
+                        int acc = (P[i] > t) && (P[i] > Nn[i]);
+                        if (!acc && di >= 0 && P[i] > Nn[i] && P[i] <= t && P[i] > t - D
+                            && PV[i] == C[i] && PM[i] >= M) acc = 1;
+                        const char *p = acc ? R.names[C[i]] : "none";
+                        int gn = !strcmp(V_l[i], "none");
+                        if (!gn && !strcmp(p, V_l[i])) ok++;
+                        if (strcmp(p, V_l[i]) && gn) fa++;
+                    }
+                    if (fa > bud) continue;
+                    if (di < 0) { if (ok > b1) { b1 = ok; b1t = t; } }
+                    else        { if (ok > b2) { b2 = ok; b2t = t; b2d = D; b2m = M; } }
+                }
+            }
+        }
+        printf("  %6d   th=%3d ok=%3d          th=%3d D=%4d M=%3d ok=%3d   %s\n",
+               bud, b1t, b1, b2t, b2d, b2m, b2, b2 > b1 ? "corrob wins" : (b2 == b1 ? "tie" : ""));
+    }
+
+    free(P); free(Nn); free(C); free(PV); free(PM);
+}
+
 typedef struct{int fa,wa,ms,iok,in;} TX;
 static TX tally(hit*H,int th,char la[][RNAMELEN],int n){
     TX z={0,0,0,0,0};
@@ -1263,6 +1379,7 @@ static void usage(void) {
 "  --faprobe              the negatives that pin the zero-FA frontier, forensically\n"
 "  --contrast             rescore top-2 on the dims where they disagree\n"
 "  --coverage             for failing commands, where does their vocabulary live?\n"
+"  --corrob               word prior may CORROBORATE a rejected command, never override\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -1834,6 +1951,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--faprobe")) FAPROBE=1;
         else if (!strcmp(a,"--contrast")) CONTRAST=1;
         else if (!strcmp(a,"--coverage")) COVERAGE=1;
+        else if (!strcmp(a,"--corrob")) CORROB=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -1968,6 +2086,7 @@ int main(int argc,char**argv){
     if(FAPROBE){ faprobe(); return 0; }
     if(CONTRAST){ contrast(); return 0; }
     if(COVERAGE){ coverage(); return 0; }
+    if(CORROB){ corrob(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }
