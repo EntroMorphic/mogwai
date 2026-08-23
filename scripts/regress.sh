@@ -78,6 +78,12 @@ rm -f /tmp/_regress.bin
 # silently runs `#if TPOPCNT == 1` as false - shipping the SWAR path instead of
 # the popcount table, with nothing in the banner to say so. A loud failure in
 # the build nobody flashes, a silent one in the build that ships.
+# The networked build's memory behaviour is entirely decided by this file, and
+# nothing else validates it. Silently reverting any of these costs measured
+# memory: IN_CONTENT_LEN 7.6 KB of held TLS, the IRAM_OPT pair 24 KB of index
+# residency. Pin the set; the numbers behind each are in the file itself.
+chk "sdkconfig.wifi pins the measured settings" \
+    "$(grep -cE '^(CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192|CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=2048|CONFIG_ESP_WIFI_IRAM_OPT=n|CONFIG_ESP_WIFI_RX_IRAM_OPT=n)$' esp32_router/sdkconfig.wifi)" "4"
 chk "firmware CMakeLists defines TPOPCNT and RD" \
     "$(grep -cE 'target_compile_definitions\(\$\{COMPONENT_LIB\} PRIVATE (TPOPCNT|RD)=' esp32_router/main/CMakeLists.txt)" "2"
 chk "product firmware source tracked" "$([ -f esp32_router/main/product.c ] && git ls-files esp32_router/main/product.c | wc -l | tr -d ' ')" "1"

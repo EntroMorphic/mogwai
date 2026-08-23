@@ -37,17 +37,27 @@ CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=2048
 # worth more as INDEX STORAGE than as WiFi speed: the index is uint32_t
 # throughout, so lift.c can place chunks in the 32-bit-only pool that malloc
 # cannot reach — and packet buffers, which need byte access, never could.
-# Measured, WiFi associated, full netif+lwIP+TLS:
 #
-#   IRAM_OPT on    2944/3840 resident (76%)   2432 DRAM + 512 IRAM   9.19 ms
-#   IRAM_OPT off   3200/3840 resident (83%)   2432 DRAM + 768 IRAM   8.42 ms
+# MATCHED PAIR, same session, PRODUCT build, one variable, mbedTLS held at 8192:
 #
-# DRAM is IDENTICAL either way. The whole gain is IRAM that WiFi was holding for
+#   IRAM_OPT on    2816/3840 (73%)   2432 DRAM + 384 IRAM   9192/9076/9045 us
+#   IRAM_OPT off   3200/3840 (83%)   2432 DRAM + 768 IRAM   8416/8285/8263 us
+#
+# DRAM is IDENTICAL. The whole gain is 24 KB of IRAM that WiFi was holding for
 # speed, handed to a workload that can physically use it. TLS unaffected:
-# worst-case free 27,644 B, handshake still returns HTTP 200.
+# still HTTP 200, worst-case free 25,800 B.
 #
-# NOT free: WiFi code now runs from flash cache, so ISR latency is higher and
-# throughput is lower. Measured under light traffic only — validate before using
-# it on a device that moves real data.
+# The PROBE build reports higher residency (2944 -> 3328) for the same settings
+# because it links less and so leaves more IRAM free. Do not mix the two: an
+# earlier version of this comment paired a probe residency with a product
+# latency, which is how that error is made.
+#
+# NOT free, and the risk is not only throughput: WiFi code now runs from flash
+# cache, so ISR latency rises. Code that must run while the cache is disabled —
+# during NVS or OTA flash writes — has to stay in IRAM regardless, and IDF
+# places the critical paths there either way. Evidence, not proof: PHY
+# calibration is written to NVS during init with the driver loaded, and that
+# succeeded here. NOT tested with traffic in flight. Validate before shipping
+# this on a device that moves real data or takes OTA updates over WiFi.
 CONFIG_ESP_WIFI_IRAM_OPT=n
 CONFIG_ESP_WIFI_RX_IRAM_OPT=n
