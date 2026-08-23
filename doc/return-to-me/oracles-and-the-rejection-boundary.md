@@ -558,7 +558,8 @@ somewhere in the corpus. And the strongest single case:
       brighten(20/20)  lamp(2/14)  next(0/325)  sofa(0/0)
 
 **`brighten` occurs 20 times in the corpus and all 20 are `iot_hue_lightup`** —
-perfect class purity, information gain of 1 — and the router rejects the query,
+perfect class purity — every occurrence of the token falls in one class — and the
+router rejects the query,
 because Dice dilutes that one signal across "next to the sofa".
 
 ## Why this is not a new idea, and that matters
@@ -604,3 +605,67 @@ set.
 
 Nothing here is a representation failure. That was the question the session
 opened with, and the answer is no.
+
+---
+
+# Boundary-witness negative selection: `fa` 6 -> 2..4, free
+
+*`compare --prune-negbound=N`. Index-internal selection, no dev used to choose
+anything. Dev used only to measure the result.*
+
+The coverage audit showed five of six false actuations exist because the
+negative that would have rejected them was pruned. So fix the criterion.
+
+`--prune-negtop` ranks a negative by how many **index entries** have it as their
+nearest neighbour. 89% of the index is negatives, so that count is dominated by
+negative-to-negative structure: it rewards a negative for representing *negative
+space*. What rejection needs is negatives on the boundary **around positive
+space** — the ones a command-like non-command lands on.
+
+`--prune-negbound` counts differently: for each **positive** exemplar, find its K
+nearest negatives and credit those. Same budget, same leave-one-out discipline,
+index-only.
+
+## Result, identical budget (2685 negatives, 3840 vectors, 240 KB)
+
+    criterion         fa   wa  missed   recall
+    negtop             6   13    14     85.9%   <- shipped
+    negbound K=1       3   13    14     85.9%
+    negbound K=2       3   13    14     85.9%
+    negbound K=4       4   13    14     85.9%
+    negbound K=8       3   13    14     85.9%
+    negbound K=16      2   13    14     85.9%
+    (unpruned, 9345)   1   13    14     85.9%
+
+**`wa`, `missed` and recall are identical at every setting.** Negatives only
+touch rejection, exactly as the sweep predicted, so the change is purely in the
+mode that matters. And the improvement is present at **every** K from 1 to 16 —
+this is the mechanism, not a lucky parameter.
+
+At 29% of the negatives it recovers most of the gap to the unpruned index:
+`fa` 6 -> 2..4 against an unpruned floor of 1.
+
+## Discipline note
+
+K was fixed at 4 **before** any result was seen, and 4 is the *worst* row in the
+sweep. It is reported as the headline for that reason. K=16 gives `fa=2`, but
+choosing it now would be selecting a parameter on dev, which is the exact
+failure mode of test evaluations #3 and #4. The robustness across K is the
+evidence; the best cell is not.
+
+Nothing else was tuned. The criterion uses only the index — no dev queries, no
+held-out data, no labels beyond the ones already in the index.
+
+## Cost
+
+Zero at runtime. This is a build-time selection: same vector count, same blob
+size, same scan, same firmware. `mkblob` would take `--prune-negbound=2685`
+instead of `--prune-negtop=2685`.
+
+## What it is not
+
+Not validated. Dev `fa` counts are single digits and this project has twice
+watched a dev improvement fail to transfer. Before shipping: pre-register the
+criterion and K with falsifiers, then spend one budget unit. The mechanism has a
+clean causal story and index-internal selection, which is a better position than
+either prior attempt started from — but that was also true of the selector.

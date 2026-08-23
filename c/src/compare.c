@@ -27,7 +27,7 @@ static int CURVE = 0;
 static int DUMPERR = 0;   /* --errs: print the actual misclassified utterances */
 static int DIRDUMP = 0;   /* --dirdump: per-item score/pred/truth, for direction analysis */
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
-static prune_opt PRUNE = {0,0,0,0};
+static prune_opt PRUNE = {0,0,0,0,0};
 static cue_t CUE; static int USECUE = 0;   /* --cue: index-derived hard word cues */
 static int CHANNELS = 0;   /* --channels: word vs n-gram error overlap */
 static int SELDUMP = 0;   /* --seldump: per-item signals a selector could use */
@@ -1239,6 +1239,7 @@ static void usage(void) {
 "  --prune-cnn            drop negatives that are nobody's nearest neighbour\n"
 "  --prune-neg=K          keep 1-in-K negatives\n"
 "  --prune-negtop=N       keep the N negatives with the highest NN-coverage\n"
+"  --prune-negbound=N     keep the N negatives that sit on POSITIVE boundaries\n"
 "\n"
 "RETAINED NEGATIVE RESULTS  (kept per `never delete`; none of these help —\n"
 "each is reproducible evidence of a measured failure, see EXPERIMENTS.md)\n"

@@ -8,12 +8,13 @@ int prune_parse(const char *a, prune_opt *o) {
     if (!strcmp(a, "--prune-cnn")) { o->cnn = 1; return 1; }
     if (!strncmp(a, "--prune-neg=", 12)) { o->neg_k = atoi(a + 12); return 1; }
     if (!strncmp(a, "--prune-negtop=", 15)) { o->neg_top = atoi(a + 15); return 1; }
+    if (!strncmp(a, "--prune-negbound=", 17)) { o->neg_bound = atoi(a + 17); return 1; }
     return 0;
 }
 
 int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
                 tvec *TI, rvec *idx, int U_n, prune_opt o, int verbose) {
-    if (!o.dup && !o.cnn && o.neg_k <= 1 && o.neg_top <= 0) return U_n;
+    if (!o.dup && !o.cnn && o.neg_k <= 1 && o.neg_top <= 0 && o.neg_bound <= 0) return U_n;
     char *keep = malloc(U_n); memset(keep, 1, U_n);
     int nonec = -1;
     for (uint32_t c = 0; c < R->n_class; c++)
@@ -94,6 +95,57 @@ int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
         free(sel);
     }
     free(cov);
+    /* (b3) BOUNDARY-WITNESS selection.
+     *
+     * negtop ranks a negative by how many INDEX ENTRIES have it as their
+     * nearest neighbour - and 89% of the index is negatives, so that count is
+     * dominated by negative-to-negative structure. It rewards a negative for
+     * representing negative space. What rejection actually needs is negatives
+     * sitting on the boundary AROUND POSITIVE space: the ones a command-like
+     * non-command would land on.
+     *
+     * Measured motivation: the shipped 2685-negative index has fa=6 on dev, the
+     * unpruned 9345-negative index has fa=1. The rejection information existed
+     * and negtop discarded it.
+     *
+     * So count differently: for each POSITIVE exemplar find its nearest
+     * negatives and credit those. Same budget, same leave-one-out discipline,
+     * index-only - no dev, no test. */
+    int nbound = 0;
+    if (o.neg_bound > 0) {
+        int *bcov = calloc(U_n, sizeof(int));
+        int *bact = malloc(U_n * sizeof(int));
+        for (int i = 0; i < U_n; i++) bact[i] = t_active(&TI[i]);
+        const int KW = 4;                       /* boundary witnesses per positive */
+        for (int i = 0; i < U_n; i++) {
+            if (!keep[i] || (int)R->label[i] == nonec) continue;   /* positives only */
+            int bs[4], bj[4];
+            for (int k = 0; k < KW; k++) { bs[k] = -(1 << 28); bj[k] = -1; }
+            for (int j = 0; j < U_n; j++) {
+                if (j == i || !keep[j] || (int)R->label[j] != nonec) continue;
+                int s = t_score_pre(&TI[i], &TI[j], bact[i], bact[j]);
+                if (s <= bs[KW-1]) continue;
+                int k = KW - 1;
+                while (k > 0 && bs[k-1] < s) { bs[k] = bs[k-1]; bj[k] = bj[k-1]; k--; }
+                bs[k] = s; bj[k] = j;
+            }
+            for (int k = 0; k < KW; k++) if (bj[k] >= 0) bcov[bj[k]]++;
+        }
+        free(bact);
+        int maxb = 0;
+        for (int i = 0; i < U_n; i++)
+            if (keep[i] && (int)R->label[i] == nonec && bcov[i] > maxb) maxb = bcov[i];
+        char *bsel = calloc(U_n, 1);
+        int bbud = o.neg_bound;
+        for (int lvl = maxb; lvl >= 0 && bbud > 0; lvl--)
+            for (int i = 0; i < U_n && bbud > 0; i++)
+                if (keep[i] && (int)R->label[i] == nonec && bcov[i] == lvl)
+                    { bsel[i] = 1; bbud--; }
+        for (int i = 0; i < U_n; i++)
+            if (keep[i] && (int)R->label[i] == nonec && !bsel[i])
+                { keep[i] = 0; nbound++; }
+        free(bsel); free(bcov);
+    }
     /* (c) negative subsample. Lossy and dominated by (b) at equal bytes. */
     int nneg = 0;
     if (o.neg_k > 1) {
@@ -113,9 +165,9 @@ int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
         kept++;
     }
     if (verbose)
-        fprintf(stderr, "  [prune] %d -> %d  (dup %d, cnn %d, negtop %d, "
+        fprintf(stderr, "  [prune] %d -> %d  (dup %d, cnn %d, negtop %d, negbound %d, "
                         "neg-subsample %d)  iot %d / none %d  | %.0f KB\n",
-                U_n, kept, ndup, ncnn, ntop, nneg, iot_k, neg_k,
+                U_n, kept, ndup, ncnn, ntop, nbound, nneg, iot_k, neg_k,
                 kept * sizeof(tvec) / 1024.0);
     R->n_index = kept;
     free(keep);
