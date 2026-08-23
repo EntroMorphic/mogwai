@@ -847,3 +847,60 @@ shipped `fa=6`, because it thresholded the best *positive* while ignoring
 whether a negative outranked it — dropping the none-check, the exact strawman
 METHOD 19 was written for two days earlier. Caught by the rule, not by judgement.
 The corrected baseline reproduces `th=136 ok=165 fa=6 wa=13 missed=14` exactly.
+
+---
+
+# Paired FA transition: `negbound` repairs three and breaks one
+
+*`compare --dumpdisp` under each selector, diffed. **Dev only — no budget
+spent.** The test-set version would cost two more touches.*
+
+A headline of `12 -> 11` is a difference of marginals and hides which utterances
+changed. The observations are paired — same utterances, both selectors — so the
+transition table is the right object and an exact McNemar on the discordant
+cells is the right test, not independent Poisson intervals on two totals.
+
+## Dev, 1335 negatives
+
+    FIXED  iot_coffee        -> reject   "i would like to talk about it"
+    FIXED  iot_cleaning      -> reject   "please restart the handmaid's tale"
+    FIXED  iot_hue_lightoff  -> reject   "i need you to put walk the dog on my list to do"
+    BROKE  reject -> iot_coffee          "i want to make a complaint to the consumer"
+
+    FA under BOTH selectors      : 3
+    repaired by negbound   (A)   : 3
+    introduced by negbound (B)   : 1
+    negtop total = 6   negbound total = 4
+
+**Not monotonic.** `negbound` is not simply preserving witnesses `negtop`
+discarded; it moves the rejection boundary, repairing three and breaking one.
+
+Exact McNemar on the four discordant pairs: `P(X >= 3 | n=4, p=0.5) = 5/16`,
+**p = 0.3125.** Not significant, which is what four discordant pairs can support.
+
+## What is genuinely corroborating
+
+The three repairs are **exactly the carrier-phrase family the forensics named** —
+`"i would like to ..."`, `"please restart the ..."`, `"put ... on my list"`.
+`negbound` is repairing the cases the mechanism was designed to repair, which is
+mechanistic evidence independent of the count. The one it breaks
+(`"i want to make a complaint to the consumer"` -> coffee) is a different shape.
+
+## Why the test-set transition is not worth a budget unit
+
+The held-out headline is `A - B = 1`. It could be `1/0` (clean) or `4/3`
+(churny), and those would read differently. But the dev transition already shows
+the mechanism **is** churny — 3/1, not 3/0 — so the clean-monotonic branch is
+already unlikely, and learning the exact held-out split would refine the verdict
+rather than change it:
+
+> directionally right, magnitude unestablished, some collateral churn.
+
+Two more touches on a nearly-exhausted budget to sharpen a conclusion that is
+already the right conclusion is not a trade this project should make. Recorded
+as available rather than run.
+
+*(If it is ever wanted: a combined mode evaluating both selectors inside one
+process would make it one touch instead of two. Deliberately not built that way
+now — a tool that evaluates the held-out set twice inside one invocation would
+spend budget without it appearing in the audit log as two touches.)*

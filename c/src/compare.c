@@ -27,6 +27,7 @@ static int CURVE = 0;
 static int DUMPERR = 0;   /* --errs: print the actual misclassified utterances */
 static int DIRDUMP = 0;   /* --dirdump: per-item score/pred/truth, for direction analysis */
 static int LEAKTEST = 0; /* --leak: reintroduce the bug on purpose, to verify the guard */
+static int USE_TEST = 0;
 static prune_opt PRUNE = {0,0,0,0,0,0};
 /* METHOD 19 enforcement; defined below, used by every decision-policy experiment */
 static void control_or_die(const char *what, int fa, int wa, int ms, int ok, int th);
@@ -934,6 +935,34 @@ static void control_or_die(const char *what, int fa, int wa, int ms, int ok, int
     exit(2);
 }
 
+
+/* ---- per-item disposition dump -------------------------------------------
+ * A headline of "12 -> 11" is a difference of marginals and hides which
+ * utterances changed. Two selectors could repair one and break none, or churn
+ * six and break five, and those are different engineering results. The
+ * observations are PAIRED - same utterances, both runs - so the transition
+ * table is the right object, and an exact McNemar on the discordant cells is
+ * the right test if one is wanted.
+ *
+ * Dump one line per evaluated item so two runs can be diffed. Deliberately not
+ * a two-index diagnostic inside one process: the split is chosen by --test, and
+ * a tool that silently evaluated the held-out set twice would spend budget
+ * without it appearing in the audit log as two touches. */
+static int DUMPDISP = 0;
+
+static void dumpdisp(void) {
+    int th = FIXTH >= 0 ? FIXTH : RSHIP_TH;
+    char **T = USE_TEST ? T_t : V_t;
+    char (*L)[RNAMELEN] = USE_TEST ? T_l : V_l;
+    int   N = USE_TEST ? T_n : V_n;
+    for (int i = 0; i < N; i++) {
+        hit h = score_ter(T[i]);
+        int c = (h.score > th) ? h.cls : -1;
+        const char *p = c < 0 ? "none" : R.names[c];
+        printf("DISP\t%d\t%s\t%s\t%s\n", i, L[i], p, T[i]);
+    }
+}
+
 typedef struct{int fa,wa,ms,iok,in;} TX;
 static TX tally(hit*H,int th,char la[][RNAMELEN],int n){
     TX z={0,0,0,0,0};
@@ -957,7 +986,6 @@ static int tune(hit*H,char la[][RNAMELEN],int n,int lo,int hi){
         long c=3L*(z.fa+z.wa)+z.ms; if(c<bc){bc=c;best=th;} }
     return best;
 }
-static int USE_TEST = 0;
 static hit *LAST = NULL; static int LAST_TH = 0; static const char *LAST_NAME = "";
 
 /* paired McNemar on the wrong-action event. No tuning involved, so not leakable. */
@@ -1439,6 +1467,7 @@ static void usage(void) {
 "  --contrast             rescore top-2 on the dims where they disagree\n"
 "  --coverage             for failing commands, where does their vocabulary live?\n"
 "  --corrob               word prior may CORROBORATE a rejected command, never override\n"
+"  --dumpdisp             one line per item: truth, prediction. Diff two runs\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -2011,6 +2040,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--contrast")) CONTRAST=1;
         else if (!strcmp(a,"--coverage")) COVERAGE=1;
         else if (!strcmp(a,"--corrob")) CORROB=1;
+        else if (!strcmp(a,"--dumpdisp")) DUMPDISP=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -2146,6 +2176,7 @@ int main(int argc,char**argv){
     if(CONTRAST){ contrast(); return 0; }
     if(COVERAGE){ coverage(); return 0; }
     if(CORROB){ corrob(); return 0; }
+    if(DUMPDISP){ dumpdisp(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }
