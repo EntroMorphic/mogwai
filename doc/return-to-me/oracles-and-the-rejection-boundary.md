@@ -669,3 +669,57 @@ watched a dev improvement fail to transfer. Before shipping: pre-register the
 criterion and K with falsifiers, then spend one budget unit. The mechanism has a
 clean causal story and index-internal selection, which is a better position than
 either prior attempt started from — but that was also true of the selector.
+
+---
+
+# Per-class halo allocation: a clean null, and why
+
+*`compare --prune-neghalo=N`. Index-internal.*
+
+`negbound` takes a global top-N by boundary-witness count, which could let a
+class with a dense boundary starve a sparse one. `neghalo` splits the budget
+equally across actuation classes, lets each select the negatives that most often
+guard **its** exemplars, unions the selections, and backfills the remainder by
+the global count. Equal split, no tuned parameter.
+
+    criterion            fa  wa  missed   acc   index
+    negtop=2685           6  13    14   85.9   240KB
+    negbound=2685         4  13    14   85.9   240KB
+    neghalo=2685          4  13    14   85.9   240KB
+    unpruned (9345)       1  13    14   85.9   656KB
+
+**No improvement.** And the reason is worth more than the refinement would have
+been. Guard coverage — the fraction of each class's positives that retain at
+least one of their four nearest negatives:
+
+    class                    negtop   negbound   neghalo
+    iot_hue_lightchange        75%      100%      100%
+    iot_hue_lightoff           82%      100%      100%
+    iot_hue_lightdim           79%      100%      100%
+    iot_cleaning               66%      100%      100%
+    iot_hue_lightup            83%      100%      100%
+    iot_coffee                 76%      100%      100%
+    iot_wemo_on                75%      100%      100%
+    iot_hue_lighton            76%      100%      100%
+    iot_wemo_off               74%      100%      100%
+
+**The global criterion already saturates the property.** Every positive in every
+class retains a guard under `negbound`; per-class allocation cannot improve on
+100%. The starvation hypothesis was reasonable and is simply false — `negtop`
+leaves 17-34% of positives unguarded, and `negbound` fixes all of it globally.
+
+## What that pins down about the residual
+
+Guard coverage is complete at `fa=4` while the unpruned index reaches `fa=1`.
+So the remaining three false actuations are **not** a positive losing its
+guards. They are negatives that guard regions where *dev queries* land but no
+*training positive* sits — the halo is constructed around training positives,
+and those queries are somewhere else.
+
+Closing that would mean guarding the positive/negative decision surface in
+general rather than the neighbourhoods of stored positives, which is a
+different and much less well-posed objective. Or simply keeping more negatives,
+which is the byte budget we spent the session buying back.
+
+`neghalo` is kept as a measured negative rather than deleted, alongside the
+other retained negative results.

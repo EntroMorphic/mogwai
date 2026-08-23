@@ -17,7 +17,7 @@ static router_t R; static tvec *TI;
    flags reproduces exactly what the device runs. regress.sh relies on that to
    prove router.bin is reproducible; if the default were "unpruned" that check
    would be comparing against a blob nobody ships. */
-static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0};
+static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0,0};
 static int THRESH = -1;   /* --threshold=N; required when pruning */
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
@@ -101,7 +101,7 @@ int main(int argc,char**argv){
            neg_top - a blob pruned with --prune-negtop would have taken RSHIP_TH
            silently, which is the exact failure this guard exists to prevent.
            Comparing the whole struct cannot go stale when a mode is added. */
-        static const prune_opt SHIPPED = {0,0,0,RSHIP_NEGTOP,0};
+        static const prune_opt SHIPPED = {0,0,0,RSHIP_NEGTOP,0,0};
         if(THRESH>=0) R.threshold=THRESH;
         else if(!memcmp(&PRUNE,&SHIPPED,sizeof PRUNE)) R.threshold=RSHIP_TH;
         else {

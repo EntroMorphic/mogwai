@@ -13,6 +13,7 @@ typedef struct {
     int cnn;      /* drop negatives that are nobody's nearest neighbour      */
     int neg_top;  /* keep the N negatives with the highest NN-coverage count */
     int neg_bound;/* keep the N negatives that most often sit on a POSITIVE's boundary */
+    int neg_halo; /* same, but with the budget allocated PER CLASS then unioned */
 } prune_opt;
 /* Compacts every parallel array in place and returns the surviving count.
  * idx may be NULL (mkblob does not build the binary rvec index).
