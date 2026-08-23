@@ -77,7 +77,7 @@ not a discipline anyone has to remember.
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
 - [The shipped index is pruned to 240 KB](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms; the price is `fa` 1 → 6 and nothing else
   - [With WiFi running it is 70% resident](#with-wifi-running-it-is-70-resident-not-100) — 9.3 ms; the 6.3 ms figure is a no-WiFi number
-- [#7 pre-registered](#test-evaluation-7--pre-registered-does-boundary-witness-selection-transfer) — does boundary-witness negative selection transfer? **not yet run**
+- [#7 pre-registered](#test-evaluation-7--pre-registered-does-boundary-witness-selection-transfer) · [result](#test-evaluation-7--result-no-falsifier-fired-and-the-effect-is-one-event) — direction transferred, magnitude did not: fa 12 -> 11
 - [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) · [result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) — the invariance transferred; **4 of 4 predictions hit**, fa 8 → 12
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
@@ -2188,3 +2188,68 @@ an operating point nobody has decided to ship. Lexical corroboration ties at the
 shipped budget. `negbound` is the only candidate that improves the safety metric
 at the operating point in use, at zero cost in bytes, latency, recall, `wa` or
 `missed` — and its selection touches no dev data at all.
+
+## Test evaluation #7 — RESULT: no falsifier fired, and the effect is one event
+
+Run at `e982968`, budget entry 9, `make testset-negbound`. 220 IoT / 2754
+non-commands.
+
+    baseline  (#6, negtop)    recall 84.1% ±2.5   fa=12   wa=15   missed=20
+    treatment (#7, negbound)  recall 84.1% ±2.5   fa=11   wa=15   missed=20
+
+### Predictions scored: 4 of 4, and the one that mattered barely
+
+| # | predicted | actual | |
+|---|---|---|---|
+| 1 | `fa` = 8, range 6–11 | **11** | hit — at the extreme top of the range |
+| 2 | `wa` = 15 ±2 | **15** | **hit exactly** |
+| 3 | `missed` = 20 ±2 | **20** | **hit exactly** |
+| 4 | recall 84.1% ±1 | **84.1%** | **hit exactly** |
+
+No falsifier fired. `fa` did not reach 12, `wa` and `missed` did not move at all,
+recall did not drop. **On the letter of the pre-registration the candidate
+survives.**
+
+### On the spirit, it is one event
+
+Dev showed `fa` 6 → 4, a 33% reduction. Held-out shows **12 → 11, an 8%
+reduction — a single false actuation out of 2754**. The Poisson interval on a
+count of 12 is roughly ±7; a difference of one sits deep inside it. This
+measurement cannot distinguish "slightly better" from "identical".
+
+My point estimate of 8 was 50% optimistic, and it landed at the very edge of the
+interval I had drawn around it. Eval #6's point estimate was 50% pessimistic.
+Two evaluations, two point estimates wrong by half in opposite directions, both
+saved by wide intervals. **The rate model is not good enough to predict a
+magnitude; it is only good enough to bracket one.**
+
+### What IS established, and it is not nothing
+
+`wa` and `missed` are **bit-identical** across the two selectors on held-out
+data — 15 and 20 in both. This is the second held-out confirmation of the
+structural claim that at th=136 a negative never wins an IoT argmax, so changing
+which negatives are stored cannot touch command behaviour. Eval #6 confirmed it
+across a change in negative *count*; eval #7 confirms it across a change in
+negative *identity* at fixed count. That invariance is now well supported.
+
+### Verdict
+
+The hypothesis was that selection-by-function transfers better than
+selection-by-appearance. **The direction transferred; the magnitude did not.**
+
+Adopting `negbound` costs nothing measurable: identical bytes, identical vector
+count, identical latency, identical recall, `wa` and `missed`. It is directionally
+better on both splits and its selection touches no dev data. That supports
+"harmless and probably marginally better" — not "better".
+
+**No adaptation.** K stays 4. K=16 remains ineligible, the budget is not
+adjusted, and the selector rule is not touched in light of this result, exactly
+as pre-registered.
+
+### Provenance note
+
+The row is stamped `DIRTY`. The uncommitted change at run time was the
+`testset-negbound` Makefile target itself — the invocation wrapper, added
+minutes before. `c/src/compare.c` and `c/src/prune.c` were both committed at
+`e982968`, so the measurement came from committed code. The correct order was to
+commit the target first, and it is recorded here rather than tidied.

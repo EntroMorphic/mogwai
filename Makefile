@@ -12,7 +12,7 @@ CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c
 DATA    := data/train.json data/validation.json data/test.json data/nlu_home.csv
 LOG     := results/RESULTS.tsv
 
-.PHONY: all fetch compare ship testset test tools regress route repl demo clean log-header
+.PHONY: all fetch compare ship testset testset-negbound test tools regress route repl demo clean log-header
 all: $(BIN)/compare
 
 $(BIN)/%: $(SRC)/%.c $(CORE) $(SRC)/router.h $(SRC)/ternary.h
@@ -61,6 +61,11 @@ testset-sel: $(BIN)/compare $(DATA) log-header
 
 testset-ship: $(BIN)/compare $(DATA) log-header
 	$(call RUNCOMPARE,--test --ship,TESTSET)
+
+# TEST SET with boundary-witness negative selection. Burns one budget unit.
+# Pre-registered as test evaluation #7 in doc/EXPERIMENTS.md.
+testset-negbound: $(BIN)/compare $(DATA) log-header
+	$(call RUNCOMPARE,--test --fixth=136 --prune-negbound=2685,TESTSET)
 
 testset: $(BIN)/compare $(DATA) log-header
 	$(call RUNCOMPARE,--test,TESTSET)
