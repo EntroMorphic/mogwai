@@ -204,3 +204,80 @@ Verifying any of it on held-out data costs a budget unit, of which few remain.
     c/bin/compare --ship --rerankoracle            # oracle 2 + residual stats
     c/bin/compare --condcentre                     # the 20-point negative
     c/bin/compare --ship --curve                   # the threshold curve
+
+---
+
+# Attacking the abstention side: a margin rule
+
+*Added 2026-08-23, same session. `compare --ship --abstain`. Dev only.*
+
+Oracle 1 said the threshold costs 9 rank-1-correct commands to buy 32
+rejections, and that the competing negative usually sits at rank 2. So test the
+relative rule directly:
+
+    P = best score among POSITIVE (command) exemplars
+    N = best score among NEGATIVE ("none") exemplars
+    accept iff  P - N > margin
+
+**The shipped rule is already the m=0 case of this.** Argmax over everything,
+reject if a negative won, else reject if below threshold — "a negative won" is
+exactly `P - N < 0`. So the honest baseline is `P > th AND P - N > 0`, and the
+question is only whether a *positive* margin buys anything.
+
+*(First version of this compared against `m = -infinity` — thresholding the best
+positive while ignoring whether a negative outranked it. That drops the
+none-check the router already has, and inflated the apparent gain from +3 to
++38 commands. Strawman baselines flatter in exactly this way.)*
+
+## The frontier
+
+Best `iot_ok` reachable at each false-actuation budget, sweeping th 0..220 and
+margin 0..100:
+
+      fa<=              shipped rule (m=0)             with margin (best m)
+         0  th=188 ok=105 wa= 1 ms= 86   th=188 m=  0 ok=105 wa= 1 ms= 86
+         1  th=170 ok=127 wa= 5 ms= 60   th=134 m= 25 ok=159 wa=12 ms= 21
+         2  th=150 ok=155 wa=10 ms= 27   th=126 m= 25 ok=161 wa=14 ms= 17
+         3  th=140 ok=162 wa=13 ms= 17   th=136 m= 13 ok=164 wa=13 ms= 15
+         4  th=138 ok=164 wa=13 ms= 15   th=134 m= 13 ok=165 wa=13 ms= 14
+         5  th=138 ok=164 wa=13 ms= 15   th=126 m= 20 ok=166 wa=14 ms= 12
+         6  th=136 ok=165 wa=13 ms= 14   th=110 m= 20 ok=168 wa=14 ms= 10
+
+The `fa<=6` baseline row reproduces the shipped config exactly, which is the
+check that the comparison is fair.
+
+**The gain is concentrated entirely in the low-fa regime.**
+
+- `fa <= 1`: **127 -> 159 commands, 66.1% -> 82.8%.** +32.
+- `fa <= 2`: +6. `fa <= 3..6`: +1 to +3, inside noise.
+- `fa = 0`: **nothing.** 105 either way. The margin cannot reach the endpoint.
+
+That the gain appears where the threshold is doing its most violent work, and
+vanishes where the rules coincide, is what you would expect if the mechanism is
+real: the absolute bar catches "weak evidence overall", the margin catches
+"there is a negative just as good", and they are different failures.
+
+## Cost to ship: approximately nothing
+
+`N` already exists inside the same scan. `route()` would track the best positive
+and best negative separately instead of a single argmax — two comparisons per
+vector rather than one, no new storage, no new representation, no second tier,
+no change to the index or the blob.
+
+## Why this is not yet a recommendation
+
+**Two free parameters selected on dev, at operating points defined by single-digit
+event counts.** The `fa<=1` frontier cell is chosen because it produces exactly
+ONE false actuation on 1335 dev negatives. The confidence interval on that is
+enormous, and this project has been here twice: threshold 126 looked better on
+dev and did not transfer (eval #3); the channel selector had a 94.3% oracle and
+failed held-out (eval #4).
+
+One thing in its favour: the gain is **not a single lucky cell**. Neighbouring
+settings give 157-159 at `fa<=1` (e.g. th=140/m=30 -> 157), against 127 for the
+best threshold-only point. A ~30-command effect stable across a neighbourhood is
+better evidence than a peak.
+
+What would make it trustworthy, in order: cross-validate the *mechanism* inside
+the index rather than tuning the pair on dev; pre-register a single (th, m) with
+falsifiers; then spend one budget unit. Not before.

@@ -366,6 +366,114 @@ static void rerankoracle(void) {
     }
 }
 
+
+/* ---- abstention rule -----------------------------------------------------
+ * The threshold is a single global bar on an absolute score. Oracle 1 showed
+ * that costs 9 rank-1-correct commands to buy 32 rejections, and that the
+ * competing negative is usually right there at rank 2. So test the relative
+ * rule instead:
+ *
+ *     P = best score among POSITIVE (command) exemplars
+ *     N = best score among NEGATIVE ("none") exemplars
+ *     accept iff  P - N > margin
+ *
+ * "Is this more like a command than like the strongest evidence it is not one"
+ * rather than "is this above 136". Subsumes the existing none-check: when the
+ * nearest vector is a negative, P - N < 0 and any margin >= 0 rejects.
+ *
+ * Also sweeps the conjunction with the absolute bar, because the two rules may
+ * be catching different things. Integer, deterministic, no new storage — both
+ * quantities already exist inside the same scan. */
+static int ABSTAIN = 0;
+
+static void abstain(void) {
+    int *P = malloc((size_t)V_n * sizeof(int));
+    int *N = malloc((size_t)V_n * sizeof(int));
+    int *C = malloc((size_t)V_n * sizeof(int));
+    for (int i = 0; i < V_n; i++) {
+        tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+        int bp = -(1 << 28), bn = -(1 << 28); uint32_t bpi = 0;
+        for (uint32_t j = 0; j < R.n_index; j++) {
+            int s = t_score(&q, &TI[j], aa);
+            if (!strcmp(R.names[R.label[j]], "none")) { if (s > bn) bn = s; }
+            else if (s > bp) { bp = s; bpi = j; }
+        }
+        P[i] = bp; N[i] = bn;
+        C[i] = r_apply_polarity(&R, R.label[bpi], V_t[i]);
+    }
+
+    printf("\n  abstention rule: accept iff P - N > margin\n");
+    printf("  P = best command exemplar, N = best negative exemplar\n");
+    printf("  shipped rule for reference: fa=6 wa=13 missed=14 iot_ok=165 (th=136)\n\n");
+    printf("  %7s %5s %5s %8s %8s\n", "margin", "fa", "wa", "missed", "iot_ok");
+    for (int m = -40; m <= 80; m += 5) {
+        int fa=0,wa=0,ms=0,ok=0;
+        for (int i = 0; i < V_n; i++) {
+            const char *p = (P[i] - N[i] > m) ? R.names[C[i]] : "none";
+            int gn = !strcmp(V_l[i], "none");
+            if (!gn && !strcmp(p, V_l[i])) ok++;
+            if (!strcmp(p, V_l[i])) continue;
+            if (gn) fa++; else if (!strcmp(p, "none")) ms++; else wa++;
+        }
+        printf("  %7d %5d %5d %8d %8d\n", m, fa, wa, ms, ok);
+    }
+
+    printf("\n  conjunction: accept iff P > th AND P - N > margin\n");
+    printf("  %7s", "th\\marg");
+    const int Ms[6] = {0, 10, 20, 30, 40, 60};
+    for (int k = 0; k < 6; k++) printf("  %14d", Ms[k]);
+    printf("\n");
+    for (int th = 100; th <= 140; th += 10) {
+        printf("  %7d", th);
+        for (int k = 0; k < 6; k++) {
+            int fa=0,wa=0,ms=0,ok=0;
+            for (int i = 0; i < V_n; i++) {
+                const char *p = (P[i] > th && P[i] - N[i] > Ms[k]) ? R.names[C[i]] : "none";
+                int gn = !strcmp(V_l[i], "none");
+                if (!gn && !strcmp(p, V_l[i])) ok++;
+                if (!strcmp(p, V_l[i])) continue;
+                if (gn) fa++; else if (!strcmp(p, "none")) ms++; else wa++;
+            }
+            printf("  %3d/%2d/%2d/%3d", fa, wa, ms, ok);
+        }
+        printf("\n");
+    }
+    printf("\n  cells are fa/wa/missed/iot_ok\n");
+
+    /* The decision-relevant summary: for each fa budget, the best recall any
+       (threshold, margin) pair reaches. Compare against the threshold-only
+       curve, which is the m=-1000 column of this same search. */
+    printf("\n  FRONTIER — best iot_ok at each fa budget\n");
+    printf("  %6s  %30s   %30s\n", "fa<=", "shipped rule (m=0)", "with margin (best m)");
+    for (int bud = 0; bud <= 6; bud++) {
+        int b1=-1,b1th=0, b2=-1,b2th=0,b2m=0, b1w=0,b1s=0, b2w=0,b2s=0;
+        for (int th = 0; th <= 220; th += 2) {
+            for (int mi = -1; mi <= 100; mi += 1) {
+                /* The SHIPPED rule is not "threshold the best positive" - it is
+                   argmax over everything, reject if a negative won, else reject
+                   if below th. That is exactly P>th AND P-N>0, i.e. the m=0
+                   case. Comparing against m=-inf would be a strawman: it drops
+                   the none-check the router already has. */
+                int m = (mi < 0) ? 0 : mi;
+                int fa=0,wa=0,ms=0,ok=0;
+                for (int i = 0; i < V_n; i++) {
+                    const char *p = (P[i] > th && P[i] - N[i] > m) ? R.names[C[i]] : "none";
+                    int gn = !strcmp(V_l[i], "none");
+                    if (!gn && !strcmp(p, V_l[i])) ok++;
+                    if (!strcmp(p, V_l[i])) continue;
+                    if (gn) fa++; else if (!strcmp(p, "none")) ms++; else wa++;
+                }
+                if (fa > bud) continue;
+                if (mi < 0) { if (ok > b1) { b1=ok; b1th=th; b1w=wa; b1s=ms; } }
+                else        { if (ok > b2) { b2=ok; b2th=th; b2m=m; b2w=wa; b2s=ms; } }
+            }
+        }
+        printf("  %6d  th=%3d ok=%3d wa=%2d ms=%3d   th=%3d m=%3d ok=%3d wa=%2d ms=%3d\n",
+               bud, b1th, b1, b1w, b1s, b2th, b2m, b2, b2w, b2s);
+    }
+    free(P); free(N); free(C);
+}
+
 typedef struct{int fa,wa,ms,iok,in;} TX;
 static TX tally(hit*H,int th,char la[][RNAMELEN],int n){
     TX z={0,0,0,0,0};
@@ -864,6 +972,7 @@ static void usage(void) {
 "  --rankoracle           for each dev error, rank of the answer that would be right\n"
 "  --rerankoracle         can the discarded per-dim magnitude reorder the top-K?\n"
 "  --condcentre           per-dim centre conditioned on firing, not diluted by zeros\n"
+"  --abstain              accept on P-N margin instead of an absolute threshold\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -1431,6 +1540,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--rankoracle")) RANKORACLE=1;
         else if (!strcmp(a,"--rerankoracle")) RERANK=1;
         else if (!strcmp(a,"--condcentre")) CONDCENTRE=1;
+        else if (!strcmp(a,"--abstain")) ABSTAIN=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -1561,6 +1671,7 @@ int main(int argc,char**argv){
     if(PACKBENCH){ packbench(); return 0; }
     if(RANKORACLE){ rankoracle(); return 0; }
     if(RERANK){ rerankoracle(); return 0; }
+    if(ABSTAIN){ abstain(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }
