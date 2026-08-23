@@ -65,6 +65,7 @@ not a discipline anyone has to remember.
   - [Red-team](#red-team-of-the-asymmetric-threshold-rejection) — `wa` is threshold-immune
 
 **The wa floor, and the selector that failed to reach it**
+- [Is the discarded magnitude recoverable?](#is-the-discarded-per-dimension-magnitude-recoverable-two-oracles-both-negative) — shortlist coverage is fine; two fine metrics both lose, and the 99.3%-ones sign plane is load-bearing
 - [Complementary information exists, but nothing extracts it](#the-wa-floor-complementary-information-exists-but-nothing-extracts-it) — oracle 94.3% vs router 85.9%
 - [Shrinking the prior for the device](#shrinking-the-prior-for-the-device-213-mb---74-kb-bit-exact) — 2.13 MB → 74 KB, bit-exact
 
@@ -2035,3 +2036,88 @@ and that negatives never cost `missed` or `wa`; this says where to spend them.
 Two caveats. Mining against the dev errors themselves would be fitting to dev —
 the legitimate version mines the phrasing family from an independent corpus.
 And verifying any of it costs a budget unit, of which few remain.
+
+## Is the discarded per-dimension magnitude recoverable? Two oracles, both negative
+
+`t_encode` reduces an `int16_t` count to one trit against a per-dimension
+centre. A dimension hit once and hit five times encode identically. That looked
+like an information bottleneck worth attacking before touching features, and
+LCVDB (a ternary vector DB whose coarse tier is 2 bits/dim and whose fine tier
+is MTF7 at 14 bits/dim) suggested the shape: coarse scan, then rerank a
+shortlist with the richer code.
+
+### Oracle 1 — is a second tier even reachable? YES
+
+For every dev error, the rank of the exemplar that would give the right answer
+(`--rankoracle`), on the shipped 3840-vector index at th=136:
+
+              K=1    K=2    K=4    K=8   K=16   K=32   K=64  >64/none  total
+    wrong-act   0      6      8     11     11     12     12        1     13
+    missed      9      9     10     10     11     12     13        1     14
+    UNBIDDEN    0      4      6      6      6      6      6        0      6
+
+**All six false actuations have a negative at rank 2-3.** Eleven of thirteen
+`wa` have the true class within top-8. A perfect reranker over a shortlist of 8
+bounds at `wa` 13 -> 2 and `fa` 6 -> 0.
+
+**And nine of fourteen `missed` are rank 1 with gap 0** — the argmax is already
+correct and the THRESHOLD rejects them. Two thirds of the missed population was
+never a ranking problem, and no reranker touches it. That is an acceptance
+problem, and nobody was looking there.
+
+### Oracle 2 — does the discarded magnitude reorder them? NO
+
+Fine score over the residual the sign bit destroys,
+`delta_i = acc[i]*RSCALE - centre[i]*total`, quantised to B bits against each
+vector's own max (an MTF7-style adaptive scale), same Dice denominator as the
+coarse metric. Ordering only: accept/reject still uses the coarse score, so
+`missed` cannot move and any change is attributable to reordering
+(`--rerankoracle`).
+
+    baseline (coarse argmax)      fa= 6  wa=13  missed=14  iot_ok=165
+    best of 24 configs (full, K=2) fa= 6  wa=13  missed=15  iot_ok=164
+    worst (4 bits, K=16)          fa=14  wa=24  missed=15  iot_ok=153
+
+Nothing improves, and it degrades **monotonically with K** — the more candidates
+the fine metric is allowed to reorder, the worse it does. That is the signature
+of a metric that is worse than the one it is reranking, not of missing bits.
+
+### Why, and a correction to my own diagnosis
+
+    residual stats over 211,285 active dims of 3,840 index vectors
+      delta > 0 (sign bit set): 209,746  (99.3%)
+      |delta|  min=1  mean=13630  max=146327
+
+**The sign plane is 99.3% ones.** `centre[d]` is the mean rate over ALL index
+vectors including the ~77% where the dimension is zero, but `t_encode` consults
+it only for dims that fired — so any firing dimension clears it. The residual
+therefore has almost no sign structure, and a fine metric built on products of
+near-always-positive quantities is dominated by magnitude rather than agreement.
+It does not nest the coarse metric, which is why more of it made things worse.
+
+I called that a structural flaw and proposed the obvious fix: condition the mean
+on firing, so the sign splits evenly. Measured (`--condcentre`, auto-tuned):
+
+    baseline      twin-ternary  85.9% +-2.5   fa=1  wa=13  missed=14  th=136
+    condcentre    twin-ternary  65.6% +-3.4   fa=1  wa=19  missed=47  th=130
+
+**Twenty points worse.** The asymmetry is load-bearing, not waste. `t_dot` is
+`agree - 2*disagree`; with a near-constant sign plane, `disagree` fires only
+when a dimension is genuinely below its diluted mean, which happens when it
+fires once inside a long utterance. That is a length signal and it is evidently
+carrying real weight. The 32 bytes of `s[]` hold ~0.06 bits per active dim of
+entropy and are worth 20 points anyway.
+
+### What this does and does not establish
+
+Established: the right answer is usually present in the coarse top-8, so a
+second tier is not blocked by candidate coverage; and two specific uses of the
+discarded magnitude are worse than the status quo.
+
+NOT established: that the magnitude is uninformative. Both negatives share one
+design fault — neither metric **strictly refines** the coarse one. A fine score
+that reduces exactly to `t_score` at minimum precision, with extra bits acting
+only as a tie-break, could not do worse than baseline by construction. That is
+the principled version of this experiment and it has not been run.
+
+Also unexamined, and now the larger target: the nine rank-1 gap-0 `missed`.

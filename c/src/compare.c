@@ -212,6 +212,155 @@ static void rankoracle(void) {
     }
 }
 
+
+/* ---- rerank oracle -----------------------------------------------------
+ * Oracle #1 said the right answer is usually present in the coarse top-K and
+ * merely mis-ordered. This asks whether the information to reorder it is
+ * ALREADY IN HAND — i.e. whether t_encode is destroying it.
+ *
+ * t_encode reduces int16 acc[i] to one trit against a per-dim centre:
+ *     sign_i = acc[i]*RSCALE >= centre[i]*total
+ * The residual it throws away is the distance from that decision surface:
+ *     delta_i = acc[i]*RSCALE - centre[i]*total
+ * which is "how confidently did this dimension fire", relative to the
+ * dimension's own expected rate. Not raw count — count is length-dependent and
+ * the centre already normalises for it.
+ *
+ * Fine score, integer, same Dice denominator as the coarse metric so length is
+ * handled identically:
+ *     sum over dims active in BOTH of  qd_i * cd_i,  scaled by 2*RD/(aa+ab+T)
+ * with each vector's deltas quantised to B bits against its own max |delta| —
+ * a per-vector adaptive scale, as MTF7 uses.
+ *
+ * ORDERING ONLY. Accept/reject still uses the coarse best against the
+ * threshold, so `missed` cannot move and any change in fa/wa is attributable
+ * to reordering alone. fa can still improve: promoting a negative to rank 1
+ * turns the answer into "none", which is a reject. */
+static int CONDCENTRE = 0;
+static int RERANK = 0;
+/* same smoothing the shipped Dice uses; ternary.c takes it as a -D, so it is
+   restated here rather than reached into. Measured flat over 2-16 at d=256. */
+#define RR_TSMOOTH 8
+#define RR_K 16
+static int32_t *RR_D = NULL;      /* [n_index][RD] residuals */
+static int32_t *RR_MX = NULL;     /* per-vector max |delta| over active dims */
+static int32_t *RR_AB = NULL;     /* per-vector active count */
+
+static void rr_delta(const char *txt, int32_t *d, int32_t *mx, int32_t *ab) {
+    int16_t acc[RD]; int32_t total;
+    r_counts(txt, acc, &total);
+    int32_t m = 1, a = 0;
+    for (int i = 0; i < RD; i++) {
+        if (!acc[i]) { d[i] = 0; continue; }
+        a++;
+        d[i] = (int32_t)acc[i] * RSCALE - R.centre[i] * total;
+        int32_t v = d[i] < 0 ? -d[i] : d[i];
+        if (v > m) m = v;
+    }
+    *mx = m; *ab = a;
+}
+/* quantise to B bits signed: [-(2^(B-1)-1), +(2^(B-1)-1)]. B=0 -> full int32. */
+static inline int32_t rr_q(int32_t v, int32_t mx, int B) {
+    if (!B) return v;
+    int32_t lim = (1 << (B - 1)) - 1;
+    return (int32_t)(((int64_t)v * lim) / mx);
+}
+
+static void rerankoracle(void) {
+    int th = FIXTH >= 0 ? FIXTH : RSHIP_TH;
+    uint32_t n = R.n_index;
+    RR_D  = malloc((size_t)n * RD * sizeof(int32_t));
+    RR_MX = malloc((size_t)n * sizeof(int32_t));
+    RR_AB = malloc((size_t)n * sizeof(int32_t));
+    if (!RR_D || !RR_MX || !RR_AB) { printf("  out of memory\n"); return; }
+    for (uint32_t j = 0; j < n; j++) rr_delta(U_t[j], RR_D + (size_t)j * RD, &RR_MX[j], &RR_AB[j]);
+
+    /* one coarse scan per query; keep top-RR_K and the coarse winner */
+    int  (*top)[RR_K] = malloc((size_t)V_n * sizeof *top);
+    int  *cbest = malloc((size_t)V_n * sizeof(int));
+    int  *cbi   = malloc((size_t)V_n * sizeof(int));
+    int32_t *qd = malloc((size_t)V_n * RD * sizeof(int32_t));
+    int32_t *qmx = malloc((size_t)V_n * sizeof(int32_t)), *qab = malloc((size_t)V_n * sizeof(int32_t));
+    for (int i = 0; i < V_n; i++) {
+        tvec q; t_encode(&R, V_t[i], &q); int aa = t_active(&q);
+        int ts[RR_K], ti[RR_K];
+        for (int k = 0; k < RR_K; k++) { ts[k] = -(1 << 28); ti[k] = 0; }
+        for (uint32_t j = 0; j < n; j++) {
+            int s = t_score(&q, &TI[j], aa);
+            if (s <= ts[RR_K - 1]) continue;
+            int k = RR_K - 1;
+            while (k > 0 && ts[k - 1] < s) { ts[k] = ts[k - 1]; ti[k] = ti[k - 1]; k--; }
+            ts[k] = s; ti[k] = (int)j;
+        }
+        cbest[i] = ts[0]; cbi[i] = ti[0];
+        for (int k = 0; k < RR_K; k++) top[i][k] = ti[k];
+        rr_delta(V_t[i], qd + (size_t)i * RD, &qmx[i], &qab[i]);
+    }
+
+    {   /* Is the residual even informative? If delta is nearly constant across
+           active dims, it encodes "fired" - which the mask already has - and a
+           fine metric built on it adds noise, not signal. Check before
+           concluding anything about the information itself. */
+        long nact=0, npos=0; long long amin=1LL<<60, amax=-(1LL<<60), asum=0;
+        for (uint32_t j = 0; j < n; j++) {
+            const int32_t *d = RR_D + (size_t)j * RD;
+            for (int t = 0; t < RD; t++) { if (!d[t]) continue; nact++;
+                if (d[t] > 0) npos++;
+                long long v = d[t] < 0 ? -d[t] : d[t];
+                if (v < amin) amin = v; if (v > amax) amax = v; asum += v; }
+        }
+        printf("\n  residual stats over %ld active dims of %u index vectors\n", nact, (unsigned)n);
+        printf("    delta > 0 (sign bit set): %ld  (%.1f%%)\n", npos, 100.0*npos/nact);
+        printf("    |delta|  min=%lld  mean=%lld  max=%lld\n", amin, asum/nact, amax);
+    }
+
+    const int Ks[4] = {2, 4, 8, 16};
+    const int Bs[6] = {2, 3, 4, 6, 8, 0};
+    printf("\n  rerank oracle at th=%d — ORDERING ONLY, accept/reject unchanged\n", th);
+    printf("  baseline (coarse argmax): "); {
+        int fa=0,wa=0,ms=0,ok=0;
+        for (int i = 0; i < V_n; i++) {
+            int c = (cbest[i] > th) ? r_apply_polarity(&R, R.label[cbi[i]], V_t[i]) : -1;
+            const char *p = c < 0 ? "none" : R.names[c]; int gn = !strcmp(V_l[i], "none");
+            if (!gn && !strcmp(p, V_l[i])) ok++;
+            if (!strcmp(p, V_l[i])) continue;
+            if (gn) fa++; else if (!strcmp(p, "none")) ms++; else wa++;
+        }
+        printf("fa=%d wa=%d missed=%d iot_ok=%d\n\n", fa, wa, ms, ok);
+    }
+    printf("  %-6s %-6s %5s %5s %8s %8s\n", "bits", "K", "fa", "wa", "missed", "iot_ok");
+    for (int bi2 = 0; bi2 < 6; bi2++) {
+        for (int ki = 0; ki < 4; ki++) {
+            int B = Bs[bi2], K = Ks[ki];
+            int fa=0,wa=0,ms=0,ok=0;
+            for (int i = 0; i < V_n; i++) {
+                int wj = cbi[i]; int64_t wbest = -((int64_t)1 << 60);
+                if (cbest[i] > th) {
+                    const int32_t *qq = qd + (size_t)i * RD;
+                    for (int k = 0; k < K; k++) {
+                        int j = top[i][k];
+                        const int32_t *cc = RR_D + (size_t)j * RD;
+                        int64_t sum = 0;
+                        for (int t = 0; t < RD; t++) {
+                            if (!qq[t] || !cc[t]) continue;
+                            sum += (int64_t)rr_q(qq[t], qmx[i], B) * rr_q(cc[t], RR_MX[j], B);
+                        }
+                        int64_t sc = (2 * sum * RD) / (qab[i] + RR_AB[j] + RR_TSMOOTH);
+                        if (sc > wbest) { wbest = sc; wj = j; }
+                    }
+                }
+                int c = (cbest[i] > th) ? r_apply_polarity(&R, R.label[wj], V_t[i]) : -1;
+                const char *p = c < 0 ? "none" : R.names[c]; int gn = !strcmp(V_l[i], "none");
+                if (!gn && !strcmp(p, V_l[i])) ok++;
+                if (!strcmp(p, V_l[i])) continue;
+                if (gn) fa++; else if (!strcmp(p, "none")) ms++; else wa++;
+            }
+            printf("  %-6s %-6d %5d %5d %8d %8d\n",
+                   B ? (char[4]){(char)('0'+B),0} : "full", K, fa, wa, ms, ok);
+        }
+    }
+}
+
 typedef struct{int fa,wa,ms,iok,in;} TX;
 static TX tally(hit*H,int th,char la[][RNAMELEN],int n){
     TX z={0,0,0,0,0};
@@ -708,6 +857,8 @@ static void usage(void) {
 "  --density              index vector sparsity — the footprint lever\n"
 "  --packbench            packed sign plane: cycles vs bytes, bit-exact check\n"
 "  --rankoracle           for each dev error, rank of the answer that would be right\n"
+"  --rerankoracle         can the discarded per-dim magnitude reorder the top-K?\n"
+"  --condcentre           per-dim centre conditioned on firing, not diluted by zeros\n"
 "  --selsig               paired significance of the selector on dev\n"
 "  --seldump --dirdump    per-item signal dumps (TSV)\n"
 "  --leak                 reintroduce the 75.6%% leak on purpose, to prove the guard\n"
@@ -1273,6 +1424,8 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--priorcls2")) PRIORCLS=2;
         else if (!strncmp(a,"--selmargin=",12)) SELMARG=atoi(a+12);
         else if (!strcmp(a,"--rankoracle")) RANKORACLE=1;
+        else if (!strcmp(a,"--rerankoracle")) RERANK=1;
+        else if (!strcmp(a,"--condcentre")) CONDCENTRE=1;
         else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
@@ -1355,9 +1508,15 @@ int main(int argc,char**argv){
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){fnd=c;break;}
         if(fnd<0&&R.n_class<RMAXCLS) snprintf(R.names[R.n_class++],RNAMELEN,"%.*s",RNAMELEN-1,U_l[i]); }
     int64_t sum[RD]; memset(sum,0,sizeof sum); int16_t acc[RD]; int32_t tot;
+    int64_t nz[RD]; memset(nz,0,sizeof nz);
     for(int i=0;i<U_n;i++){ r_counts(U_t[i],acc,&tot);
-        for(int d=0;d<RD;d++) sum[d]+=((int64_t)acc[d]*RSCALE)/tot; }
-    for(int d=0;d<RD;d++) R.centre[d]=(int32_t)(sum[d]/U_n);
+        for(int d=0;d<RD;d++){ sum[d]+=((int64_t)acc[d]*RSCALE)/tot; if(acc[d]) nz[d]++; } }
+    /* CONDCENTRE: divide by the number of vectors in which the dim actually
+       FIRED, not by every vector. t_encode consults centre[] only for dims with
+       acc!=0, so a mean diluted by the ~77%% of vectors where the dim is zero is
+       a bar that any firing dim clears - measured, the sign plane comes out
+       99.3%% ones, i.e. 32 bytes/vector carrying ~0.06 bits per active dim. */
+    for(int d=0;d<RD;d++) R.centre[d]=(int32_t)(sum[d]/(CONDCENTRE?(nz[d]?nz[d]:1):U_n));
     R.index=calloc(U_n,sizeof(rvec)); R.label=calloc(U_n,1); TI=calloc(U_n,sizeof(tvec));
     for(int i=0;i<U_n;i++){ r_encode(&R,U_t[i],&R.index[i]); t_encode(&R,U_t[i],&TI[i]);
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){R.label[i]=c;break;} }
@@ -1396,6 +1555,7 @@ int main(int argc,char**argv){
     if(DENSITY){ density(); return 0; }
     if(PACKBENCH){ packbench(); return 0; }
     if(RANKORACLE){ rankoracle(); return 0; }
+    if(RERANK){ rerankoracle(); return 0; }
     if(FOOTPRINT){ footprint(); return 0; }
     if(LMMRAW){ lmm_raw(); return 0; }
     if(LMMRAW3){ lmm_raw3(); return 0; }
