@@ -427,3 +427,45 @@ Guarded both ways: `decision experiments assert their control` checks the
 enforcement is wired, and a mutation reintroducing the exact strawman makes it
 fire. Verified by hand as well: with a broken control the process exits 2 and
 prints **zero** treatment rows.
+
+## 20. Prove the information is missing before adding any
+
+**Pattern, not incident.** Over one session, every mechanism that *added*
+something lost, and the one that *preserved* something won:
+
+    richer quantisation / MTF7 sidecar   retired - exact n-grams already a coin flip
+    hashing, larger dimension            retired - hashed vectors preserve the n-grams
+    magnitude rerank                     negative across all 24 configurations
+    conditional per-dim centre           -20 points; the asymmetry was load-bearing
+    whole-word lexical channel           3 of 16; the discriminative token is in neither
+    IDF / rarity weighting               retired - no shared rare terms to weight
+    class signatures                     already inert and cut (cascade.c)
+    lexical corroboration                ties at the shipped operating point
+    brute-force more negatives           +25 ms to move fa from 3 to 1
+
+    boundary-witness negative selection  fa 6 -> 4, zero bytes, zero latency
+
+The winner changed **which negatives survive**, at identical budget, identical
+bytes, identical runtime. It added no information. It stopped the system
+discarding the information it already had.
+
+The same shape appeared twice more in the same session. The sign plane is 99.3%
+ones — apparently wasted capacity — and making it informative cost 20 points,
+because the near-constancy *was* the signal. And `negtop` was discarding exactly
+the negatives that do rejection work, while optimising a criterion that looked
+like the right one.
+
+**Rule.** Before adding a channel, a representation, a tier, or a parameter,
+demonstrate that the required information is **absent** from what the system
+already computes. An oracle that shows the answer is present-but-mis-ordered is
+not the same as one showing the answer is present-and-recoverable, and neither
+is the same as showing it is absent. Ask in this order:
+
+1. Is the right answer already reachable? (candidate coverage)
+2. Is it merely mis-ordered? (metric)
+3. Is the distinguishing evidence in the features at all? (representation)
+4. Is it in the corpus at all? (coverage)
+
+Only a *no* at step 3 or 4 justifies adding something. A *yes* means the work is
+to stop discarding what is there — which is cheaper, smaller, and has been the
+right answer every time it has been tested here.

@@ -77,6 +77,7 @@ not a discipline anyone has to remember.
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
 - [The shipped index is pruned to 240 KB](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms; the price is `fa` 1 → 6 and nothing else
   - [With WiFi running it is 70% resident](#with-wifi-running-it-is-70-resident-not-100) — 9.3 ms; the 6.3 ms figure is a no-WiFi number
+- [#7 pre-registered](#test-evaluation-7--pre-registered-does-boundary-witness-selection-transfer) — does boundary-witness negative selection transfer? **not yet run**
 - [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) · [result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) — the invariance transferred; **4 of 4 predictions hit**, fa 8 → 12
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
@@ -2121,3 +2122,69 @@ only as a tie-break, could not do worse than baseline by construction. That is
 the principled version of this experiment and it has not been run.
 
 Also unexamined, and now the larger target: the nine rank-1 gap-0 `missed`.
+
+## Test evaluation #7 — PRE-REGISTERED: does boundary-witness selection transfer?
+
+Written before running. **Not yet run.** This section is the commitment; the
+result will be appended beside it whether or not it agrees.
+
+### Hypothesis
+
+> Negatives selected for **guarding positive boundaries** transfer better than
+> negatives selected for **generic negative-space coverage**.
+
+### Treatment and control
+
+    treatment   --prune-negbound=2685, K=4      (boundary witnesses)
+    control     --prune-negtop=2685             (the shipped selector)
+
+Identical budget, identical vector count (3840), identical blob size (240 KB),
+identical scan, identical firmware. The only change is *which* negatives survive.
+The control must reproduce the frozen baseline or the run aborts —
+`control_or_die()`, METHOD 19.
+
+### Baseline, from test evaluation #6 (budget entry 8)
+
+    TEST   recall 84.1% ±2.5   fa=12   wa=15   missed=20   (220 IoT / 2754 neg)
+
+### Predictions
+
+Eval #6 taught that the **final rate** transfers better than the delta: dev
+shipped `fa` 0.449% against test 0.436%, while the additive-delta model
+over-predicted by 50%. Using the rate model on dev `negbound` (4/1335 = 0.300%):
+
+1. **`fa` = 8, range 6–11.** 0.300% × 2754 ≈ 8.3.
+2. **`wa` = 15**, tolerance ±2.
+3. **`missed` = 20**, tolerance ±2.
+4. **recall 84.1%**, tolerance ±1 point.
+
+Not predictions but structural certainties, checked anyway: blob size 240 KB,
+vector count 3840, per-query latency unchanged.
+
+### Falsifiers
+
+- **`fa` ≥ 12** — no improvement. The candidate is killed.
+- **`wa` or `missed` degrades by more than 2** — the mechanism has side effects
+  it structurally should not have, since negatives cannot win an IoT argmax at
+  th=136. Killed, and the invariance claim needs re-examining.
+- **recall drops more than 1 point** — killed.
+
+### No adaptation after evaluation
+
+If `K=4` underperforms, the candidate is **cut, not re-tuned**. Explicitly:
+
+> **K=16 is not eligible for substitution.** It is known to give `fa=2` on dev,
+> which is exactly what makes it dangerous after the fact. Neither is the
+> budget, the witness definition, nor the selector rule eligible for adjustment
+> in light of the result.
+
+This is the discipline that cut the selector in eval #4 rather than re-tuning
+its gate, and reverted threshold 126 in eval #3.
+
+### Why this candidate and not the others
+
+The `P - N` abstention margin buys more (+32 commands at `fa <= 1`) but only at
+an operating point nobody has decided to ship. Lexical corroboration ties at the
+shipped budget. `negbound` is the only candidate that improves the safety metric
+at the operating point in use, at zero cost in bytes, latency, recall, `wa` or
+`missed` — and its selection touches no dev data at all.
