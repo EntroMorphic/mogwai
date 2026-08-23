@@ -32,6 +32,9 @@
 #include "nvs_flash.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "router.h"
+#include "ternary.h"
+#include "lift.h"
 
 #if __has_include("wifi_creds.h")
 #include "wifi_creds.h"
@@ -72,6 +75,33 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
         printf("  got IP " IPSTR "\n", IP2STR(&e->ip_info.ip));
         xEventGroupSetBits(EG, CONNECTED_BIT);
     }
+}
+
+
+/* ---- lift the index, then prove TLS still works -------------------------- */
+/* Mirrors product.c's load(): header, names, centre, labels, ACT, index. The
+   probe never routes, so it needs only TI/ACT/n_index — enough to occupy memory
+   exactly as the product would, via the SAME lift_run() in lift.c. */
+extern const uint8_t blob_start[] asm("_binary_router_bin_start");
+static router_t R;
+static lift_t   L;
+
+static void lift_the_index(void) {
+    const uint8_t *p = blob_start;
+    uint32_t hdr[5]; memcpy(hdr, p, 20); p += 20;
+    if (hdr[0] != RMAGIC || hdr[1] != RD) { printf("  BLOB PARSE FAILED\n"); return; }
+    R.n_index = hdr[2];
+    p += RNAMELEN * RMAXCLS;
+    p += sizeof(int32_t) * RD;
+    p += R.n_index;                                  /* labels */
+    const uint16_t *act = (const uint16_t *)p; p += (size_t)R.n_index * 2;
+    const tvec     *ti  = (const tvec *)p;
+
+    lift_run(&L, ti, act, R.n_index, LIFT_RESERVE_TLS);
+    printf("  index %u/%u in SRAM (%u%%): %u DRAM + %u IRAM-only, %u MISMATCHED\n",
+           (unsigned)(L.vec_dram + L.vec_iram), (unsigned)R.n_index,
+           (unsigned)(R.n_index ? (L.vec_dram + L.vec_iram) * 100 / R.n_index : 0),
+           (unsigned)L.vec_dram, (unsigned)L.vec_iram, (unsigned)L.bad);
 }
 
 static esp_err_t sink(esp_http_client_event_t *e) { (void)e; return ESP_OK; }
@@ -135,6 +165,8 @@ void app_main(void) {
                                             pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
         if (b & CONNECTED_BIT) {
             stage("associated + DHCP");
+            lift_the_index();
+            stage("index lifted");
             fetch("http://neverssl.com/",        0, "plain TCP + HTTP");
             fetch("https://www.howsmyssl.com/",  1, "TLS handshake + HTTPS");
             fetch("https://www.howsmyssl.com/",  1, "second TLS (warm)");

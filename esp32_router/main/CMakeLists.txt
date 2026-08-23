@@ -23,7 +23,8 @@ set(PROBE "$ENV{MOGWAI_PROBE}")
 if(PROBE)
   # No router.c/ternary.c and no blob: the probe measures the network stack, and
   # linking the router in would only muddy the heap figures it exists to report.
-  idf_component_register(SRCS "wifiprobe.c"
+  idf_component_register(SRCS "wifiprobe.c" "router.c" "ternary.c" "lift.c"
+                         EMBED_FILES "router.bin"
                          INCLUDE_DIRS "."
                          REQUIRES driver esp_timer esp_wifi esp_netif esp_event
                                   nvs_flash esp_http_client esp-tls mbedtls)
@@ -33,7 +34,7 @@ else()
   else()
     set(MAIN_SRC "main.c")
   endif()
-  idf_component_register(SRCS "${MAIN_SRC}" "router.c" "ternary.c"
+  idf_component_register(SRCS "${MAIN_SRC}" "router.c" "ternary.c" "lift.c"
                          INCLUDE_DIRS "."
                          REQUIRES driver esp_timer
                          EMBED_FILES "router.bin")

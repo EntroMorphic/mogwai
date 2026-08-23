@@ -68,6 +68,7 @@ not a discipline anyone has to remember.
 - [Shrinking the prior for the device](#shrinking-the-prior-for-the-device-213-mb---74-kb-bit-exact) — 2.13 MB → 74 KB, bit-exact
 
 **Where the time goes on device**
+- [A functional WiFi stack, measured](#a-functional-wifi-stack-measured-what-it-costs-and-what-survives-it) — TLS dips 46.7 KB below steady state; the shipped reserve was smaller than that
 - [Hardware-offload audit](#hardware-offload-audit-what-can-move-to-silicon-and-what-cannot) — every path ends at the same 24 MB/s flash wall
 - [Packing the sign plane — MEASURED, and it loses](#packing-the-sign-plane--measured-and-it-loses) — bit-exact and 1.61x smaller, but 4.8x slower; 6x over break-even
 - [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) — free heap is a **sum of regions**; one malloc can never fit. 43.9 → 34.3 ms at no accuracy cost
@@ -1774,3 +1775,69 @@ it is not an independent replication, and no multiple-comparison correction has
 been applied to that p-value. The honest summary is that the effect keeps
 appearing at the same magnitude, not that it has been independently confirmed
 five times.
+
+## A functional WiFi stack, measured: what it costs and what survives it
+
+Every residency figure before this one was taken with `esp_wifi_start()` called
+but **nothing associated** — no AP, no DHCP, no sockets, no TLS. Those are
+boot-time numbers, and they are the wrong numbers to size a reserve from.
+
+`wifiprobe.c` (`MOGWAI_PROBE=1`) reports free heap at each stage and, crucially,
+`esp_get_minimum_free_heap_size()`. Measured on a real AP:
+
+    boot                       273680
+    nvs_flash_init             271972
+    netif + lwIP               262460   (-9512)
+    esp_wifi_init              227444   (-35016)   <- the radio driver
+    esp_wifi_start             225524
+    associated + DHCP          224436   min-ever 221720
+    plain TCP + HTTP    200    223812   min-ever 217780
+    TLS handshake       200    223292   min-ever 176804
+    second TLS (warm)   200    223292   min-ever 176772
+
+**A TLS handshake dips 46,716 B below steady state.** Steady-state free moves by
+about **1.1 KB** across the same fetch, so sampling free heap before and after
+would have under-reported the requirement by a factor of **45**. The warm second
+handshake barely moves the low-water mark (32 bytes), so the peak is
+per-handshake and does not compound.
+
+The shipped `SRAM_RESERVE` was **40,960 B**, chosen by eye. It is smaller than
+the transient. A product that lifted the index down to that reserve and then
+made an HTTPS request would have died — on the first request, in the field, not
+at boot. `LIFT_RESERVE_TLS` is now 61,440.
+
+### The IRAM-only pool is free money, and the guard is the point
+
+IRAM permits only 32-bit accesses, so `malloc` cannot use it — which is exactly
+why the mbedTLS transient cannot touch it either. `tvec` is `uint32_t m[8]` +
+`uint32_t s[8]`, so the scan (whole-word reads) is legal there; `ACT` is
+`uint16_t` and never is. `memcpy`/`memcmp` fault on it, hence word-wise copy and
+compare in `lift.c`.
+
+The first attempt used `MALLOC_CAP_EXEC | MALLOC_CAP_32BIT` unguarded and looked
+excellent — 93% resident, 7.07 ms — because `MALLOC_CAP_EXEC` **also draws from
+the D/IRAM regions, which are ordinary DRAM to everything else.** It had
+quietly spent the TLS budget, leaving 15,900 B free. The guard is not an
+address-range test (chip-specific, easy to get subtly wrong) but a direct
+question: *did this allocation consume any of the 8-bit-capable pool?* If it
+did, give it back.
+
+### The result, with the index lifted and TLS afterwards
+
+    associated + DHCP          220316
+    index lifted                65104   2816/3840 = 73%
+                                        2304 DRAM + 512 IRAM-only, 0 MISMATCHED
+    TLS handshake       200     64368   min-ever 17508
+    second TLS (warm)   200     64368   min-ever 17508
+
+**TLS completes with the index resident**, and the low-water mark is 17,508 B.
+The reserve did its job: 61,440 held back, 46,860 consumed by the handshake,
+~14.6 KB genuinely spare. Without the IRAM-only chunks it would have been 2304
+vectors — **60%** — so IRAM is worth 13 points here, at zero cost to the TLS
+budget. Projected latency at 73% is ~8.8 ms against 6.3 ms with no network.
+
+**One failure, reported as observed:** the plain-HTTP fetch to `neverssl.com`
+returned `ESP_ERR_HTTP_CONNECT` (`select()` timeout). That is a reachability
+problem with that host, not a heap problem — the TLS fetch to a different host
+succeeded immediately afterwards with *less* heap available. Recorded rather
+than retried into a clean-looking run.

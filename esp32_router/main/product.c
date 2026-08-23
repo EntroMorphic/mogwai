@@ -29,6 +29,7 @@
 #include "esp_heap_caps.h"
 #include "router.h"
 #include "ternary.h"
+#include "lift.h"
 
 #define PIN_LIGHT     GPIO_NUM_2
 #define PIN_WEMO      GPIO_NUM_4
@@ -46,19 +47,14 @@ static const tvec *TI;
 static const uint16_t *ACT;
 
 /* The index is scanned strictly in order, so it does not need to be one
-   allocation. That matters: esp_get_free_heap_size() reports the SUM across
-   heap regions, but the ESP32 splits DRAM into several non-contiguous blocks,
-   so a single malloc is bounded by the LARGEST block. Measured on this part:
-   258,720 B needed, 295,764 B free in total, 163,840 B in the largest block.
-   A flat lift can never succeed; a chunked one uses nearly all of it. */
-#define CHUNK_VECS    128                    /* 8 KB per chunk: fits the small regions too */
-#define MAXCHUNK      512                    /* 65,536 vectors; the 656 KB index is 10,500 */
-#define SRAM_RESERVE  40960                  /* heap left for the rest of the firmware */
-static const tvec *CH[MAXCHUNK];             /* chunk c -> SRAM copy, or into flash */
-static uint32_t NCH;
-static uint32_t vec_in_sram = 0, sram_bad = 0;
-static size_t sram_need = 0, sram_largest = 0;   /* reported in the banner: a
-   printf here would sit in stdout's buffer and be lost when uart_param_config
+   allocation. esp_get_free_heap_size() reports the SUM across heap regions, but
+   the ESP32 splits DRAM into non-contiguous blocks, so a single malloc is
+   bounded by the LARGEST block. Chunked, it uses nearly all of it and then
+   spills into the IRAM-only pool that malloc cannot reach at all.
+   The policy lives in lift.c and is shared with wifiprobe.c, so the arrangement
+   that is measured and the arrangement that ships are the same code. */
+static lift_t L;                             /* reported in the banner: a printf
+   here would sit in stdout's buffer and be lost when uart_param_config
    reconfigures the console */
 static const uint8_t *REFP;
 static uint32_t NREF;
@@ -121,65 +117,6 @@ static const char *actuate(const char *cls) {
     return NULL;
 }
 
-/* Copy as much of the index into SRAM as the heap will take, chunk by chunk.
- *
- * Measured: identical code over identical vectors costs 4168 ns/vector from
- * flash-mapped memory and 1617 ns from internal SRAM - 2.58x, because the cost
- * is cache-MMU and SPI overhead, not flash bandwidth. Pure memory touch is 20x
- * cheaper. So every chunk that lands in SRAM is a chunk scanned 2.58x faster.
- *
- * Partial is fine and is the point of chunking: a chunk that will not fit stays
- * flash-mapped and scores bit-identically, because it is the same bytes. The
- * device degrades to the old speed instead of failing to boot. */
-static int lift_index(void)
-{
-    if (R.n_index > (uint32_t)MAXCHUNK * CHUNK_VECS) return -1;
-    NCH = (R.n_index + CHUNK_VECS - 1) / CHUNK_VECS;
-    sram_need    = (size_t)R.n_index * sizeof(tvec) + (size_t)R.n_index * 2;
-    sram_largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-
-    /* ACT first: 2 B/vector, and it is touched once per vector like the index
-       is. Small enough that it fits a region whatever else happens. */
-    size_t abytes = (size_t)R.n_index * 2;
-    if (heap_caps_get_free_size(MALLOC_CAP_8BIT) > abytes + SRAM_RESERVE) {
-        uint16_t *ra = malloc(abytes);
-        if (ra) { memcpy(ra, ACT, abytes); ACT = ra; }
-    }
-
-    for (uint32_t c = 0; c < NCH; c++) {
-        uint32_t off = c * CHUNK_VECS;
-        uint32_t n   = R.n_index - off; if (n > CHUNK_VECS) n = CHUNK_VECS;
-        size_t   b   = (size_t)n * sizeof(tvec);
-        CH[c] = TI + off;                            /* flash by default */
-        if (heap_caps_get_free_size(MALLOC_CAP_8BIT) < b + SRAM_RESERVE) continue;
-        tvec *dst = malloc(b);
-        if (!dst) continue;                          /* no region big enough; try the next */
-        memcpy(dst, TI + off, b);
-        CH[c] = dst;
-        vec_in_sram += n;
-    }
-
-    /* Verify the CHUNK ADDRESSING, not just the copy.
-     *
-     * memcmp'ing each chunk straight after memcpy'ing it is a check that cannot
-     * fail - it re-reads what it just wrote. The real hazard in chunking is an
-     * off-by-one at a chunk boundary, which would silently score vector i
-     * against the bytes of some other vector. So walk every index through the
-     * exact nested accessor the scan uses and compare it to the flat
-     * flash-mapped original. Mutating CHUNK_VECS in either loop fires this. */
-    {
-        const tvec *flat = TI;
-        uint32_t i = 0;
-        for (uint32_t c = 0; c < NCH; c++) {
-            const tvec *base = CH[c];
-            uint32_t n = R.n_index - i; if (n > CHUNK_VECS) n = CHUNK_VECS;
-            for (uint32_t k = 0; k < n; k++, i++)
-                if (memcmp(&base[k], &flat[i], sizeof(tvec))) sram_bad++;
-        }
-        if (i != R.n_index) sram_bad++;          /* the walk must cover the index exactly */
-    }
-    return 0;
-}
 
 static int load(void) {
     const uint8_t *p = blob_start;
@@ -204,17 +141,17 @@ static int load(void) {
      * Adaptive rather than compile-time: try, and fall back to flash-mapped if
      * the allocation fails. A device that boots slower is better than one that
      * does not boot. */
-    return lift_index();
+    return lift_run(&L, TI, ACT, R.n_index, LIFT_RESERVE_BARE);
 }
 
 static int route(const char *txt, int *score_out) {
     tvec q; t_encode(&R, txt, &q);
     int aa = t_active(&q), best = -(1 << 28); uint32_t bi = 0, i = 0;
-    for (uint32_t c = 0; c < NCH; c++) {
-        const tvec *base = CH[c];
-        uint32_t n = R.n_index - i; if (n > CHUNK_VECS) n = CHUNK_VECS;
+    for (uint32_t c = 0; c < L.nch; c++) {
+        const tvec *base = L.ch[c];
+        uint32_t n = R.n_index - i; if (n > LIFT_CHUNK_VECS) n = LIFT_CHUNK_VECS;
         for (uint32_t k = 0; k < n; k++, i++) {
-            int s = t_score_pre(&q, &base[k], aa, ACT[i]);
+            int s = t_score_pre(&q, &base[k], aa, L.act[i]);
             if (s > best) { best = s; bi = i; }
         }
     }
@@ -253,14 +190,15 @@ void app_main(void) {
     printf("pins: light PWM=GPIO%d  wemo=GPIO%d  cleaning=GPIO%d  coffee=GPIO%d\n",
            PIN_LIGHT, PIN_WEMO, PIN_CLEANING, PIN_COFFEE);
     printf("index %u/%u vectors in SRAM (%u%%), %u chunks of %u\n",
-           (unsigned)vec_in_sram, (unsigned)R.n_index,
-           (unsigned)(R.n_index ? vec_in_sram * 100 / R.n_index : 0),
-           (unsigned)NCH, (unsigned)CHUNK_VECS);
+           (unsigned)(L.vec_dram + L.vec_iram), (unsigned)R.n_index,
+           (unsigned)(R.n_index ? (L.vec_dram + L.vec_iram) * 100 / R.n_index : 0),
+           (unsigned)L.nch, (unsigned)LIFT_CHUNK_VECS);
+    printf("  %u in DRAM, %u in the IRAM-only pool (malloc cannot reach it)\n",
+           (unsigned)L.vec_dram, (unsigned)L.vec_iram);
     printf("  addressing verified over all %u vectors: %u MISMATCHED\n",
-           (unsigned)R.n_index, (unsigned)sram_bad);
+           (unsigned)R.n_index, (unsigned)L.bad);
     printf("  needs %u B | largest contiguous block %u B | total free %u B\n",
-           (unsigned)sram_need, (unsigned)sram_largest, (unsigned)esp_get_free_heap_size());
-    printf("type an utterance and press enter. non-commands actuate NOTHING.\n\n> ");
+           (unsigned)L.need, (unsigned)L.largest, (unsigned)esp_get_free_heap_size());
     fflush(stdout);
 
     char line[256]; int n = 0;
