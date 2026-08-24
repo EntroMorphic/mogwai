@@ -173,9 +173,10 @@ parity check is the natural place to enforce it permanently.
 We have been fighting to keep 245,760 B resident alongside WiFi and TLS, and
 the networked build sits at 83% after reclaiming WiFi IRAM. At ~132 KB the
 economics change: full residency alongside the network stack stops being tight.
-Fewer loads and half the popcounts should cut latency too — but that is
-inference from the operation count, **not measured**, and it goes on hardware
-before it goes in a README.
+Fewer loads and half the popcounts should cut latency too — that was inference
+from the operation count when this was written, and it has since been measured:
+**4.3 ms at 100% residency**, with the WiFi stack up and the radio associated,
+through a live TLS handshake.
 
 ## What is still open
 
@@ -296,12 +297,13 @@ could not do. Routing afterwards was score-identical (206, 233).
 Measured from a clean clone at HEAD, because the working tree was mid-mutation
 at the time and `c/src/router.h` was corrupted that instant.
 
-**The IRAM-only path is documented as dormant, not removed.** v2 fits entirely
-in DRAM, so `iram_only_malloc()` fires on no configuration we ship. It is kept
-because the condition that needed it is a function of index size, not of the
-format: raise `RSHIP_NEGTOP`, widen `RD`, or add classes and DRAM runs out
-again. `lift.c` now says so.
-
+**The IRAM-only path is dormant, documented, and now tested.** v2 fits entirely
+in DRAM, so `iram_only_malloc()` fires on nothing that ships. It was forced by
+starving DRAM at build time (`-DLIFT_RESERVE_BARE=204800`), putting 1536 of 3840
+vectors in the pool: addressing verified with 0 MISMATCHED, routing
+bit-identical, at a measured **+232 ns/vector — 20% slower than DRAM**, against
+2474 ns from flash. It is kept because the condition that needs it is a function
+of index size, not of the format.
 **Mutation coverage found a hole in this very red-team.** The re-run scored
 69 of 72 and named `shipped blob is v2 (RTR2)` — a check *I* added — as
 uncoverable. Patching the magic byte from 'RTR2' to 'RTR1' fixes that, and the

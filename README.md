@@ -285,6 +285,19 @@ allocation. Lifting it in 8 KB chunks uses nearly all the free heap; any chunk
 that will not fit stays flash-mapped and scores identically. Details:
 [Chunked SRAM residency](doc/EXPERIMENTS.md#chunked-sram-residency-the-index-does-not-need-one-allocation).
 
+Three memory tiers, all measured on this part, per index vector:
+
+| tier | ns/vector | |
+|---|---:|---|
+| DRAM | 1154 | where the whole v2 index lives |
+| IRAM-only | 1386 | +20%; `malloc` cannot reach it, 32-bit access only |
+| flash-mapped | 2474 | the fallback when nothing else fits |
+
+The IRAM tier is dormant under v2 — the index fits in DRAM — but it is
+[exercised deliberately](doc/EXPERIMENTS.md#the-iram-only-fallback-exercised) by
+starving DRAM at build time, and routing from it is bit-identical. Spilling
+degrades gracefully rather than falling off a cliff.
+
 Two consequences worth knowing before deploying this. **3840 vectors is a
 ceiling, not a target** — the index cannot grow indefinitely without chunks
 falling back to flash, and a flash-resident chunk costs real milliseconds on

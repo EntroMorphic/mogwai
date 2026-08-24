@@ -74,6 +74,7 @@ not a discipline anyone has to remember.
 - [Hardware-offload audit](#hardware-offload-audit-what-can-move-to-silicon-and-what-cannot) — every path ends at the same 24 MB/s flash wall
 - [Packing the sign plane — MEASURED, and it loses](#packing-the-sign-plane--measured-and-it-loses) — bit-exact and 1.61x smaller, but 4.8x slower; 6x over break-even
 - [The sign plane is an exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane) — 0.16% of dims are `-1`; store those, not 120 KB of bit-plane. **Lossless**, 64 → 34.4 B/vector, 6.46 → 4.3 ms, and 100% resident with WiFi up
+- [The IRAM-only fallback, exercised](#the-iram-only-fallback-exercised) — dormant under v2, so it was forced: 1536 of 3840 vectors into the pool `malloc` cannot reach. Bit-identical routing, **+232 ns/vector (20%)**
 - [Power: what a scan costs](#power-what-a-scan-costs-and-why-the-devkit-hides-it) — 23 mA, 0.496 mJ/query. On a devkit that is 0.2% of the budget; on a **sleeping product it is ~10%**, and the devkit reading is the misleading one
 - [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) — free heap is a **sum of regions**; one malloc can never fit. 43.9 → 34.3 ms at no accuracy cost
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
@@ -1560,7 +1561,7 @@ Full write-up, including the red-team that found two silent-failure gaps in the
 parser: [doc/return-to-me/the-sign-plane-is-an-exception-set.md](return-to-me/the-sign-plane-is-an-exception-set.md).
 
 
-### The IRAM-only fallback, exercised
+## The IRAM-only fallback, exercised
 
 v2 made this path dormant — the whole index fits in DRAM, so `iram_only_malloc()`
 fires on nothing that ships. Dormant is not the same as correct, so it was forced
