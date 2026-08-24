@@ -1,0 +1,4 @@
+# mutation coverage, written by scripts/mutate.sh
+covered 70 of 72
+suite   72 checks
+commit  71b2e3c

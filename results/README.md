@@ -25,3 +25,9 @@ wrong lesson.
 
 `compare` now emits its own `ROW\t...` line and the Makefile only stamps and
 appends it. Nothing parses formatted output.
+
+`mutation-coverage.txt` and `mutation-detail.txt` are written by
+`scripts/mutate.sh`: which checks a mutation made fail, flat and per-mutation.
+`mutation-summary.txt` records the headline — coverage, suite size, and the
+commit it was measured at — because that number previously went to stdout only,
+so it survived in commit messages and nowhere you could audit.
