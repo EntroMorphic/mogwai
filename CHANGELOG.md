@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.1.1 — 2026-08-24
+
+**No firmware change.** Every source file on the shipped path is byte-for-byte
+identical to v0.1.0; `git diff v0.1.0..v0.1.1 -- c/src esp32_router/main` is
+empty. This release exists because the *pipeline that produced v0.1.0* was
+weaker than the artifact it produced, and shipping a build system nobody has
+attacked is how a good binary becomes a bad one later.
+
+Red-teaming the deployment found five defects:
+
+- **No test gate.** The release workflow was entirely independent of the test
+  suite, so tagging a tree that fails `regress` would have shipped a broken
+  image to strangers. A `verify` job now runs all 72 checks first.
+- **Hardcoded flash offsets** in two files. `0x1000/0x8000/0x10000` is correct
+  only until `partitions.csv` moves — and a moved app produces a plausible image
+  of exactly the right size that does not boot. Now `idf.py merge-bin`, which
+  reads the offsets out of the build that just happened.
+- **Nothing verified the image's contents.** A stale build directory or the
+  wrong app passes every other step. Adds `c/test/imgcheck.c`, which finds the
+  blob inside the image byte for byte — not a checksum of the image, which says
+  nothing about what is in it. It fails on a blob altered by one byte.
+- **An unpinned CDN** in the browser flasher: `esp-web-tools@10` is a range that
+  silently follows new releases, for a script whose job is flashing firmware.
+  Pinned to `10.4.0`.
+- **The manifest version stamp** was a `sed` that failed silently if the
+  template were ever committed already-stamped. CI now asserts it first.
+
+Two deployment misconfigurations, both invisible in the repository:
+
+- The `github-pages` environment refused tag deployments, so the release
+  published its assets but never its flasher.
+- Pages was set to the **legacy branch builder**, so every push to `main` served
+  the repo root — which has no `index.html` — and overwrote the flasher. It
+  looked like a deployment that succeeded and then died for no reason.
+
+Also: `actions/checkout` bumped off deprecated Node 20, mutation coverage
+recorded to `results/mutation-summary.txt` rather than stdout alone, and the
+README audited end to end — a transcript that spliced a v2 banner onto v1
+timings, a size comparison in incomparable units, and a "No Python anywhere"
+claim that the ESP-IDF toolchain contradicts.
+
+Verification unchanged and re-run: **72/72** host checks, mutation coverage
+**70 of 72**, and the published artifact downloaded, written to an erased chip
+at `0x0`, and booted with nothing else on the flash.
+
+
 ## v0.1.0 — 2026-08-24
 
 First tagged release. **Exploratory research, not a product** — the task framing
