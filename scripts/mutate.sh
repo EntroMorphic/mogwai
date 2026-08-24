@@ -139,6 +139,12 @@ run_mut "slice-ordering guard removed" \
 run_mut "reference-record bound removed" \
   "sed -i '' 's|            if ((size_t)(rp - base) + (size_t)len + 5 > have) return -6;|            if (0) return -6;|' c/src/router.c"
 
+# 'RTR1' is 31 54 54 52 little-endian, 'RTR2' is 32 54 54 52 -- one byte apart.
+# Patching it rather than copying archive/blob-v1/ keeps the mutation working in
+# a fresh clone, where archive/ does not exist.
+run_mut "a v1 blob gets shipped" \
+  "printf '\\061' | dd of=esp32_router/main/router.bin bs=1 seek=0 conv=notrunc 2>/dev/null"
+
 run_mut "blob vector count changed"          "printf '\\377' | dd of=esp32_router/main/router.bin bs=1 seek=9 conv=notrunc"
 run_mut "a stray blob gets tracked"          "git add -f archive/superseded_blobs/router-d512-1805441.bin"
 run_mut "product firmware untracked"         "git rm -q --cached esp32_router/main/product.c"

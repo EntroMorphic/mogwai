@@ -40,7 +40,9 @@ typedef struct {
     const uint16_t *eoff;                    /* n_index + 1 */
     const uint8_t  *epos;                    /* uint8: NEVER eligible for IRAM */
     uint32_t n_index, nch, nex;
-    uint32_t vec_dram, vec_iram;             /* lifted, by pool */
+    uint32_t vec_dram, vec_iram;             /* lifted, by pool; vec_iram is 0
+                                                on every shipped v2 config -- see
+                                                the note in lift.c */
     uint32_t bad;                            /* addressing mismatches; must be 0 */
     size_t   need, largest;                  /* for reporting */
 } lift_t;

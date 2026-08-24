@@ -179,10 +179,13 @@ threshold is the knob — the full operating curve is in
     parity vs host                    64/64 class and score, bit-exact
 
 † v1 layout, not re-run under v2.
-‡ the stack is initialised and retrying association; the radio is not associated,
-  so this does not include contention from active RX/TX. Under v1 the same build
-  ran 9.3 ms at 70% residency — the gap closed because the index now fits
-  alongside the network stack instead of spilling to flash.
+‡ measured associated (DHCP lease held) and unchanged by it: 4.33–4.52 ms
+  associated against 4.29–4.51 ms merely initialised. A live TLS fetch over the
+  same link returned HTTP 200 and dipped free heap to 49,184 B — a 37,912 B peak
+  draw against the 61,440 B reserve — with the whole index still resident, and
+  routing afterwards was score-identical (206, 233). Under v1 the same build ran
+  9.3 ms at 70% residency; the gap closed because the index now fits alongside
+  the network stack instead of spilling to flash.
 
 Optimisation history: 200.4 → 102.1 (clocks) → 78.8 (precomputed activity
 counts) → 43.5 ms (popcount table) → 34.3 ms (chunked SRAM residency) → 6.3 ms

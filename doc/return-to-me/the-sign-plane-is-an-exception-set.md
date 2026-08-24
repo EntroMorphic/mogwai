@@ -280,3 +280,34 @@ Both are now permanent entries in `scripts/mutate.sh`.
   in that number.
 - **`r_load`/`r_free`** are declared in `router.h` and neither defined nor
   called. Dead declarations, noticed and not yet removed.
+
+## Resolutions (same day)
+
+**The WiFi caveat is closed.** Re-measured with the radio associated and a DHCP
+lease held: 4.33–4.52 ms, against 4.29–4.51 ms merely initialised. Association
+costs nothing measurable. A live TLS fetch over the same link returned HTTP 200
+and dipped free heap to 49,184 B — a 37,912 B peak draw against the 61,440 B
+reserve, which was sized from an earlier 46,716 B measurement and is if anything
+generous now. **This ran with the entire index resident**, which is the thing v1
+could not do. Routing afterwards was score-identical (206, 233).
+
+Measured from a clean clone at HEAD, because the working tree was mid-mutation
+at the time and `c/src/router.h` was corrupted that instant.
+
+**The IRAM-only path is documented as dormant, not removed.** v2 fits entirely
+in DRAM, so `iram_only_malloc()` fires on no configuration we ship. It is kept
+because the condition that needed it is a function of index size, not of the
+format: raise `RSHIP_NEGTOP`, widen `RD`, or add classes and DRAM runs out
+again. `lift.c` now says so.
+
+**Mutation coverage found a hole in this very red-team.** The re-run scored
+69 of 72 and named `shipped blob is v2 (RTR2)` — a check *I* added — as
+uncoverable. Patching the magic byte from 'RTR2' to 'RTR1' fixes that, and the
+attempt immediately exposed a worse bug: `blobguard` called `r_parse2`, ignored
+the refusal, and dereferenced an untouched `rindex2`, dying with SIGBUS instead
+of reporting. A second harness bug surfaced beside it — the truncation verdict
+keyed off the global failure counter, so it announced "SOME ACCEPTED" whenever
+any earlier case had failed, which is a test that lies about which thing broke.
+
+Three bugs in the red-team's own instruments, none of which a run against a
+good blob would ever have shown.

@@ -53,19 +53,42 @@ int main(int argc, char **argv) {
     /* Truncation: any refusal is correct. Below 20 bytes there is not even a
        header, so the parser says -1 rather than -2; demanding a specific code
        here tests the error taxonomy, not the guard. */
-    for (long cut = 10; cut < SZ; cut = cut * 3 / 2 + 1) {
-        router_t R; rindex2 IX;
-        int rc = r_parse2(&R, &IX, ORIG, (size_t)cut);
-        if (rc == 0) { printf("  truncated to %-9ld *** ACCEPTED ***\n", cut); fails++; }
+    {   int trunc_bad = 0;                 /* counted separately: keying the
+                                              verdict off the global counter made
+                                              this line report "SOME ACCEPTED"
+                                              whenever any EARLIER case failed */
+        for (long cut = 10; cut < SZ; cut = cut * 3 / 2 + 1) {
+            router_t R; rindex2 IX;
+            if (r_parse2(&R, &IX, ORIG, (size_t)cut) == 0) {
+                printf("  truncated to %-9ld *** ACCEPTED ***\n", cut);
+                trunc_bad++; }
+        }
+        printf("  %-46s %s\n", "every truncation from 10 bytes up is refused",
+               trunc_bad ? "*** SOME ACCEPTED ***" : "ok");
+        fails += trunc_bad;
     }
-    printf("  %-46s %s\n", "every truncation from 10 bytes up is refused",
-           fails ? "*** SOME ACCEPTED ***" : "ok");
     {   router_t R; rindex2 IX;
         int rc = r_parse2(&R, &IX, ORIG, (size_t)SZ - 1);
         int ok = rc != 0;
         printf("  %-46s rc=%-3d %s\n", "truncated by ONE byte is refused", rc,
                ok ? "ok" : "*** WRONG ***");
         if (!ok) fails++; }
+
+    /* Everything below corrupts a COPY and needs the original to have parsed,
+     * because it reads IX to find what to corrupt. r_parse2 leaves IX untouched
+     * when it refuses, so using it after a failed parse dereferences
+     * uninitialised stack — which is exactly what happened when a mutation made
+     * the shipped blob claim to be v1: SIGBUS instead of a clean report. A test
+     * that crashes is worse than one that fails. */
+    {   router_t R0; rindex2 IX0;
+        if (r_parse2(&R0, &IX0, ORIG, (size_t)SZ) != 0) {
+            printf("\n  the blob at %s does not parse — structural checks skipped.\n"
+                   "  (this is a real refusal, not a harness fault: run blobguard\n"
+                   "   against a good blob to exercise them.)\n", path);
+            printf("\n  *** BLOBGUARD FAILED *** (base blob rejected)\n");
+            return 1;
+        }
+    }
 
     /* Structural corruption. NOTE: IX is parsed from the COPY, so its pointers
        already point into the copy — an earlier version of this test subtracted
