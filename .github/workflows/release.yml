@@ -1,9 +1,10 @@
-# Build the single-file flashable image and attach it to a release.
+# Build the single-file flashable image, attach it to a release, and publish the
+# browser flasher to Pages.
 #
 # The point is that a user needs neither this repo nor ESP-IDF: one file, one
 # offset. The image is bootloader + partition table + app + blob merged, and it
-# is verified the honest way before shipping — erase_flash, write at 0x0, and
-# the board boots and routes with nothing else on the chip.
+# was verified the honest way before any of this existed -- erase_flash, write it
+# at 0x0, and the board boots and routes with nothing else on the chip.
 name: release image
 
 on:
@@ -11,12 +12,15 @@ on:
     tags: [ 'v*' ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   image:
     name: single-file image
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -28,7 +32,7 @@ jobs:
           path: esp32_router
           command: idf.py -DPRODUCT=1 -DRD=256 -DTPOPCNT=1 build
 
-      # merge_bin ships with ESP-IDF; the resulting file needs none of it.
+      # merge_bin ships with ESP-IDF; the file it produces needs none of it.
       - name: Merge into one image
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -42,13 +46,15 @@ jobs:
             0x8000 build/partition_table/partition-table.bin
             0x10000 build/router_validate.bin
 
-      - name: Checksum and manifest
+      - name: Checksum, and stage the flasher
         run: |
           sha256sum mogwai-esp32.bin | tee mogwai-esp32.bin.sha256
-          # stamp the web-flasher manifest with this tag
-          sed -i "s/\"version\": \"dev\"/\"version\": \"${GITHUB_REF_NAME:-dev}\"/" flash/manifest.json
+          # The manifest ships as "dev"; stamp it with whatever produced this run.
+          sed -i "s/\"version\": \"dev\"/\"version\": \"${GITHUB_REF_NAME}\"/" flash/manifest.json
+          # ESP Web Tools fetches the image relative to the manifest, so it has
+          # to sit beside it in the published directory.
           cp mogwai-esp32.bin flash/
-          ls -l mogwai-esp32.bin
+          ls -l flash/
 
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/')
@@ -58,9 +64,20 @@ jobs:
             mogwai-esp32.bin
             mogwai-esp32.bin.sha256
 
-      # The browser flasher needs the image beside the manifest.
-      - name: Publish the web flasher
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: flash
+
+  # Uploading an artifact does NOT publish it. Pages needs its own job with the
+  # github-pages environment; without this the flasher page silently never
+  # appears, which is exactly how it was written the first time.
+  deploy:
+    name: publish the flasher
+    needs: image
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
