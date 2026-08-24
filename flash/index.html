@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>flash mogwai</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1rem; }
+  code { background: #f4f4f5; padding: .1em .3em; border-radius: 3px; }
+  .note { border-left: 3px solid #d4d4d8; padding-left: 1rem; color: #52525b; }
+</style>
+
+<h1>mogwai</h1>
+<p>Natural-language control for ESP32-class hardware. Integer-only nearest-neighbour
+routing — no model, no floats, no training. Routes an utterance in 4.3 ms with the
+whole index resident in SRAM.</p>
+
+<p>Plug in an ESP32 over USB and click. Nothing to install; this uses WebSerial,
+so it needs Chrome or Edge.</p>
+
+<p><esp-web-install-button manifest="manifest.json"></esp-web-install-button></p>
+
+<p class="note"><strong>This erases the board.</strong> If it shipped with ESP-AT
+or anything else you want back, save it first — see
+<a href="https://github.com/EntroMorphic/mogwai/blob/main/board_backup/RESTORE.md">board_backup/RESTORE.md</a>.</p>
+
+<h2>Then</h2>
+<p>Open a serial monitor at 115200 and type an utterance:</p>
+<pre>&gt; turn the lights on
+  iot_hue_lighton score 227  (margin +91)
+  ACTUATED     light -&gt; ON  (duty 255/255)
+  4437 us</pre>
+
+<p>Default pins: light PWM on GPIO2 (the onboard LED on most devkits),
+wemo GPIO4, cleaning GPIO16, coffee GPIO17. <strong>GPIO16 and 17 are the PSRAM
+lines on WROVER modules</strong> — override them at build time if you have one.</p>
+
+<h2>What it does not do</h2>
+<p>It routes nine IoT intents from a public dataset and rejects everything else.
+It is exploratory research, not a product: read
+<a href="https://github.com/EntroMorphic/mogwai/blob/main/doc/FRAME.md">FRAME.md</a>
+before trusting a number. On held-out data it actuates wrongly on
+<strong>12 of 2754</strong> non-commands (0.44%).</p>
+
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>

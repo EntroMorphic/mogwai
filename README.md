@@ -51,6 +51,25 @@ Nothing actuates unless the router accepts, and "the nearest thing I know is not
 a command" is reported as a *different* rejection from "nothing scored high
 enough". See [esp32_router/README.md](esp32_router/README.md).
 
+### Just flash it
+
+One file, one offset, no toolchain and no checkout. `make image` merges
+bootloader + partition table + app + blob into a single binary, and CI attaches
+it to every tagged release:
+
+    esptool --chip esp32 --port /dev/ttyUSB0 write_flash 0x0 mogwai-esp32.bin
+
+Or from a browser with nothing installed at all — [`flash/`](flash/) is an
+[ESP Web Tools](https://esphome.github.io/esp-web-tools/) page that flashes over
+WebSerial in Chrome or Edge.
+
+Verified the honest way rather than assumed: `erase_flash`, write that one file
+at `0x0`, and the board boots and routes with **nothing else on the chip** —
+same score, same 4437 µs.
+
+> **It erases the board.** ESP32 devkits usually ship with ESP-AT; if you want
+> it back, save it first — [board_backup/RESTORE.md](board_backup/RESTORE.md).
+
 **On the host** — two dependencies, a C compiler and `curl`:
 
     make demo                                    # 60-second tour
@@ -337,6 +356,7 @@ The layout, and what parity does *not* cover:
                        Sources are SYMLINKS into c/src
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 8 cycles
+    flash/             browser flasher (ESP Web Tools) — WebSerial, nothing to install
     scripts/           fetch.sh (curl only), regress.sh (72 checks), mutate.sh
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
@@ -350,10 +370,12 @@ The layout, and what parity does *not* cover:
 Small, capable, and governed by three absolute prohibitions. Break them and you
 get something much worse — which is the whole reason for the name.
 
-1. **No Python** anywhere in the pipeline. Corpora are fetched with `curl`, and
-   the board is driven by `c/bin/devtalk`. Not in the product, not on the hot
-   path, not as glue, not as a "quick" experiment harness that quietly becomes
-   the deliverable.
+1. **No Python** in anything this repo owns — no product code, no hot path, no
+   glue, and no "quick" experiment harness that quietly becomes the deliverable.
+   Corpora are fetched with `curl` and the board is driven by `c/bin/devtalk`,
+   both written for the purpose. The exception is the **vendor toolchain**:
+   ESP-IDF's `idf.py` and `esptool` are Python, and replacing them is not a
+   project. That is why `make image` exists — so a *user* needs neither.
 2. **No float** on the hot path. `int32_t` is the widest type. No `sqrt`, no
    division that is not integer, no learned parameters anywhere.
 3. **Nothing is deleted, only archived.** Superseded work, negative results and

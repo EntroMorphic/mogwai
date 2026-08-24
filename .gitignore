@@ -68,3 +68,8 @@ c/*.bin
 # WiFi credentials for the wifiprobe measurement build. NEVER commit these.
 # Copy esp32_router/main/wifi_creds.h.example and fill it in locally.
 esp32_router/main/wifi_creds.h
+
+# Single-file flashable images, produced by `make image`. Build artefacts: they
+# are attached to releases by CI, never tracked. Keeping them out also keeps the
+# "only tracked .bin is the shipped blob" invariant true.
+dist/

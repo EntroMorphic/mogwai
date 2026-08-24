@@ -132,3 +132,23 @@ demo: $(BIN)/compare $(DATA)
 	@printf '\n\033[1m4. measured, at the shipped operating point\033[0m\n'
 	@$(BIN)/compare --ship 2>/dev/null | grep -vE '^ROW' | tail -5
 	@printf '\n\033[1m5. on the device\033[0m  (4.3 ms, 100%% SRAM-resident, PARITY EXACT — see esp32_router/README.md)\n\n'
+
+# A single file a user can flash at offset 0x0 with no ESP-IDF, no toolchain,
+# and no repo checkout. bootloader + partition table + app + blob, merged.
+#
+# Verified the honest way: erase_flash, write this at 0x0, and the board boots
+# and routes with nothing else on the chip.
+IMAGE := dist/mogwai-esp32-$(shell git describe --tags --always --dirty 2>/dev/null || echo dev).bin
+image:
+	@command -v esptool.py >/dev/null || { \
+	  echo "esptool.py not found — run . \$$IDF_PATH/export.sh first"; exit 1; }
+	@mkdir -p dist
+	@cd esp32_router && idf.py -DPRODUCT=1 -DRD=256 -DTPOPCNT=1 build >/dev/null
+	@cd esp32_router/build && esptool.py --chip esp32 merge_bin -o ../../$(IMAGE) \
+	   --flash_mode dio --flash_freq 80m --flash_size 4MB \
+	   0x1000 bootloader/bootloader.bin \
+	   0x8000 partition_table/partition-table.bin \
+	   0x10000 router_validate.bin >/dev/null
+	@shasum -a 256 $(IMAGE) | tee $(IMAGE).sha256
+	@printf '\n  %s\n  %s bytes — flash to offset 0x0\n\n' "$(IMAGE)" "$$(wc -c < $(IMAGE) | tr -d ' ')"
+.PHONY: image

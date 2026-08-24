@@ -1,0 +1,13 @@
+{
+  "name": "mogwai",
+  "version": "dev",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        { "path": "mogwai-esp32.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

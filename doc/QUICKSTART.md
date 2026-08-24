@@ -69,5 +69,7 @@ See [esp32_router/README.md](../esp32_router/README.md) — that build is a
 
 ## Three rules
 
-No Python. No float on the hot path. Nothing is ever deleted, only archived.
+No Python in anything this repo owns (ESP-IDF's toolchain is the one exception,
+which is why `make image` exists). No float on the hot path. Nothing is ever
+deleted, only archived.
 Each was learned by breaking it — hence the name.
