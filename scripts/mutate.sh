@@ -24,7 +24,7 @@ MPATHS="c/src c/test doc README.md LICENSE scripts/regress.sh Makefile
         data/SHA256 esp32_router/main/router.bin esp32_router/README.md
         journal/README.md provenance .gitignore esp32_router/main/product.c
         esp32_router/main/CMakeLists.txt esp32_router/sdkconfig.wifi
-        results/TEST_BUDGET results/RESULTS.tsv"
+        results/TEST_BUDGET results/RESULTS.tsv results/RELEASE_VERIFIED.tsv"
 
 for f in $MPATHS; do save "$f"; done
 
@@ -134,6 +134,9 @@ printf "fired %2d\n" "$(printf '%s\n' "$nm" | grep -c .)"
 git -C archive/needle_upstream update-ref "refs/heads/$UPBR" "$UPREF" 2>/dev/null
 
 run_mut "leak guard disabled entirely"       "sed -i '' 's/    if (hits)/    if (0)/' c/src/invariants.c"
+run_mut "a release loses its hardware verification" \
+  "sed -i '' '/^v0.1.3	/d' results/RELEASE_VERIFIED.tsv"
+
 run_mut "README falls a release behind" \
   "sed -i '' 's|releases/tag/v0.1.1|releases/tag/v0.1.0|' README.md"
 

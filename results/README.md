@@ -31,3 +31,11 @@ appends it. Nothing parses formatted output.
 `mutation-summary.txt` records the headline — coverage, suite size, and the
 commit it was measured at — because that number previously went to stdout only,
 so it survived in commit messages and nowhere you could audit.
+
+`RELEASE_VERIFIED.tsv` records that a published release was downloaded, flashed
+to an **erased** board, and seen to boot and route — tag, the sha256 of the
+bytes that were flashed, when, the measured latency, and the commit. Written by
+`scripts/verify-release.sh`; `regress.sh` asserts every tag has a row. Recording
+the sha matters as much as recording the tag: re-running a release workflow
+replaces the published asset under the same tag, which is how v0.1.0's binary
+was silently swapped 83 minutes after release.

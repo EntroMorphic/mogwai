@@ -86,6 +86,27 @@ jobs:
           cp mogwai-esp32.bin flash/
           ls -l flash/
 
+      # A re-run of this workflow REPLACES the published assets. That is how
+      # v0.1.0's binary was silently swapped 83 minutes after the release: the
+      # Pages deploy had failed, the run was re-run to fix it, and the attach
+      # step rebuilt and overwrote the artifact -- .sha256 included, so the two
+      # stayed consistent and the substitution was invisible to a checksum.
+      # Anyone who downloaded in that window has different bytes under the same
+      # tag. Refuse instead: to republish Pages alone, re-run only the deploy
+      # job; to change the binary, cut a new tag.
+      - name: Refuse to overwrite published assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets|length' 2>/dev/null || echo 0)
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "::error::${GITHUB_REF_NAME} already has $n published asset(s)."
+            echo "Re-running would replace them under the same tag. Cut a new tag instead."
+            exit 1
+          fi
+          echo "no existing assets on ${GITHUB_REF_NAME} — safe to attach"
+
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2

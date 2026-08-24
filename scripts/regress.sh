@@ -301,6 +301,27 @@ chk "budget log reconciles with RESULTS.tsv" "$((LOGGED - PRIOR))" "$ROWS"
 
 # The docs quote this suite's size. That number went stale the moment the
 # suite grew, and nothing noticed. Check it against reality.
+# Every published release must have been flashed to a real board and verified.
+# CI cannot do this -- there is no board on a runner -- so this asserts the
+# RECORD, exactly as the budget check does for held-out reads. It cannot force
+# the flash; it makes an unverified release impossible to ignore.
+#
+# v0.1.2, v0.1.3 and v0.1.4 were published without anyone putting them on
+# hardware. The reasoning was "byte-equivalent modulo metadata to something
+# already verified" -- sound, and still an inference. The artifact a stranger
+# downloads is the thing that has to boot.
+RV=results/RELEASE_VERIFIED.tsv
+RV_TAGS=$(git tag -l 'v*' --sort=v:refname)
+if [ -z "$RV_TAGS" ]; then
+    skip "every release was flashed and verified" "no tags in this clone"
+else
+    RV_MISSING=""
+    for t in $RV_TAGS; do
+        grep -q "^${t}	" "$RV" 2>/dev/null || RV_MISSING="$RV_MISSING $t"
+    done
+    chk "every release was flashed and verified" "${RV_MISSING:-none}" "none"
+fi
+
 # The README names the current release. A hardcoded version is exactly the kind
 # of claim that rots one tag later, so derive it: whatever the README says must
 # be the newest tag in the repo.
