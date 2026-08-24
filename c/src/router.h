@@ -135,6 +135,4 @@ typedef struct {
  * while n_index does not describe what is really there. */
 int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have);
 
-int  r_load(router_t *r, const char *path);
-void r_free(router_t *r);
 #endif
