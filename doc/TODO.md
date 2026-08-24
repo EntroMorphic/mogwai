@@ -11,6 +11,12 @@ rather than read from flash on every query, which should cut scan energy by more
 than the 5.4x latency figure suggests - SPI flash reads dominate. Unmeasured,
 and stated as a prediction so it can be wrong.
 
+A harness now exists: `MOGWAI_POWER=1` holds the board in four defined states
+(idle, 100% duty, 1 Hz, 10 Hz) for 30 s each with the serial line silent and the
+actuator pins parked, so an inline USB meter can be read against each one. See
+[../esp32_router/README.md](../esp32_router/README.md). What is still missing is
+the readings, which need a meter on the USB line - the ESP32 has no current
+sensor and no amount of firmware will produce one.
 ### P1-3 · One board
 ESP32-D0WD-V3 only. The popcount table, the DRAM placement and the QIO result
 are specific to LX6 with no SIMD; S3/C6 would likely reorder them.

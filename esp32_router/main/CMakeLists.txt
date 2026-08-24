@@ -3,6 +3,8 @@
 #   -DPRODUCT=1          -> product.c    the device: UART in, GPIO/PWM out
 #   MOGWAI_WIFI=1 (env)  -> product.c + network stack, TLS-sized lift reserve
 #   MOGWAI_PROBE=1 (env) -> wifiprobe.c  measurement: heap cost of a WiFi stack
+#   MOGWAI_POWER=1 (env) -> powerprobe.c measurement: holds defined states for a
+#                                        USB power meter; routes but never actuates
 # main.c and product.c share router.c/ternary.c, which are SYMLINKS into
 # ../../c/src, so the device runs the arithmetic the host measured — not a copy.
 #
@@ -20,11 +22,17 @@ if(NOT DEFINED PRODUCT)
   set(PRODUCT 0)
 endif()
 set(PROBE "$ENV{MOGWAI_PROBE}")
+set(POWER "$ENV{MOGWAI_POWER}")
 set(WIFI  "$ENV{MOGWAI_WIFI}")
 
 set(NET_REQ esp_wifi esp_netif esp_event nvs_flash esp_http_client esp-tls mbedtls)
 
-if(PROBE)
+if(POWER)
+  idf_component_register(SRCS "powerprobe.c" "router.c" "ternary.c" "lift.c"
+                         EMBED_FILES "router.bin"
+                         INCLUDE_DIRS "."
+                         REQUIRES driver esp_timer)
+elseif(PROBE)
   idf_component_register(SRCS "wifiprobe.c" "router.c" "ternary.c" "lift.c"
                          EMBED_FILES "router.bin"
                          INCLUDE_DIRS "."

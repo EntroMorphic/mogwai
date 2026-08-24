@@ -114,6 +114,61 @@ twice, and `-D` cache variables are invisible in the early pass that collects
 component requirements. A `-D`-conditional `REQUIRES` silently takes the wrong
 branch. See the comment at the top of that file.
 
+## `MOGWAI_POWER=1` — measuring what a scan costs in energy
+
+    cd esp32_router && MOGWAI_POWER=1 idf.py build flash monitor
+
+The ESP32 has no current sensor, so this measurement is external and manual:
+an inline USB power meter, read by eye. That makes the **protocol** the
+experiment, and this firmware exists because three things will silently corrupt
+it otherwise.
+
+**A USB meter reads the whole board.** Regulator, CP2102/CH340 bridge, LEDs,
+everything. No absolute reading is ever "the scan's power". Only the *delta*
+between two states isolates anything, so each state below differs from its
+neighbour in exactly one way.
+
+**Serial output costs power.** The UART and the USB bridge draw while
+transmitting, easily milliamps — comparable to what is being measured. A state
+that prints and a state that does not are not comparable at all. So each state
+announces itself, flushes, waits for the line to drain, and then holds in
+**silence** for the full 30 s. (The obvious `uart_wait_tx_done()` is deliberately
+not used: the console here is the VFS/ROM UART with no driver installed, so that
+call fails *and logs an error* — inside the window that must be quiet. It did
+exactly that in the first version.)
+
+**GPIO2 is the onboard LED**, driven by LEDC PWM as the light intent. A routed
+utterance that actuated during a hold would change the LED duty and be read as
+scan power. This probe routes and **discards**: no PWM channel is started, no
+pin moves, and all four actuator pins are parked low for every state alike.
+
+The scan states use the same blob, the same `r_parse2` and the same `lift_run`
+with the same reserve as the product, so the arrangement being measured is the
+one that ships.
+
+### States, held 30 s each, cycling forever
+
+| state | what it is |
+|---|---|
+| `idle` | CPU idle, no scanning, radio off — the **baseline** |
+| `scan100` | back-to-back scanning, 100% duty — baseline **+ full scan cost** |
+| `duty1hz` | one scan per second (~0.4% duty) — a realistic always-on listener |
+| `duty10hz` | ten scans per second (~4.7% duty) |
+
+Duty is **measured and reported**, not assumed: FreeRTOS tick granularity makes
+the periodic states land slightly off their nominal rate, and the firmware
+prints the scans, busy microseconds and actual duty it achieved.
+
+### Reducing the readings
+
+    scan energy per query = (I_scan100 - I_idle) * V * t_scan
+    always-on average     = I_idle + (I_scan100 - I_idle) * duty
+
+`t_scan` is printed by the firmware (~4.2 ms). The `duty1hz` and `duty10hz`
+states are not needed for the arithmetic — they are a **check on it**: if the
+model is right, their measured current should fall on the line predicted by the
+first two states. If it does not, the model is wrong, not the meter.
+
 ## Build
 
     idf.py -DRD=256 -DTPOPCNT=1 build flash monitor
