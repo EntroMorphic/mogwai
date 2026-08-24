@@ -47,6 +47,14 @@ run_mut(){                       # $1 label   $2 mutation
 echo "=== mutations ==="
 run_mut "compiler warning introduced"        "printf 'static int _m;\n' >> c/src/cascade.c"
 run_mut "a tool source deleted"              "rm -f c/src/cuemine.c"
+# Both of these fail SILENTLY if reverted: the corpus check would compare the
+# data against checksums derived from that same data, and a moving ref lets
+# upstream change the corpus under the repo with nothing to say so.
+run_mut "fetch.sh regenerates checksums again" \
+  "printf '\\nshasum -a 256 data/train.json > data/SHA256\\n' >> scripts/fetch.sh"
+run_mut "corpus pin reverts to a moving ref" \
+  "sed -i '' 's|resolve/\$MASSIVE_REV/|resolve/main/|' scripts/fetch.sh"
+
 run_mut "corpus checksum altered"            "sed -i '' '1s/^0/1/' data/SHA256"
 run_mut "popcount table corrupted"           "sed -i '' 's/P8(0), P8(1), P8(1), P8(2)/P8(0), P8(1), P8(1), P8(3)/' c/src/ternary.c"
 run_mut "t_dot rewrite broken"               "sed -i '' 's/return agree - 2 \* disagree;/return agree - disagree;/' c/src/ternary.c"

@@ -35,6 +35,24 @@ chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "13"
 
 echo "=== CORPUS ==="
 chk "corpus checksums" "$(shasum -a 256 -c data/SHA256 2>/dev/null | grep -c OK)" "4"
+# fetch.sh must VERIFY the tracked checksums, not regenerate them. It used to end
+# with a shasum redirect into data/SHA256, which meant a changed upstream was
+# downloaded, the checksums rewritten to match, and the check above compared the
+# data to a file derived from that same data. It could not fail.
+#
+# Asserted by POSITION, not by order: there must be exactly one redirect into
+# data/SHA256 and it must sit inside the --record branch. The first version of
+# this check set a flag when it saw --record and never cleared it, so a
+# regeneration appended AFTER that branch passed cleanly -- it only caught the
+# case I had imagined. Comments are stripped, because the version before THAT
+# matched the prose describing the very thing it forbids.
+FETCH_REC=$(grep -n '= "--record"' scripts/fetch.sh | head -1 | cut -d: -f1)
+FETCH_END=$(awk -v s="${FETCH_REC:-0}" 'NR>s && /^(elif|else|fi)/{print NR; exit}' scripts/fetch.sh)
+FETCH_REDIR=$(grep -nE '>[[:space:]]*data/SHA256' scripts/fetch.sh | grep -vE ':[[:space:]]*#' | cut -d: -f1)
+chk "fetch.sh rewrites checksums only under --record" \
+    "$(printf '%s\n' $FETCH_REDIR | grep -c . )|$(printf '%s\n' $FETCH_REDIR | awk -v a="${FETCH_REC:-0}" -v b="${FETCH_END:-0}" '$1>a && $1<b' | grep -c .)" "1|1"
+chk "corpus revisions are pinned, not moving refs" \
+    "$(grep -vE '^[[:space:]]*#' scripts/fetch.sh | grep -cE 'resolve/(main|master)/|/(main|master)/AnnotatedData')" "0"
 
 echo "=== EXHAUSTIVE PROOFS ==="
 o=$(c/bin/t_popcnt 2>&1)

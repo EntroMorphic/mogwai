@@ -81,6 +81,30 @@ routed with nothing else on the flash — `3840/3840 vectors in SRAM`, score 227
 > **It erases the board.** ESP32 devkits usually ship with ESP-AT; if you want
 > it back, save it first — [board_backup/RESTORE.md](board_backup/RESTORE.md).
 
+
+### What the published image does and does not guarantee
+
+The `.bin` is **not signed**, and the firmware does not enable secure boot or
+flash encryption. The `mogwai-esp32.bin.sha256` published beside it is served
+from the same origin as the binary, so it detects a corrupted or truncated
+download — not a compromised release. Treat it as you would any unsigned
+hobbyist firmware.
+
+What you *can* do is rebuild it and diff:
+
+    make image     # then compare against the release asset
+
+The build is reproducible except for four things, and we know exactly which
+bytes they are because v0.1.0 and v0.1.1 were compared this way: the version
+string at app offset `0x35`, the build timestamp at `0x71`–`0x77`, the
+`app_elf_sha256` at `0xb1`–`0xcf`, and esptool's appended image digest — plus a
+timestamp and digest in the bootloader. **107 bytes of 428,016.** Anything else
+differing means the artifact is not what this source produces.
+
+The browser flasher loads `esp-web-tools` pinned to an exact version from a
+public CDN. That is a third party in the trust path, which is the price of
+flashing without installing anything.
+
 **On the host** — two dependencies, a C compiler and `curl`:
 
     make demo                                    # 60-second tour
@@ -88,7 +112,7 @@ routed with nothing else on the flash — `3840/3840 vectors in SRAM`, score 227
     make repl                                    # interactively
 
 Build is about a second, a full evaluation about a second, and the whole
-73-check regression suite runs in 25 s - most of which is an exhaustive 2^32
+75-check regression suite runs in 25 s - most of which is an exhaustive 2^32
 popcount proof. Full path in [doc/QUICKSTART.md](doc/QUICKSTART.md).
 
 ```
@@ -190,6 +214,13 @@ unpruned blob instead:
     ./c/bin/mkblob <data> out.bin --prune-negtop=0 --threshold=136
 
 The firmware lifts whatever fits and is correct either way.
+
+The held-out set has now been read across **evaluations #2 through #7**. Every
+read was pre-registered with falsifiers and logged against a budget
+(`results/TEST_BUDGET`), which is the discipline that makes repeated reads
+defensible — but independence erodes with each one, and 84.1% is not as clean a
+number as a single-shot measurement would be. This is stated here rather than
+only in [METHOD.md](doc/METHOD.md), because it qualifies every figure above.
 
 ### Read `fa`, not recall
 
@@ -334,7 +365,7 @@ Full working, including what would falsify it:
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (73 checks) — run after any structural change
+    make regress        # full host regression (75 checks) — run after any structural change
 
 Then the device:
 
@@ -369,7 +400,7 @@ The layout, and what parity does *not* cover:
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 8 cycles
     flash/             the browser flasher, published to Pages by CI on every tag
-    scripts/           fetch.sh (curl only), regress.sh (73 checks), mutate.sh
+    scripts/           fetch.sh (curl only), regress.sh (75 checks), mutate.sh
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
     board_backup/      how to restore the board's original ESP-AT firmware
@@ -396,10 +427,10 @@ get something much worse — which is the whole reason for the name.
 The held-out split is a budgeted resource: every read is logged in
 `results/TEST_BUDGET`, and configurations are pre-registered with falsifiers
 before it is touched. Every run is stamped with the git SHA and the clean/dirty
-state of the tree. Run `make regress` after any structural change: 73 checks,
+state of the tree. Run `make regress` after any structural change: 75 checks,
 25 seconds.
 
-CI runs the same 73 checks on Linux/GCC and builds the VALIDATION, PRODUCT and
+CI runs the same 75 checks on Linux/GCC and builds the VALIDATION, PRODUCT and
 networked firmwares from `sdkconfig.defaults`, asserting the blob and the
 firmware agree on `RD`. That job exists because the code had never left
 macOS/clang, and three portability bugs were found the first time it did.
@@ -418,7 +449,14 @@ and cannot relicense material this project does not own:
   [MASSIVE](https://huggingface.co/datasets/mteb/amazon_massive_intent) and
   [NLU-Evaluation-Data](https://github.com/xliuhw/NLU-Evaluation-Data) at build
   time; each carries its own upstream licence. Only `data/SHA256` is tracked.
-- **`provenance/needle-upstream.bundle`** is a git bundle of
+
+  Both are pinned to **immutable revisions**, and `fetch.sh` verifies what it
+  downloaded against the tracked checksums rather than regenerating them — so a
+  changed upstream is a loud failure, not a silent rebaseline. That is the
+  mitigation for not holding a copy: the exact bytes this repo was built on are
+  identified, even though they are not redistributed here. Both datasets are
+  CC-BY-4.0 and could be archived with attribution if the upstreams ever
+  disappear; that decision has not been taken.
   [anjaustin/needle](https://github.com/anjaustin/needle), retained for
   provenance under its own terms. This project shares no code with it.
 - **`archive/`** is local-only and holds superseded work plus a second
