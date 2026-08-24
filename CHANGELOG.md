@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.1.3 — 2026-08-24
+
+**The IRAM-only fallback is no longer untested.** It was dormant — v2 fits the
+whole index in DRAM, so `iram_only_malloc()` fires on nothing that ships — and
+"correct as far as anything shows" is not the same as tested.
+
+Forced by starving DRAM at build time, which required making the lift reserves
+overridable (`#ifndef`, documented as being solely for this and never for a
+shipping build — the TLS number is what stands between the device and dying on
+its first HTTPS request):
+
+    idf.py -DPRODUCT=1 -DCMAKE_C_FLAGS="-DLIFT_RESERVE_BARE=204800" build flash
+
+    2304 in DRAM, 1536 in the IRAM-only pool, 0 MISMATCHED
+
+Routing is **bit-identical** to the all-DRAM build: 227 / 206 / 233 and the same
+rejection. That is the part worth having, because IRAM is 32-bit-access-only —
+the chunk copy and the verification walk use word-wise `wcopy`/`wcmp` precisely
+because `memcpy`/`memcmp` fault there, and neither had executed in its v2 form
+until now.
+
+The cost, same firmware with only the reserve differing, four queries:
+
+    all-DRAM  4431 4423 4285 4283 us
+    40% IRAM  4789 4782 4638 4641 us
+    delta      358  359  353  358 us   (spread 6)
+
+**+232 ns per IRAM-resident vector** — 1386 against 1154 ns from DRAM, 20%
+slower. A flash-mapped vector is 2474 ns, so IRAM is much nearer DRAM than
+flash and spilling into it degrades gracefully rather than falling off a cliff.
+
+### Firmware source changed; the firmware did not
+
+This is the first release where files under `esp32_router/main` changed — and
+the compiled output is unaffected, which was checked rather than assumed. A
+local build against the v0.1.2 asset differs in 119 bytes, every one accounted
+for: 11 bytes of version string (`-1-gc4cffee` is exactly 11 characters), the
+build timestamp, `app_elf_sha256`, esptool's appended digest, and a timestamp
+and digest in the bootloader. **No code bytes.** Comments and `#ifndef` guards
+do not reach the instruction stream.
+
 ## v0.1.2 — 2026-08-24
 
 **No firmware change**, again: `git diff v0.1.1..v0.1.2 -- c/src esp32_router/main`

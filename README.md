@@ -59,7 +59,7 @@ in an ESP32 over USB and click. Nothing to install: it flashes over WebSerial
 from Chrome or Edge.
 
 Or one file at one offset, no toolchain and no checkout. The current release is
-**[v0.1.2](https://github.com/EntroMorphic/mogwai/releases/tag/v0.1.2)**; every
+**[v0.1.3](https://github.com/EntroMorphic/mogwai/releases/tag/v0.1.3)**; every
 tag carries the same two assets, and `make image` builds the identical file
 locally:
 
