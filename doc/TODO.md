@@ -4,19 +4,23 @@ Ranked by consequence, not effort. Each names what would close it.
 
 ## P1 — limits what can be deployed
 
-### P1-2 · No power measurement
-For an always-on listener, mW dominates ms. The cost of a 4.3 ms scan, and the
-duty cycle it implies, are both unmeasured. The index is now resident in SRAM
-rather than read from flash on every query, which should cut scan energy by more
-than the 5.4x latency figure suggests - SPI flash reads dominate. Unmeasured,
-and stated as a prediction so it can be wrong.
+### P1-2 · Power measured on a devkit, product figures estimated
+Measured with an inline USB meter: idle 48 mA, scanning 71 mA at 5.12 V, so the
+scan costs **23 mA / 117.8 mW**, or **0.496 mJ per query**. Saturation is at 238
+queries/s.
 
-A harness now exists: `MOGWAI_POWER=1` holds the board in four defined states
-(idle, 100% duty, 1 Hz, 10 Hz) for 30 s each with the serial line silent and the
-actuator pins parked, so an inline USB meter can be read against each one. See
-[../esp32_router/README.md](../esp32_router/README.md). What is still missing is
-the readings, which need a meter on the USB line - the ESP32 has no current
-sensor and no amount of firmware will produce one.
+The devkit reading makes the router look irrelevant to power - 0.5 mW against a
+246 mW baseline at 1 Hz - but ~38% of that baseline is the USB bridge and
+regulator, which a product does not have. Estimated on 3.3 V with light sleep
+between queries, the router is **~10% of the budget at 1 query/s and ~32% at
+10/s**, and the v2 format was worth 10.3% and 28.2% of total power at those
+rates. See [Power](EXPERIMENTS.md#power-what-a-scan-costs-and-why-the-devkit-hides-it).
+
+What is still missing is the sleep readings. The `sleepidle` and `sleep1hz`
+states exist in `MOGWAI_POWER=1` and would replace the datasheet decomposition
+with a measurement - one reading of `sleepidle` pins the plumbing, because in
+light sleep the ESP32 draws under a milliamp. Deliberately left as an estimate:
+it needs no tooling beyond the meter already used.
 ### P1-3 · One board
 ESP32-D0WD-V3 only. The popcount table, the DRAM placement and the QIO result
 are specific to LX6 with no SIMD; S3/C6 would likely reorder them.

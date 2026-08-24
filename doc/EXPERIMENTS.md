@@ -74,6 +74,7 @@ not a discipline anyone has to remember.
 - [Hardware-offload audit](#hardware-offload-audit-what-can-move-to-silicon-and-what-cannot) — every path ends at the same 24 MB/s flash wall
 - [Packing the sign plane — MEASURED, and it loses](#packing-the-sign-plane--measured-and-it-loses) — bit-exact and 1.61x smaller, but 4.8x slower; 6x over break-even
 - [The sign plane is an exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane) — 0.16% of dims are `-1`; store those, not 120 KB of bit-plane. **Lossless**, 64 → 34.4 B/vector, 6.46 → 4.3 ms, and 100% resident with WiFi up
+- [Power: what a scan costs](#power-what-a-scan-costs-and-why-the-devkit-hides-it) — 23 mA, 0.496 mJ/query. On a devkit that is 0.2% of the budget; on a **sleeping product it is ~10%**, and the devkit reading is the misleading one
 - [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) — free heap is a **sum of regions**; one malloc can never fit. 43.9 → 34.3 ms at no accuracy cost
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
 - [The shipped index is pruned to 3840 vectors](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms in the v1 format (v2 took it to 4.3); the price is `fa` 1 → 6 and nothing else
@@ -1557,6 +1558,89 @@ whole index still resident, and routing afterwards score-identical.
 
 Full write-up, including the red-team that found two silent-failure gaps in the
 parser: [doc/return-to-me/the-sign-plane-is-an-exception-set.md](return-to-me/the-sign-plane-is-an-exception-set.md).
+
+
+## Power: what a scan costs, and why the devkit hides it
+
+Inline USB power meter on the devkit, `MOGWAI_POWER=1` holding each state 30 s
+with the serial line silent and the actuator pins parked.
+
+**Measured** — the only numbers here that are ours:
+
+| state | current | power |
+|---|---:|---:|
+| idle | 48 mA | 245.8 mW |
+| scanning, 100% duty | 71 mA | 363.5 mW |
+| **the scan** | **23 mA** | **117.8 mW** |
+
+At 5.12 V and a measured 4.21 ms scan, that is **0.496 mJ per query at the
+wall**, and saturation — the scan running continuously — is at 238 queries/s.
+
+### The devkit reading is not the product reading
+
+Taken at face value this says the router is irrelevant to power: 0.5 mW against
+a 246 mW baseline at 1 query/s, two tenths of one percent. **That conclusion is
+an artifact of the board.** The meter reads the whole devkit, and most of the
+baseline is plumbing a product does not have.
+
+The ESP32 datasheet quotes modem-sleep at 240 MHz as a 30–68 mA range, the low
+end being an idle CPU. Our measured +23 mA for full compute lands inside that
+range, which is the consistency check that licenses using it:
+
+| | estimated |
+|---|---:|
+| ESP32 idle, 240 MHz, radio off | ~30 mA (datasheet) |
+| USB bridge + regulator | ~18 mA (the remainder) |
+
+**38% of what the meter reads is devkit plumbing.**
+
+### Estimated product figures
+
+3.3 V, no USB bridge, light sleep between queries (light and not deep: deep
+sleep loses SRAM, and a 137 KB resident index is the whole design).
+
+| design | avg | power | router's share | 2000 mAh |
+|---|---:|---:|---:|---:|
+| always awake, 240 MHz | 30.1 mA | 99.3 mW | 0.3% | 2.6 days |
+| **light sleep, 1 query/s** | **1.02 mA** | **3.37 mW** | **9.5%** | **78 days** |
+| light sleep, 10 queries/s | 3.00 mA | 9.89 mW | 32.3% | 27 days |
+
+So the router is **not** irrelevant to power — it is ~10% of a sleeping
+product's budget at 1 Hz and a third of it at 10 Hz. What is irrelevant is the
+router's contribution *on a devkit*, where 246 mW of USB plumbing drowns it.
+
+### What the v2 format was worth in energy
+
+Applying the same model to the 6.46 → 4.21 ms improvement:
+
+| rate | v1 | v2 | |
+|---|---:|---:|---|
+| 1 query/s | 3.75 mW, 70 days | 3.37 mW, 78 days | **10.3% less power** |
+| 10 queries/s | 13.77 mW, 19 days | 9.89 mW, 27 days | **28.2% less power** |
+
+On the devkit the same change is worth 0.2 mW of 246 — invisible. Both readings
+are correct; they are answers to different questions, and only one of them is
+about a product.
+
+### What would falsify this
+
+Everything past the first table is arithmetic on a datasheet, not a measurement,
+and it rests on three things worth naming:
+
+- **The 30 mA idle figure.** If the real idle is 20 mA the plumbing is 28 mA and
+  the router's share rises; if it is 40 mA the share falls. One reading of the
+  `sleepidle` state settles it — in light sleep the ESP32 draws under a
+  milliamp, so that state reads very nearly the plumbing alone.
+- **The linear-LDO assumption.** Devkits normally use an AMS1117, where input
+  current ≈ output current, which is why the measured 23 mA transfers to the
+  3.3 V rail unchanged. A buck converter would break that.
+- **Light sleep actually reaching 0.8 mA.** Wake latency, RTC peripherals left
+  on, and a running WiFi stack all raise it, and the last one matters: none of
+  this models a device that keeps a network connection alive.
+
+The `sleepidle` and `sleep1hz` states exist in the probe and would replace most
+of this with measurement. They are unread — this is deliberately the estimate
+that can be made without further instrumentation.
 
 ## Chunked SRAM residency: the index does not need one allocation
 
