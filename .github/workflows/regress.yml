@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-tags: true
 
       - name: Toolchain
         run: cc --version && make --version | head -1
@@ -48,6 +50,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-tags: true
 
       # The firmware's router.c/ternary.c are SYMLINKS into c/src, so this also
       # proves a host-side change did not break the device build. sdkconfig is

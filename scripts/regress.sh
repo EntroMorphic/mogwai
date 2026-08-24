@@ -304,9 +304,19 @@ chk "budget log reconciles with RESULTS.tsv" "$((LOGGED - PRIOR))" "$ROWS"
 # The README names the current release. A hardcoded version is exactly the kind
 # of claim that rots one tag later, so derive it: whatever the README says must
 # be the newest tag in the repo.
+#
+# Skipped when the clone has no tags, which is a legitimate state -- a fork, or
+# a shallow CI checkout. This check passed locally and FAILED in CI for exactly
+# that reason: actions/checkout does not fetch tags by default, so `git tag -l`
+# was empty and the check compared v0.1.1 against nothing. CI now asks for tags
+# so the check really runs; the skip is for everyone else.
 README_VER=$(grep -oE 'releases/tag/v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -1 | sed 's|.*/||')
 NEWEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1)
-chk "README names the newest release tag" "${README_VER:-none}" "${NEWEST_TAG:-none}"
+if [ -z "$NEWEST_TAG" ]; then
+    skip "README names the newest release tag" "no tags in this clone"
+else
+    chk "README names the newest release tag" "${README_VER:-none}" "$NEWEST_TAG"
+fi
 
 LIVE=$((P + F + S + 1))   # +1 for this check itself; skipped still count as checks
 # Every doc that states a LIVE check count must state the same one, and it must
