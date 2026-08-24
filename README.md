@@ -224,6 +224,57 @@ on top. Under the v1 64-byte format that was decisive — the index dropped to
 4.3 ms with the radio associated, verified through a live TLS handshake. See
 [the sign plane write-up](doc/return-to-me/the-sign-plane-is-an-exception-set.md).
 
+## Power
+
+Inline USB power meter on the devkit, holding each state 30 s with the serial
+line silent and the actuator pins parked (`MOGWAI_POWER=1`).
+
+**Measured:**
+
+| state | current | power |
+|---|---:|---:|
+| idle | 48 mA | 245.8 mW |
+| scanning, 100% duty | 71 mA | 363.5 mW |
+| **the scan itself** | **23 mA** | **117.8 mW** |
+
+At 5.12 V and a 4.21 ms scan that is **0.496 mJ per query**, and the scan
+saturates — runs continuously — only at **238 queries/second**.
+
+### The devkit number is the misleading one
+
+Read literally, that says the router is irrelevant to power: 0.5 mW against a
+246 mW baseline at 1 query/s. But the meter reads the **whole devkit**, and the
+ESP32 datasheet puts idle at 240 MHz around 30 mA — leaving ~18 mA, **38% of the
+baseline, as USB bridge and regulator**. A product has neither.
+
+Estimated at 3.3 V with light sleep between queries (light, not deep: deep sleep
+loses SRAM, and a 137 KB resident index is the whole design):
+
+| design | avg | power | router's share | 2000 mAh |
+|---|---:|---:|---:|---:|
+| always awake, 240 MHz | 30.1 mA | 99.3 mW | 0.3% | 2.6 days |
+| **light sleep, 1 query/s** | **1.02 mA** | **3.37 mW** | **9.5%** | **78 days** |
+| light sleep, 10 queries/s | 3.00 mA | 9.89 mW | 32.3% | 27 days |
+
+So the router is **~10% of a sleeping product's budget at 1 Hz** and a third of
+it at 10 Hz. What is irrelevant is its contribution *on a devkit*. Under the same
+model the v2 format was worth **10.3%** of total power at 1 Hz and **28.2%** at
+10 Hz — where on the devkit the identical change is worth 0.2 mW of 246, which
+is invisible. Both are correct; only one is about a product.
+
+> **Not validated off USB.** Only the first table is measured. Everything below
+> it is arithmetic on a datasheet, taken on a devkit powered over USB, and no
+> part of it has been checked on a board running from a battery or a bare 3.3 V
+> supply. It rests on three assumptions, any of which would move the numbers:
+> the 30 mA idle figure; a **linear LDO**, where input current ≈ output current
+> (true for the AMS1117 most devkits carry, false for a buck converter); and
+> light sleep actually reaching 0.8 mA — which a **live network connection would
+> break outright**, and none of this models a device holding a WiFi association.
+> Treat the product rows as a sizing estimate, not a specification.
+
+Full working, including what would falsify it:
+[EXPERIMENTS.md](doc/EXPERIMENTS.md#power-what-a-scan-costs-and-why-the-devkit-hides-it).
+
 ## How it works
 
 1. **Encode** — FNV-1a hash character 3/4-grams into `RD=256` dimensions. Each
