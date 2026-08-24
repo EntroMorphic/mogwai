@@ -361,7 +361,8 @@ Full working, including what would falsify it:
 
 ## Build and flash
 
-    make fetch          # curl the corpora (MASSIVE + NLU-Evaluation-Data), records SHA256
+    make fetch          # curl the corpora at pinned revisions, VERIFY against data/SHA256
+                        #   (scripts/fetch.sh --record to deliberately rebaseline)
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
@@ -400,7 +401,8 @@ The layout, and what parity does *not* cover:
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 8 cycles
     flash/             the browser flasher, published to Pages by CI on every tag
-    scripts/           fetch.sh (curl only), regress.sh (75 checks), mutate.sh
+    scripts/           fetch.sh (curl only, pinned revisions, verifies checksums),
+                       regress.sh (75 checks), mutate.sh
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
     board_backup/      how to restore the board's original ESP-AT firmware

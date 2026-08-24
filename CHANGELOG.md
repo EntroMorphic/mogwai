@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+**The corpus checksum test could not fail.** `data/SHA256` is tracked, but
+`fetch.sh` overwrote it with the checksums of whatever it had just downloaded,
+so the suite compared the corpora against a file derived from those same
+corpora. A changed upstream would have been fetched, silently rebaselined, and
+passed. Both sources were also on moving refs (`resolve/main`, `master`), so
+upstream drift was live rather than theoretical — and every reproducibility
+claim this project makes sits downstream of those two URLs.
+
+`fetch.sh` now pins both to immutable revisions, verifies against the tracked
+checksums, and exits nonzero on a mismatch. Rebaselining moved behind an
+explicit `--record` flag. Verified: a from-scratch fetch at the pinned revisions
+reproduces the tracked checksums exactly, and a one-byte corruption exits 1.
+Two checks guard it, positive-controlled and mutation-covered. Suite 73 → 75.
+
+Also now stated in the README, having never been said out loud:
+
+- The published image is **unsigned** — no secure boot, no flash encryption —
+  and its `.sha256` is served from the same origin, so it detects corruption and
+  not compromise. The rebuild-and-diff path is documented, including which 107
+  of 428,016 bytes legitimately differ.
+- The held-out set has been read across **evaluations #2–#7**. Budgeted and
+  pre-registered, which is what makes repeated reads defensible, but
+  independence erodes with each one.
+
+`doc/METHOD.md` gains §22: a check whose expected value comes from its own input
+cannot fail, and no amount of running it more carefully would ever have said so.
+
+
 ## v0.1.1 — 2026-08-24
 
 **No firmware change.** Every source file on the shipped path is byte-for-byte

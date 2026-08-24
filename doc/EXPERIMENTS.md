@@ -4,7 +4,7 @@ Every row in `results/RESULTS.tsv` is stamped with the git SHA and whether the
 tree was clean. `make compare` appends automatically — tracking is structural,
 not a discipline anyone has to remember.
 
-    make fetch     # curl the corpora, record SHA256
+    make fetch     # curl the corpora at pinned revisions, verify data/SHA256
     make compare   # build, run, append one row per variant
 
 ## Look up a fact

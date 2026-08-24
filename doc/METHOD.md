@@ -496,3 +496,38 @@ sharper case — **the input space a validator is tested on must include the
 inputs it exists to reject**, and the way to force that is to make removing each
 guard a mutation. Both v2 guards are now `run_mut` entries, and each removal
 makes `blobguard` fail two cases.
+
+## 22. A check whose expected value comes from its own input cannot fail
+
+`corpus checksums` compared `data/*.json` against `data/SHA256` and reported
+`PASS` on every run this project has ever made. It was asserting nothing.
+
+`scripts/fetch.sh` ended with
+
+    shasum -a 256 data/train.json ... > data/SHA256
+
+so the file the check compared against was **regenerated from the very files it
+was checking**. Download a different corpus and the checksums are rewritten to
+match it; the check still passes. The tracked baseline existed, was committed,
+and was silently replaced before anything read it. The only signal was a `git
+diff` on `data/SHA256` that a human had to happen to notice — and the corpora
+are fetched at build time from two URLs on moving refs, so upstream drift was a
+live possibility rather than a theoretical one.
+
+Everything downstream inherits this. Byte-identical blob reproduction, `PARITY
+EXACT`, the whole operating curve — all of it is measured against corpora whose
+identity was, in effect, defined as "whatever we last downloaded".
+
+The rule: **the expected value must come from somewhere the thing under test
+cannot influence.** A committed baseline only counts if the process being tested
+cannot write to it. Here the fix was to make regeneration reachable only under
+an explicit `--record` flag, so rebaselining is a decision someone makes and
+explains in a commit, and a mismatch is a loud failure with a nonzero exit.
+
+This is the sharpest form of the family §17 and §21 belong to. §17 says
+mutation-test the harness; §21 says a validator only ever fed good input is
+testing itself. This one is worse than both, because there is no input that
+would have exposed it — the check was structurally incapable of failing, and no
+amount of running it more carefully would have said so. The question to ask of
+any assertion is not "does it pass?" but **"what would have to be true for this
+to fail, and can that state actually be reached?"**
