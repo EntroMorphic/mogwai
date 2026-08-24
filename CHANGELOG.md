@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.1.4 — 2026-08-24
+
+**Documentation only.** No source outside `doc/` and `README.md` changed, so the
+image is the v0.1.3 build bar its version string, timestamps and digests.
+
+- The IRAM write-up was added as a `###` and landed under an unrelated parent
+  ("The sign plane is an exception set"), and was **absent from the contents** —
+  the contents check only covers `##` headings, so a `###` can be added with
+  nothing noticing. Promoted and indexed.
+- Two claims in `doc/return-to-me/` were true when written and had stopped
+  being: *"inference from the operation count, not measured, and it goes on
+  hardware before it goes in a README"* — it has since gone on hardware — and
+  the IRAM path described as dormant rather than dormant **and tested**.
+- The README now carries all three memory tiers, every one measured on this
+  part: DRAM 1154 ns/vector, IRAM-only 1386 (+20%, `malloc` cannot reach it,
+  32-bit access only), flash-mapped 2474. The IRAM row is the one that was
+  missing — it had existed as an assumption for the life of the project, in
+  shipping code, until v0.1.3 measured it.
+
 ## v0.1.3 — 2026-08-24
 
 **The IRAM-only fallback is no longer untested.** It was dormant — v2 fits the
