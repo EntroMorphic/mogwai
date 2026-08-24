@@ -26,8 +26,11 @@ utterances it actually matched**. That last part is the real explanation:
       polarity               negative cue present, winner already agrees
       encoding               42 of 256 dims carry evidence
       nearest stored utterances:
-         220  iot_hue_lightoff   "turn off the kitchen lights"
-         199  iot_hue_lightoff   "turn off the light in the kitchen"
+         220  iot_hue_lightoff       "turn off the kitchen lights"
+         199  iot_hue_lightoff       "turn off the light in the kitchen"
+         181  iot_hue_lightoff       "kitchen light off"
+         181  iot_hue_lightoff       "please turn off kitchen light"
+         180  iot_hue_lightoff       "turn off the lights in the kitchenn"
 
 There are two distinct ways to get `none`, and they are reported separately:
 the score fell below the threshold, or the nearest match was not a command.

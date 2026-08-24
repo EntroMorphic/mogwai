@@ -5,7 +5,7 @@ Ranked by consequence, not effort. Each names what would close it.
 ## P1 — limits what can be deployed
 
 ### P1-2 · No power measurement
-For an always-on listener, mW dominates ms. The cost of a 6.3 ms scan, and the
+For an always-on listener, mW dominates ms. The cost of a 4.3 ms scan, and the
 duty cycle it implies, are both unmeasured. The index is now resident in SRAM
 rather than read from flash on every query, which should cut scan energy by more
 than the 5.4x latency figure suggests - SPI flash reads dominate. Unmeasured,

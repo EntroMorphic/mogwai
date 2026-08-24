@@ -469,3 +469,30 @@ is the same as showing it is absent. Ask in this order:
 Only a *no* at step 3 or 4 justifies adding something. A *yes* means the work is
 to stop discarding what is there — which is cheaper, smaller, and has been the
 right answer every time it has been tested here.
+
+## 21. A validator exercised only on good input is testing itself
+
+`blobguard` exists to prove the firmware's parser refuses a corrupt blob. It
+reported `OK (0 failures)` while carrying two defects, and both surfaced the
+moment something fed it a *bad* blob:
+
+- it called `r_parse2`, **ignored the refusal**, then dereferenced an untouched
+  `rindex2` to find what to corrupt next — SIGBUS, exit 138, instead of a
+  report. A test that crashes is worse than one that fails, because the exit
+  code is indistinguishable from a build problem.
+- its truncation verdict keyed off the **global** failure counter, so it printed
+  `SOME ACCEPTED` whenever any earlier case had failed. A test that lies about
+  *which* thing broke sends you to the wrong file.
+
+Neither is reachable from a run against a good blob, which is the only kind of
+run a validator gets in normal use. The same session found a third: the first
+version of the same test parsed the index from a **copy** and then did pointer
+arithmetic against the **original**, corrupting a random address and reporting
+that a guard worked when it had never executed.
+
+Three defects, all in the instruments, all after the instruments had reported
+everything green. §17 says mutation-test the harness; this is the narrower and
+sharper case — **the input space a validator is tested on must include the
+inputs it exists to reject**, and the way to force that is to make removing each
+guard a mutation. Both v2 guards are now `run_mut` entries, and each removal
+makes `blobguard` fail two cases.

@@ -11,13 +11,13 @@ not a discipline anyone has to remember.
 
 | question | answer | where |
 |---|---|---|
-| What ships? | twin-ternary, d=256, **3840 vectors, 240 KB**, threshold 136 | [126 was tried and reverted](#test-evaluation-3--result-the-dev-gain-did-not-transfer-126-reverted-to-136) |
-| How fast on device? | **6.3 ms**, index 100% resident in SRAM, PARITY EXACT | [Shipped index](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) |
+| What ships? | twin-ternary, d=256, **3840 vectors, 137 KB** (v2 exception format), threshold 136 | [126 was tried and reverted](#test-evaluation-3--result-the-dev-gain-did-not-transfer-126-reverted-to-136) |
+| How fast on device? | **4.3 ms**, index 100% resident in SRAM, PARITY EXACT — with WiFi up too | [Exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane) |
 | Why is the index in flash at all? | It fits total free heap but no single heap region | [same](#chunked-sram-residency-the-index-does-not-need-one-allocation) |
-| Can the sign plane be packed? | Bit-exact, 1.61x smaller, and **4.8x slower** — no | [Packing the sign plane](#packing-the-sign-plane--measured-and-it-loses) |
+| Can the sign plane be packed? | Densely, no — 4.8x slower. As a sparse **exception set**, yes, and it ships | [Exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane) · [the loss](#packing-the-sign-plane--measured-and-it-loses) |
 | What predicts latency? | 59.8 ns/byte + 326 ns/vector; bytes are 92% | [Cost model](#what-the-failed-lever-bought-a-resolved-cost-model) |
 | Is 2-bit really better than 1-bit? | Yes, at **matched bytes**, on the whole curve | [Red-team of test eval](#red-team-of-test-evaluation-2) |
-| What is the held-out number? | **84.1% ±2.5, fa 12/2754 (0.44%)** — the SHIPPED 240 KB index at threshold 136 | [Test eval #6 result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) |
+| What is the held-out number? | **84.1% ±2.5, fa 12/2754 (0.44%)** — the SHIPPED index at threshold 136 | [Test eval #6 result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) |
 | Why isn't accuracy the headline? | It is recall; it cannot see false actuations | [Metric is blind](#the-accuracy-metric-is-blind-to-false-actuations--read-every-number-above-with-this-in-mind) |
 | How good could this ever get? | ~98%; some labels are wrong, some are unknowable | [Residual errors](#what-the-residual-errors-actually-are) |
 | What did we get wrong? | [Invalidated](#invalidated-kept-as-negative-results), and every `Red-team of…` section |
@@ -73,10 +73,11 @@ not a discipline anyone has to remember.
 - [A functional WiFi stack, measured](#a-functional-wifi-stack-measured-what-it-costs-and-what-survives-it) — TLS dips 46.7 KB below steady state; the shipped reserve was smaller than that
 - [Hardware-offload audit](#hardware-offload-audit-what-can-move-to-silicon-and-what-cannot) — every path ends at the same 24 MB/s flash wall
 - [Packing the sign plane — MEASURED, and it loses](#packing-the-sign-plane--measured-and-it-loses) — bit-exact and 1.61x smaller, but 4.8x slower; 6x over break-even
+- [The sign plane is an exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane) — 0.16% of dims are `-1`; store those, not 120 KB of bit-plane. **Lossless**, 64 → 34.4 B/vector, 6.46 → 4.3 ms, and 100% resident with WiFi up
 - [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) — free heap is a **sum of regions**; one malloc can never fit. 43.9 → 34.3 ms at no accuracy cost
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
-- [The shipped index is pruned to 240 KB](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms; the price is `fa` 1 → 6 and nothing else
-  - [With WiFi running it is 70% resident](#with-wifi-running-it-is-70-resident-not-100) — 9.3 ms; the 6.3 ms figure is a no-WiFi number
+- [The shipped index is pruned to 3840 vectors](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms in the v1 format (v2 took it to 4.3); the price is `fa` 1 → 6 and nothing else
+  - [With WiFi running it is 70% resident](#with-wifi-running-it-is-70-resident-not-100) — 9.3 ms under the v1 format. **v2 removed this** — 100% resident and 4.3 ms with the radio associated
 - [#7 pre-registered](#test-evaluation-7--pre-registered-does-boundary-witness-selection-transfer) · [result](#test-evaluation-7--result-no-falsifier-fired-and-the-effect-is-one-event) — direction transferred, magnitude did not: fa 12 -> 11
 - [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) · [result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) — the invariance transferred; **4 of 4 predictions hit**, fa 8 → 12
 
@@ -1477,6 +1478,86 @@ conclusion is safe without re-measuring on hardware.
 Reproduce: `c/bin/compare --packbench`. The remaining byte lever is pruning, not
 encoding.
 
+
+### Superseded — the packing that wins does not decode at all
+
+Everything above stands **for the encoding it tested**, which packed the signs
+of active dims densely and therefore had to reconstruct them before scoring.
+That is the step that cost 4.8x, and the conclusion — do not trade cycles for
+bytes once the index is resident — was right.
+
+The v2 format does not make that trade. See
+[The sign plane is an exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane):
+it keeps the mask intact, stores only the 0.16% of dims that are below centre as
+byte positions, and absorbs them as a **correction term in the algebra** rather
+than reconstructing anything. It beats the packed form on both axes at once —
+34.4 B/vector against 39.67, and *fewer* popcounts rather than 4.8x more.
+
+## The sign plane is an exception set, not a bit-plane
+
+Twin-ternary stores two bit-planes: `m[]` mask and `s[]` sign, 64 B/vector.
+Measured over the shipped 3840-vector index, all 983,040 dims:
+
+| symbol | count | share |
+|---|---:|---:|
+| `0` (m=0) | 771,755 | 78.51% |
+| `+1` (m=1,s=1) | 209,746 | 21.34% |
+| `-1` (m=1,s=0) | **1,539** | **0.16%** |
+
+Thirty-two of every sixty-four vector bytes encode a bit that is `+1` for 99.27%
+of active dims. Conditional entropy of sign given active is ~0.062 bits: the
+whole sign plane carries about **1.6 KB of information stored in 120 KB**. That
+0.062 matches the figure already recorded under `--condcentre`, from a different
+direction.
+
+It is not waste, and it must not be deleted. `--condcentre` conditioned the
+centre so the signs would split evenly and lost **twenty points** (65.6% ±3.4
+against 85.9% ±2.5). With a near-constant sign plane, `disagree` fires only when
+a dim sits below its diluted mean, which happens when it fires once inside a
+*long* utterance. That is a length signal, and long utterances are the
+negatives — which is why 83% of the exceptions live in `none`.
+
+So represent it as what it is. Keep the 32-byte mask, make `+1` implicit, store
+the below-centre dims as `uint8` positions. With `s = m & ~E`, inside `both` we
+have `q.s = ~Eq` and `b.s = ~Eb`, so `diff` there is `Eq ^ Eb`:
+
+    disagree = |Eq & bm| + |Eb & qm| - 2*|Eq & Eb|
+
+An identity for every input — not an approximation, and nothing is decoded.
+Eight popcounts instead of sixteen, plus bit tests on sets that are empty for
+89.3% of vectors.
+
+    DEV query x index pairs      5,863,680    dot mismatches 0
+    of which |Eq & Eb| > 0          54,683
+    randomised dense pairs         200,000    dot mismatches 0
+    of which |Ea & Eb| > 0         177,943 (89.0%)
+
+The second and fourth lines matter: if the exception sets never intersected, the
+`-2*inter` correction would be an unexercised branch and "0 mismatches" would
+prove nothing about it.
+
+| | v1 | v2 |
+|---|---:|---:|
+| blob | 261,036 B | **147,377 B** |
+| vector payload | 245,760 B | **132,101 B** |
+| SRAM resident | 245,760 B | **139,781 B** |
+| bytes/vector | 64 | **34.4** |
+| device latency | 6.46 ms | **4.3 ms** |
+| with WiFi up | 9.3 ms at 70% resident | **4.3 ms at 100%** |
+
+On hardware: `PARITY EXACT`, 64/64 class and score. That is the proof — the
+reference scores embedded in the blob are computed host-side from the **v1
+bit-planes**, and the device reproduces all 64 bit-exactly from the exception
+form. Being bit-identical, adoption cost **no test budget**: every number
+recorded on test remains exactly valid.
+
+A live TLS handshake over an associated radio returned HTTP 200 and dipped free
+heap to 49,184 B — a 37,912 B peak draw against the 61,440 B reserve — with the
+whole index still resident, and routing afterwards score-identical.
+
+Full write-up, including the red-team that found two silent-failure gaps in the
+parser: [doc/return-to-me/the-sign-plane-is-an-exception-set.md](return-to-me/the-sign-plane-is-an-exception-set.md).
+
 ## Chunked SRAM residency: the index does not need one allocation
 
 Flash-mapped scanning costs 4168 ns/vector against 1617 ns from internal SRAM —
@@ -1586,6 +1667,12 @@ earlier condensation-beats-random result rather than overturning it.
 
 ## The shipped index is pruned to 240 KB for full SRAM residency
 
+> **Sizes below are the v1 64-byte format.** The pruning decision — 3840
+> vectors, `RSHIP_NEGTOP=2685`, `fa` 1 → 6 — stands unchanged and is what still
+> ships. Only the *storage* moved: the same 3840 vectors are 137 KB in the v2
+> exception format, not 240 KB, and route in 4.3 ms rather than 6.3. See
+> [The sign plane is an exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane).
+
 The chunked lift put 34% of the 656 KB index in SRAM. The obvious next question
 is what size would be **100%** resident, and it has an exact answer: chunks are
 8 KB, the heap reserve is 40 KB, and 30 chunks is the most that fits — so
@@ -1610,6 +1697,13 @@ nearest neighbour, so removing negatives cannot move an IoT score.
 
 
 ### With WiFi running it is 70% resident, not 100%
+
+> **Superseded by the v2 format.** This measured the v1 64-byte index, which at
+> 240 KB could not fit alongside the WiFi stack. At 137 KB it does: the shipped
+> firmware reports 3840/3840 resident (100%) with WiFi up, entirely in DRAM
+> without touching the IRAM-only pool, and routes in 4.3 ms with the radio
+> associated — verified through a live TLS handshake. The reasoning below about
+> chunked degradation remains correct and is why this was survivable at all.
 
 The 295 KB free-heap figure everything above rests on was measured with the WiFi
 stack **never started**. `CONFIG_ESP_WIFI_ENABLED=y` is the ESP-IDF default so

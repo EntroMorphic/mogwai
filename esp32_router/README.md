@@ -40,9 +40,9 @@ returns the class index when the score clears the bar, and the `none` class is a
 valid index. The firmware printed **ACTUATED** for "what time does the train
 leave". No pin moved, because the table has no `none` case — but reporting an
 actuation for a non-command is the one thing this system must never do.
-Held-out, on the **shipped 240 KB index**, false actuations are **12 in 2754
+Held-out, on the **shipped index**, false actuations are **12 in 2754
 non-commands (0.44%)** — test evaluation #6. The unpruned 656 KB index measures
-8 (0.29%); the 240 KB index trades those four for full SRAM residency and a
+8 (0.29%); the pruned index trades those four for full SRAM residency and a
 5.4x faster scan. See doc/EXPERIMENTS.md.
 
 GPIO2 is the onboard LED on most ESP32 devkits, so the light intents are
@@ -141,8 +141,10 @@ is the whole router. `route()` is ~15 lines and needs no other scaffolding.
 
 Also note `bench_mt()` uses core 1. On a device running WiFi, core 1 is not
 free; the single-core number is the one that survives deployment. With the index
-chunked into SRAM the same scan is 34.3 ms, and the shipped 240 KB index - which
-is 100% resident - routes in 6.3 ms. See doc/EXPERIMENTS.md.
+chunked into SRAM the same scan is 34.3 ms, and the shipped index - 3840 vectors,
+137 KB in the v2 exception format - is 100% resident and routes in 4.3 ms, with
+the WiFi stack up as well as without. See doc/EXPERIMENTS.md and
+../doc/BLOB_FORMAT.md.
 
 ## Recovery
 

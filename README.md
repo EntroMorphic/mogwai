@@ -6,8 +6,8 @@ A natural-language interface for controlling ESP32-class hardware, built as an
 **integer-only nearest-neighbour router** rather than a language model.
 
 No floats. No learned parameters. No training step. A hashed character-n-gram
-encoder, a two-bit-plane vector index, and an integer similarity — and it routes
-an utterance on a stock ESP32-D0WD-V3 in **6.3 ms**, with the whole index
+encoder, a sparse ternary vector index, and an integer similarity — and it routes
+an utterance on a stock ESP32-D0WD-V3 in **4.3 ms**, with the whole index
 resident in SRAM, flash untouched on every query, bit-identical to the host.
 
 The premise being tested is that **compressing an LLM onto an MCU is not
@@ -34,7 +34,8 @@ locally with its full history; see [doc/ARCHIVE.md](doc/ARCHIVE.md).
     ===== mogwai =====
     index 3840 vectors, threshold 136, 10 classes
     pins: light PWM=GPIO2  wemo=GPIO4  cleaning=GPIO16  coffee=GPIO17
-    index 3840/3840 vectors in SRAM (100%), 30 chunks of 128
+    index 3840/3840 vectors in SRAM (100%), 15 chunks of 256
+      3840 in DRAM, 0 in the IRAM-only pool (malloc cannot reach it)
       addressing verified over all 3840 vectors: 0 MISMATCHED
 
     > turn the lights on
@@ -83,6 +84,12 @@ apart is the point of this section.
 Two bits per dimension beats one, and the comparison is **size-matched**: binary
 at d=512 spends the same 64 bytes per vector. All rows unpruned, so the
 byte-matched comparison stays honest.
+
+That comparison is between *encodings*, and it is unchanged. What has changed is
+what those encodings cost to **store**: twin-ternary's sign plane is 99.84%
+constant and compresses losslessly to 34.4 B/vector, where binary has no sign
+plane to compress. So twin now wins on bytes as well as on the curve — but that
+is a storage result, not a re-run of this experiment.
 
 | | recall | fa | wa | missed | size |
 |---|---|---|---|---|---|
@@ -207,13 +214,15 @@ that will not fit stays flash-mapped and scores identically. Details:
 [Chunked SRAM residency](doc/EXPERIMENTS.md#chunked-sram-residency-the-index-does-not-need-one-allocation).
 
 Two consequences worth knowing before deploying this. **3840 vectors is a
-ceiling, not a target** — chunk 31 does not cost a little, it costs 0.33 ms on
-every query forever, so the index cannot grow without falling off. And the
-295 KB free-heap figure is measured with **the WiFi stack never started**; bring
-WiFi up and it is 70% resident and 9.3 ms, because WiFi takes ~72 KB of liftable
-heap. That is the chunked design degrading rather than failing — a flat lift
-would have dropped to 43.9 ms — but 6.3 ms is a no-WiFi number and is labelled
-as one above.
+ceiling, not a target** — the index cannot grow indefinitely without chunks
+falling back to flash, and a flash-resident chunk costs real milliseconds on
+every query forever. And the free-heap figures depend on whether the network
+stack is up: WiFi takes ~72 KB of liftable heap and TLS wants a 61 KB reserve
+on top. Under the v1 64-byte format that was decisive — the index dropped to
+70% resident and 9.3 ms with WiFi running. **Under v2 it is not**: the index is
+137 KB instead of 240 KB, so it stays 100% resident either way and routes in
+4.3 ms with the radio associated, verified through a live TLS handshake. See
+[the sign plane write-up](doc/return-to-me/the-sign-plane-is-an-exception-set.md).
 
 ## How it works
 
