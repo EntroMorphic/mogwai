@@ -12,7 +12,6 @@ fa 6
 wa 13
 missed 14
 t_dot algebraic rewrite exact
-blob verifier (parity + index integrity)
 blob reproducible byte-identical
 blobfmt REJECTS a blob with trailing bytes
 decision experiments assert their control
@@ -23,9 +22,11 @@ blobfmt REJECTS a truncated blob
 blob verifier (parity + index integrity)
 blob reproducible byte-identical
 layout matches doc/BLOB_FORMAT.md
+blobguard: r_parse2 refuses every corruption
 blob verifier (parity + index integrity)
 decision experiments assert their control
 blob dim matches router.h RD
+BLOB_FORMAT.md constants match router.h
 blob reproducible byte-identical
 recall 85.9
 fa 6
@@ -34,6 +35,7 @@ missed 14
 index 240 KB
 decision experiments assert their control
 blob threshold matches router.h RSHIP_TH
+BLOB_FORMAT.md constants match router.h
 blob reproducible byte-identical
 recall 85.9
 fa 6
@@ -111,9 +113,20 @@ leak guard ABORTS on a deliberate leak
 no remote points at the upstream clone
 no remote points at the upstream clone
 docs quote the live check count
+blobguard: r_parse2 refuses every corruption
+no remote points at the upstream clone
+blobguard: r_parse2 refuses every corruption
+no remote points at the upstream clone
 layout matches doc/BLOB_FORMAT.md
+blobguard: r_parse2 refuses every corruption
 blob verifier (parity + index integrity)
-blob vectors 3840 (30 SRAM chunks)
+shipped blob is v2 (RTR2)
+blob reproducible byte-identical
+no remote points at the upstream clone
+layout matches doc/BLOB_FORMAT.md
+blobguard: r_parse2 refuses every corruption
+blob verifier (parity + index integrity)
+blob vectors 3840 (15 SRAM chunks of 256)
 blob reproducible byte-identical
 no remote points at the upstream clone
 the only tracked .bin is the shipped blob

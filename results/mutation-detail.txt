@@ -17,7 +17,6 @@
     missed 14
 === t_dot rewrite broken
     t_dot algebraic rewrite exact
-    blob verifier (parity + index integrity)
     blob reproducible byte-identical
 === blobfmt stops rejecting bad blobs
     blobfmt REJECTS a blob with trailing bytes
@@ -34,9 +33,11 @@
     blob reproducible byte-identical
 === RD changed, blob left alone
     layout matches doc/BLOB_FORMAT.md
+    blobguard: r_parse2 refuses every corruption
     blob verifier (parity + index integrity)
     decision experiments assert their control
     blob dim matches router.h RD
+    BLOB_FORMAT.md constants match router.h
     blob reproducible byte-identical
     recall 85.9
     fa 6
@@ -46,6 +47,7 @@
 === shipped threshold changed
     decision experiments assert their control
     blob threshold matches router.h RSHIP_TH
+    BLOB_FORMAT.md constants match router.h
     blob reproducible byte-identical
     recall 85.9
     fa 6
@@ -161,10 +163,24 @@
 === doc check count goes stale
     no remote points at the upstream clone
     docs quote the live check count
+=== slice-ordering guard removed
+    blobguard: r_parse2 refuses every corruption
+    no remote points at the upstream clone
+=== reference-record bound removed
+    blobguard: r_parse2 refuses every corruption
+    no remote points at the upstream clone
+=== a v1 blob gets shipped
+    layout matches doc/BLOB_FORMAT.md
+    blobguard: r_parse2 refuses every corruption
+    blob verifier (parity + index integrity)
+    shipped blob is v2 (RTR2)
+    blob reproducible byte-identical
+    no remote points at the upstream clone
 === blob vector count changed
     layout matches doc/BLOB_FORMAT.md
+    blobguard: r_parse2 refuses every corruption
     blob verifier (parity + index integrity)
-    blob vectors 3840 (30 SRAM chunks)
+    blob vectors 3840 (15 SRAM chunks of 256)
     blob reproducible byte-identical
     no remote points at the upstream clone
 === a stray blob gets tracked
