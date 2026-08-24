@@ -131,4 +131,4 @@ demo: $(BIN)/compare $(DATA)
 	@$(BIN)/compare --ship --route="zzz qqq xyzzy"
 	@printf '\n\033[1m4. measured, at the shipped operating point\033[0m\n'
 	@$(BIN)/compare --ship 2>/dev/null | grep -vE '^ROW' | tail -5
-	@printf '\n\033[1m5. on the device\033[0m  (43.5 ms, PARITY EXACT — see esp32_router/README.md)\n\n'
+	@printf '\n\033[1m5. on the device\033[0m  (4.3 ms, 100%% SRAM-resident, PARITY EXACT — see esp32_router/README.md)\n\n'

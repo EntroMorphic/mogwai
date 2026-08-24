@@ -41,11 +41,11 @@ locally with its full history; see [doc/ARCHIVE.md](doc/ARCHIVE.md).
     > turn the lights on
       iot_hue_lighton score 227  (margin +91)
       ACTUATED     light -> ON  (duty 255/255)
-      6455 us
+      4437 us
 
     > what time does the train leave
       REJECTED     nearest match is not a command — no output changed
-      6304 us
+      4290 us
 
 Nothing actuates unless the router accepts, and "the nearest thing I know is not
 a command" is reported as a *different* rejection from "nothing scored high
@@ -58,7 +58,7 @@ enough". See [esp32_router/README.md](esp32_router/README.md).
     make repl                                    # interactively
 
 Build is about a second, a full evaluation about a second, and the whole
-72-check regression suite runs in 19 s - most of which is an exhaustive 2^32
+72-check regression suite runs in 25 s - most of which is an exhaustive 2^32
 popcount proof. Full path in [doc/QUICKSTART.md](doc/QUICKSTART.md).
 
 ```
@@ -70,8 +70,11 @@ $ make route TEXT="turn off the kitchen light"
     polarity               negative cue present, winner already agrees
     encoding               42 of 256 dims carry evidence
     nearest stored utterances:
-       220  iot_hue_lightoff   "turn off the kitchen lights"
-       199  iot_hue_lightoff   "turn off the light in the kitchen"
+       220  iot_hue_lightoff       "turn off the kitchen lights"
+       199  iot_hue_lightoff       "turn off the light in the kitchen"
+       181  iot_hue_lightoff       "kitchen light off"
+       181  iot_hue_lightoff       "please turn off kitchen light"
+       180  iot_hue_lightoff       "turn off the lights in the kitchenn"
 ```
 
 ## Results
@@ -91,7 +94,7 @@ constant and compresses losslessly to 34.4 B/vector, where binary has no sign
 plane to compress. So twin now wins on bytes as well as on the curve — but that
 is a storage result, not a re-run of this experiment.
 
-| | recall | fa | wa | missed | size |
+| | recall | fa | wa | missed | vector payload |
 |---|---|---|---|---|---|
 | binary, 1 bit/dim, d=256 | 80.7% ±2.8 | 1 | 13 | 24 | 328 KB |
 | binary, 1 bit/dim, d=512 | 79.7% ±2.9 | 0 | 15 | 24 | 656 KB |
@@ -145,9 +148,11 @@ falsifiers](doc/EXPERIMENTS.md#test-evaluation-6--pre-registered-does-the-prunin
 and then [tested on the held-out
 set](doc/EXPERIMENTS.md#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted).
 All four predictions held; none of the falsifiers fired. The price of a 2.7×
-smaller footprint and a 5.4× faster scan is **four extra false actuations in
-2754 held-out non-commands**, 0.44% against 0.29%.
-
+smaller footprint and a 5.4× faster scan — the figures **as the trade was made**,
+both under the v1 format — is **four extra false actuations in 2754 held-out
+non-commands**, 0.44% against 0.29%. The v2 format later took those same 3840
+vectors to 129 KB and 4.3 ms losslessly and at no accuracy cost; that is a
+separate change and does not move this trade.
 It is still a regression on the property this project weighs above recall, and
 it was taken deliberately. If your application cannot spend it, build the
 unpruned blob instead:
@@ -165,10 +170,10 @@ non-commands — 0.44%**.
 
 Held-out, at the shipped threshold, the two representations trade off like this:
 
-| | recall | fa | wa | missed | size |
+| | recall | fa | wa | missed | vector payload |
 |---|---|---|---|---|---|
 | binary, 1 bit/dim | 75.5% ±2.9 | **10** | 14 | 40 | 120 KB |
-| **twin-ternary, 2 bit/dim** | **84.1% ±2.5** | 12 | 15 | **20** | 137 KB |
+| **twin-ternary, 2 bit/dim** | **84.1% ±2.5** | 12 | 15 | **20** | 129 KB |
 
 Twin buys recall and pays a little precision: it misses **half** as many commands
 (20 against 40) for two more false actuations. Binary is the more conservative
@@ -204,6 +209,12 @@ device**, so the single-core number is the one that survives deployment.
 Cost model, fitted across three dimensions: **59.8 ns/byte + 326 ns/vector**.
 Bytes are 92% of the cost, so index size predicts latency directly — which is
 why shrinking the index, not speeding up the arithmetic, was the lever that paid.
+
+That fit is flash-mapped. Resident in SRAM the slope is far shallower — v1 ran
+1683 ns/vector at 64 B, implying **21.2 ns/byte + 326** — and v2 is an
+out-of-sample test of the *form*, because it nearly halved the bytes without
+touching the arithmetic. Predicted 1055 ns/vector at 34.4 B; **measured 1096, a
+3.7% error**. The model was not refitted.
 
 Getting the index into SRAM looked impossible for a while. Free heap is **295 KB
 in total but only 164 KB in the largest region**, so the single `malloc` that
@@ -318,9 +329,12 @@ The layout, and what parity does *not* cover:
     README.md          you are here
     Makefile           every entry point: fetch, demo, route, ship, regress, testset
     c/src/             the entire shipping system — 9 tools + 8 shared units
-    c/test/            an exhaustive 2^32 popcount proof, a blob-format validator
-    esp32_router/      two firmwares: PRODUCT (UART in, GPIO out) and VALIDATION
-                       (host-parity harness). Sources are SYMLINKS into c/src
+    c/test/            an exhaustive 2^32 popcount proof, a blob-format validator,
+                       and a guard that the firmware parser refuses corrupt blobs
+    esp32_router/      five firmwares from one component: PRODUCT (UART in, GPIO
+                       out), VALIDATION (host-parity harness), +WiFi, and two
+                       measurement probes (WiFi heap cost, power)
+                       Sources are SYMLINKS into c/src
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 8 cycles
     scripts/           fetch.sh (curl only), regress.sh (72 checks), mutate.sh
@@ -349,12 +363,12 @@ The held-out split is a budgeted resource: every read is logged in
 `results/TEST_BUDGET`, and configurations are pre-registered with falsifiers
 before it is touched. Every run is stamped with the git SHA and the clean/dirty
 state of the tree. Run `make regress` after any structural change: 72 checks,
-19 seconds.
+25 seconds.
 
-CI runs the same 72 checks on Linux/GCC and builds both ESP32 firmwares from
-`sdkconfig.defaults`, asserting the blob and the firmware agree on `RD`. That
-job exists because the code had never left macOS/clang, and three portability
-bugs were found the first time it did.
+CI runs the same 72 checks on Linux/GCC and builds the VALIDATION, PRODUCT and
+networked firmwares from `sdkconfig.defaults`, asserting the blob and the
+firmware agree on `RD`. That job exists because the code had never left
+macOS/clang, and three portability bugs were found the first time it did.
 
 How the guardrails were learned, each named for the incident that taught it:
 [doc/METHOD.md](doc/METHOD.md).
