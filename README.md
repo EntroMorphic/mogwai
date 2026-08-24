@@ -1,6 +1,7 @@
 # mogwai — twin-ternary intent router for ESP32
 
 [![regress](https://github.com/EntroMorphic/mogwai/actions/workflows/regress.yml/badge.svg)](https://github.com/EntroMorphic/mogwai/actions/workflows/regress.yml)
+[![release](https://img.shields.io/github/v/release/EntroMorphic/mogwai?label=flashable%20image)](https://github.com/EntroMorphic/mogwai/releases/latest)
 
 A natural-language interface for controlling ESP32-class hardware, built as an
 **integer-only nearest-neighbour router** rather than a language model.
@@ -346,6 +347,7 @@ The layout, and what parity does *not* cover:
 ## Repo map
 
     README.md          you are here
+    CHANGELOG.md       what shipped, and what it does not do
     Makefile           every entry point: fetch, demo, route, ship, regress, testset
     c/src/             the entire shipping system — 9 tools + 8 shared units
     c/test/            an exhaustive 2^32 popcount proof, a blob-format validator,

@@ -187,6 +187,21 @@ states are not needed for the arithmetic — they are a **check on it**: if the
 model is right, their measured current should fall on the line predicted by the
 first two states. If it does not, the model is wrong, not the meter.
 
+## A single image, for people who are not building this
+
+Everything above needs ESP-IDF. Users do not:
+
+    make image        # from the repo root — bootloader + partitions + app + blob
+
+produces one file flashable at offset `0x0` with no toolchain and no checkout,
+and CI attaches the same file to every tagged release. The browser flasher at
+[entromorphic.github.io/mogwai](https://entromorphic.github.io/mogwai/) writes it
+over WebSerial with nothing installed at all.
+
+It ships the `PRODUCT=1` firmware: UART in, GPIO out, no network and therefore no
+credentials to supply. Verified by downloading the published artifact, erasing
+the chip, and booting it with nothing else on the flash.
+
 ## Build
 
     idf.py -DRD=256 -DTPOPCNT=1 build flash monitor

@@ -4,6 +4,16 @@ Two dependencies on the host: a C compiler and `curl`. No package manager, no
 lockfile, no virtualenv. The tracked tree is 2.6 MB; a full clone is ~85 MB,
 nearly all of it history (see doc/TODO.md P2-2).
 
+## Fastest path: don't build anything
+
+[entromorphic.github.io/mogwai](https://entromorphic.github.io/mogwai/) flashes a
+board over WebSerial from Chrome or Edge. Nothing to install, no checkout, no
+toolchain. Or take the single image from the
+[latest release](https://github.com/EntroMorphic/mogwai/releases/latest) and
+write it at offset `0x0`.
+
+Everything below is for working on it rather than running it.
+
 ## 60 seconds
 
     make demo
