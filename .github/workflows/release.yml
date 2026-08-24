@@ -107,6 +107,12 @@ jobs:
   # github-pages environment; without this the flasher page silently never
   # appears, which is exactly how it was written the first time. Tags also need
   # an explicit deployment-branch policy on that environment.
+  #
+  # And the repository's Pages source MUST be "GitHub Actions", not "Deploy from
+  # a branch". With the legacy branch builder enabled the two fight: this job
+  # publishes the flasher, then the next push to main triggers the branch build,
+  # which serves the repo root -- no index.html -- and the page 404s. It looked
+  # like a working deployment that spontaneously died.
   deploy:
     name: publish the flasher
     needs: image
