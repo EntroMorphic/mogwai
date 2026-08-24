@@ -19,20 +19,30 @@ static int wcmp(const uint32_t *a, const uint32_t *b, size_t bytes) {
     return 0;
 }
 
-/* The IRAM-only pool: DORMANT as of the v2 format, deliberately retained.
+/* The IRAM-only pool: DORMANT on every shipped configuration, and TESTED.
  *
  * Under v1 the index was 64 B/vector and did NOT fit in DRAM alongside the heap
  * reserve, so lift_run spilled the tail into the IRAM-only pool that malloc
- * cannot otherwise reach. v2 halves the record to a 32-byte mask, and the whole
- * 3840-vector index now lands in DRAM: the shipped firmware reports
+ * cannot otherwise reach. v2 halves the record to a 32-byte mask and the whole
+ * 3840-vector index lands in DRAM: the shipped firmware reports
  * "3840 in DRAM, 0 in the IRAM-only pool" both bare and with WiFi up.
  *
- * So iram_only_malloc() no longer fires on any configuration we ship, which
- * means it is no longer exercised by any run. It is kept because the condition
- * that needed it is a function of index size, not of the format: raise
- * RSHIP_NEGTOP, widen RD, or add classes and DRAM runs out again. Treat it as
- * untested code that used to work — if it ever fires, the banner says so, and
- * the addressing walk at the end of lift_run still verifies every vector.
+ * That made this dormant, which is not the same as correct. It has since been
+ * exercised deliberately by starving DRAM at build time:
+ *
+ *     idf.py -DPRODUCT=1 -DCMAKE_C_FLAGS="-DLIFT_RESERVE_BARE=204800" build flash
+ *
+ * which forces 1536 of 3840 vectors into IRAM. Measured on hardware: the
+ * addressing walk verifies all 3840 with 0 MISMATCHED, and routing is
+ * bit-identical to the all-DRAM build — scores 227 / 206 / 233 and the same
+ * rejection, unchanged. The cost is 20%: an IRAM-resident vector scores in
+ * 1386 ns against 1154 ns from DRAM, +232 ns each, consistent to 6 us across
+ * four queries. Still far better than the 2474 ns of a flash-mapped vector, so
+ * the fallback degrades gracefully rather than falling off a cliff.
+ *
+ * It is kept because the condition that needs it is a function of index size,
+ * not of the format: raise RSHIP_NEGTOP, widen RD, or add classes and DRAM runs
+ * out again.
  */
 /* Allocate a chunk from the IRAM-ONLY pool, or return NULL.
  *

@@ -187,6 +187,18 @@ states are not needed for the arithmetic — they are a **check on it**: if the
 model is right, their measured current should fall on the line predicted by the
 first two states. If it does not, the model is wrong, not the meter.
 
+### Exercising the IRAM-only fallback
+
+`iram_only_malloc()` fires on nothing that ships — v2 fits entirely in DRAM. To
+test it, starve DRAM so chunks spill:
+
+    idf.py -DPRODUCT=1 -DCMAKE_C_FLAGS="-DLIFT_RESERVE_BARE=204800" build flash monitor
+
+Expect `2304 in DRAM, 1536 in the IRAM-only pool`, `0 MISMATCHED`, and routing
+identical to the normal build. **Never override the reserve for a shipping
+build**: those are measured numbers, and the TLS one is what stands between the
+device and dying on its first HTTPS request.
+
 ## A single image, for people who are not building this
 
 Everything above needs ESP-IDF. Users do not:

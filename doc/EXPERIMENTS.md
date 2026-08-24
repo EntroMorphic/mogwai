@@ -1560,6 +1560,38 @@ Full write-up, including the red-team that found two silent-failure gaps in the
 parser: [doc/return-to-me/the-sign-plane-is-an-exception-set.md](return-to-me/the-sign-plane-is-an-exception-set.md).
 
 
+### The IRAM-only fallback, exercised
+
+v2 made this path dormant — the whole index fits in DRAM, so `iram_only_malloc()`
+fires on nothing that ships. Dormant is not the same as correct, so it was forced
+by starving DRAM at build time:
+
+    idf.py -DPRODUCT=1 -DCMAKE_C_FLAGS="-DLIFT_RESERVE_BARE=204800" build flash
+
+    index 3840/3840 vectors in SRAM (100%), 15 chunks of 256
+      2304 in DRAM, 1536 in the IRAM-only pool (malloc cannot reach it)
+      addressing verified over all 3840 vectors: 0 MISMATCHED
+
+Routing is **bit-identical** to the all-DRAM build — scores 227 / 206 / 233 and
+the same rejection, unchanged. That matters more than it sounds: IRAM is
+32-bit-access-only, so the chunk copy and the verification walk use word-wise
+`wcopy`/`wcmp` because `memcpy`/`memcmp` emit byte accesses and fault there.
+
+The cost, same firmware and only the reserve differing:
+
+| query | all-DRAM | 40% IRAM | delta |
+|---|---:|---:|---:|
+| turn the lights on | 4431 µs | 4789 µs | 358 |
+| turn off the light in the bathroom | 4423 µs | 4782 µs | 359 |
+| start the coffee machine | 4285 µs | 4638 µs | 353 |
+| what time does the train leave | 4283 µs | 4641 µs | 358 |
+
+357 µs over 1536 IRAM-resident vectors: **+232 ns each**, 1386 ns against
+1154 ns from DRAM — **20% slower**. Consistent to 6 µs across four queries.
+Against a flash-mapped vector at 2474 ns, IRAM is much nearer DRAM than flash,
+so spilling into it degrades gracefully rather than falling off a cliff.
+
+
 ## Power: what a scan costs, and why the devkit hides it
 
 Inline USB power meter on the devkit, `MOGWAI_POWER=1` holding each state 30 s

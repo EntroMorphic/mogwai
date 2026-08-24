@@ -30,9 +30,21 @@
  *
  * Sizing the reserve from the steady state rather than the low-water mark is
  * the specific way this fails: the device boots, runs, and dies on its first
- * HTTPS request in the field. */
+ * HTTPS request in the field.
+ *
+ * Overridable at build time SOLELY so the IRAM path can be exercised. v2 fits
+ * entirely in DRAM, so iram_only_malloc() fires on nothing we ship — inflating
+ * the reserve starves DRAM deliberately and forces chunks into the IRAM-only
+ * pool, which is the only way to test code that is otherwise dormant. Never
+ * override these for a shipping build: they are measured numbers, and the TLS
+ * one is what stands between the device and dying on its first HTTPS request.
+ */
+#ifndef LIFT_RESERVE_BARE
 #define LIFT_RESERVE_BARE 40960
+#endif
+#ifndef LIFT_RESERVE_TLS
 #define LIFT_RESERVE_TLS  61440              /* 46,716 measured + 31% margin */
+#endif
 
 typedef struct {
     const uint32_t *ch[LIFT_MAXCHUNK];       /* chunk -> SRAM copy, or into flash */

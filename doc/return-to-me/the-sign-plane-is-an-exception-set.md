@@ -271,10 +271,12 @@ Both are now permanent entries in `scripts/mutate.sh`.
 
 ## Still not covered
 
-- **The IRAM-only path is now dead in practice.** v2 fits entirely in DRAM, so
-  `iram_only_malloc` never fires on the shipped index and that code is no longer
-  exercised by any run. It is still correct as far as anything shows, which is
-  not the same as tested.
+- **The IRAM-only path is dormant but no longer untested.** v2 fits entirely in
+  DRAM, so `iram_only_malloc()` fires on nothing that ships. It has since been
+  forced by starving DRAM at build time
+  (`-DLIFT_RESERVE_BARE=204800`), which puts 1536 of 3840 vectors in IRAM:
+  addressing verified with 0 MISMATCHED and routing bit-identical, at a measured
+  20% per-vector penalty. See EXPERIMENTS, "The IRAM-only fallback, exercised".
 - **The WiFi latency figure has no associated radio.** 4.3 ms was measured with
   the stack initialised and retrying association. Active RX/TX contention is not
   in that number.
