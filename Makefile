@@ -103,8 +103,12 @@ $(BIN)/blobguard: c/test/blobguard.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/rou
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/blobguard.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
 
+$(BIN)/imgcheck: c/test/imgcheck.c
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -o $@ c/test/imgcheck.c
+
 .PHONY: tools
-tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard
+tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard $(BIN)/imgcheck
 	@echo "  all tools + tests built: $$(ls $(BIN) | tr '\n' ' ')"
 
 # Full host regression. Run after any structural change.
@@ -136,19 +140,21 @@ demo: $(BIN)/compare $(DATA)
 # A single file a user can flash at offset 0x0 with no ESP-IDF, no toolchain,
 # and no repo checkout. bootloader + partition table + app + blob, merged.
 #
-# Verified the honest way: erase_flash, write this at 0x0, and the board boots
-# and routes with nothing else on the chip.
+# `idf.py merge-bin` rather than esptool with hand-written offsets: it reads the
+# offsets out of the build that just happened. The hand-written version was
+# 0x1000/0x8000/0x10000 in two files, which is correct only for as long as
+# partitions.csv does not move — and a moved app would have produced a
+# plausible image of exactly the right size that does not boot.
+#
+# Then imgcheck, because nothing else in the chain verifies that the data which
+# came OUT is the data that went IN.
 IMAGE := dist/mogwai-esp32-$(shell git describe --tags --always --dirty 2>/dev/null || echo dev).bin
-image:
-	@command -v esptool.py >/dev/null || { \
-	  echo "esptool.py not found — run . \$$IDF_PATH/export.sh first"; exit 1; }
+image: $(BIN)/imgcheck
 	@mkdir -p dist
 	@cd esp32_router && idf.py -DPRODUCT=1 -DRD=256 -DTPOPCNT=1 build >/dev/null
-	@cd esp32_router/build && esptool.py --chip esp32 merge_bin -o ../../$(IMAGE) \
-	   --flash_mode dio --flash_freq 80m --flash_size 4MB \
-	   0x1000 bootloader/bootloader.bin \
-	   0x8000 partition_table/partition-table.bin \
-	   0x10000 router_validate.bin >/dev/null
+	@cd esp32_router && idf.py merge-bin -o $(CURDIR)/$(IMAGE) >/dev/null
+	@$(BIN)/imgcheck $(IMAGE) esp32_router/main/router.bin
 	@shasum -a 256 $(IMAGE) | tee $(IMAGE).sha256
-	@printf '\n  %s\n  %s bytes — flash to offset 0x0\n\n' "$(IMAGE)" "$$(wc -c < $(IMAGE) | tr -d ' ')"
+	@printf '\n  %s\n  %s bytes — flash to offset 0x0 (needs a 4 MB ESP32)\n\n' \
+	  "$(IMAGE)" "$$(wc -c < $(IMAGE) | tr -d ' ')"
 .PHONY: image

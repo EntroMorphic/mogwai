@@ -31,7 +31,7 @@ chk "tools+tests build with zero warnings" "$BUILD_N" "0"
 if [ "$BUILD_N" != "0" ]; then
   printf '%s\n' "$BUILD_OUT" | grep -E 'warning|error' | head -20 | sed 's/^/        /'
 fi
-chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "12"
+chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "13"
 
 echo "=== CORPUS ==="
 chk "corpus checksums" "$(shasum -a 256 -c data/SHA256 2>/dev/null | grep -c OK)" "4"

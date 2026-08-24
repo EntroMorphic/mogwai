@@ -58,6 +58,7 @@ signature, which is why `make tools` now exists.
 | `t_popcnt.c` | the popcount table equals `__builtin_popcount` on **all 2³² words**, exhaustively — not sampled. Plus the `t_dot` algebraic rewrite over 2M random vector pairs |
 | `blobfmt.c` | `router.bin` parses **exactly** per [BLOB_FORMAT.md](BLOB_FORMAT.md), last record ending precisely at EOF. Run `c/bin/blobfmt esp32_router/main/router.bin` — doc drift shows up as unaccounted bytes |
 | `blobguard.c` | `r_parse2()` — the parser the **firmware** runs — REFUSES a corrupt blob rather than misreading it. Eleven cases: bad magic, wrong dim, zero and oversized `n_index`, truncation at every scale, non-ascending offsets, unsorted and duplicated exception slices, references past the end. Two of these were live gaps when it was written |
+| `imgcheck.c` | the flashable image contains the **shipped blob, verbatim** — not a checksum of the image (which says nothing about its contents) and not the header alone (which survives a corrupted body). Release-time integrity: nothing else in the build → embed → merge chain checks that what came out is what went in |
 
 ## Compile-time switches
 

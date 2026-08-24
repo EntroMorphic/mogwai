@@ -62,6 +62,10 @@ Or one file at one offset, no toolchain and no checkout — `make image` builds 
 locally and CI attaches it to every tagged release:
 
     esptool --chip esp32 --port /dev/ttyUSB0 write_flash 0x0 mogwai-esp32.bin
+    # (older ESP-IDF ships it as `esptool.py`)
+
+Needs an ESP32 with **4 MB of flash or more** — the partition table puts a 2 MB
+app at `0x10000`, so the image needs `0x210000` bytes. Most devkits are 4 MB.
 
 Verified end to end rather than assumed: the artifact published by CI was
 downloaded, written to an **erased** chip at `0x0`, and the board booted and
@@ -351,7 +355,7 @@ The layout, and what parity does *not* cover:
     Makefile           every entry point: fetch, demo, route, ship, regress, testset
     c/src/             the entire shipping system — 9 tools + 8 shared units
     c/test/            an exhaustive 2^32 popcount proof, a blob-format validator,
-                       and a guard that the firmware parser refuses corrupt blobs
+                       a firmware-parser guard, and a release-image integrity check
     esp32_router/      five firmwares from one component: PRODUCT (UART in, GPIO
                        out), VALIDATION (host-parity harness), +WiFi, and two
                        measurement probes (WiFi heap cost, power)

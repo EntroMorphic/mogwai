@@ -22,6 +22,16 @@ so it needs Chrome or Edge.</p>
 or anything else you want back, save it first — see
 <a href="https://github.com/EntroMorphic/mogwai/blob/main/board_backup/RESTORE.md">board_backup/RESTORE.md</a>.</p>
 
+<h2>Requirements</h2>
+<ul>
+  <li><strong>4 MB of flash or more.</strong> The partition table puts a 2 MB app
+      at <code>0x10000</code>, so the image needs 0x210000 bytes and the
+      bootloader is built for a 4 MB layout. Most ESP32 devkits are 4 MB.</li>
+  <li>An <strong>ESP32</strong> (LX6). Not S2/S3/C3/C6 — the popcount table and
+      DRAM placement are specific to this part.</li>
+  <li>Chrome or Edge, for WebSerial.</li>
+</ul>
+
 <h2>Then</h2>
 <p>Open a serial monitor at 115200 and type an utterance:</p>
 <pre>&gt; turn the lights on
@@ -40,4 +50,6 @@ It is exploratory research, not a product: read
 before trusting a number. On held-out data it actuates wrongly on
 <strong>12 of 2754</strong> non-commands (0.44%).</p>
 
-<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<!-- Pinned to an exact version deliberately: this script flashes firmware, and
+     "@10" is a RANGE that silently follows new CDN releases. -->
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
