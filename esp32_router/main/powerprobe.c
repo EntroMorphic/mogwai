@@ -33,6 +33,7 @@
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
+#include "esp_sleep.h"
 #include "router.h"
 #include "ternary.h"
 #include "lift.h"
@@ -113,6 +114,41 @@ static void hold(const char *name, const char *what, int period_ms) {
     fflush(stdout);
 }
 
+/* Light sleep between queries. THIS is where the power is.
+ *
+ * Measured: the scan costs 23 mA of a 71 mA total, and at 1 Hz it contributes
+ * 0.5 mW against a 246 mW baseline. The router is 0.2% of the budget. So the
+ * only measurement left that can matter is what the OTHER 99.8% does when the
+ * part is allowed to sleep between utterances.
+ *
+ * Light sleep, not deep: deep sleep loses SRAM, and the whole point of this
+ * design is a 137 KB index resident in SRAM. Reloading it from flash on every
+ * wake would cost far more than it saved. Light sleep retains RAM. */
+static void hold_sleep(const char *name, const char *what, int period_ms, int scan) {
+    printf("\n  STATE %-10s %s\n  holding %d s — read the meter now, then wait for the next STATE line\n",
+           name, what, HOLD_S);
+    fflush(stdout);
+    vTaskDelay(pdMS_TO_TICKS(400));
+
+    int64_t end = esp_timer_get_time() + (int64_t)HOLD_S * 1000000;
+    uint32_t wakes = 0; int64_t busy = 0;
+    while (esp_timer_get_time() < end) {
+        int64_t t0 = esp_timer_get_time();
+        if (scan) { SINK = scan_once(); busy += esp_timer_get_time() - t0; }
+        wakes++;
+        int64_t used = esp_timer_get_time() - t0;
+        int64_t left = (int64_t)period_ms * 1000 - used;
+        if (left > 0) {
+            esp_sleep_enable_timer_wakeup((uint64_t)left);
+            esp_light_sleep_start();
+        }
+    }
+    printf("    (%u wakes, %lld us busy of %d s = %.2f%% awake-for-work)\n",
+           (unsigned)wakes, busy, HOLD_S,
+           100.0 * busy / ((double)HOLD_S * 1000000));
+    fflush(stdout);
+}
+
 void app_main(void) {
     /* Park the actuator pins at a FIXED level and never touch them again. LEDC
        is deliberately not started: a running PWM channel draws, and a changing
@@ -151,6 +187,8 @@ void app_main(void) {
         hold("scan100", "scanning back-to-back, 100% duty", 0);
         hold("duty1hz", "one scan per second",              1000);
         hold("duty10hz","ten scans per second",             100);
+        hold_sleep("sleepidle", "LIGHT SLEEP, waking 1/s, no scan",  1000, 0);
+        hold_sleep("sleep1hz",  "LIGHT SLEEP, waking 1/s AND scanning", 1000, 1);
         printf("\n  --- cycle complete, repeating so you can re-read any state ---\n");
     }
 }

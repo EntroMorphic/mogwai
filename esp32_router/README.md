@@ -154,6 +154,24 @@ one that ships.
 | `scan100` | back-to-back scanning, 100% duty — baseline **+ full scan cost** |
 | `duty1hz` | one scan per second (~0.4% duty) — a realistic always-on listener |
 | `duty10hz` | ten scans per second (~4.7% duty) |
+| `sleepidle` | **light sleep**, waking 1/s, no scan — the floor |
+| `sleep1hz` | **light sleep**, waking 1/s and scanning — the real listener |
+
+Light sleep, not deep: deep sleep loses SRAM, and the whole point of this design
+is a 137 KB index resident in it. Reloading from flash on every wake would cost
+far more than it saved.
+
+The two sleep states **decompose the baseline**, which is the thing worth
+knowing. In light sleep the ESP32 itself draws well under a milliamp, so
+whatever `sleepidle` reads is very nearly the *rest of the devkit* — the
+CP2102/CH340 bridge and the regulator, neither of which exists on a product
+board:
+
+    dev-board overhead   ~= I_sleepidle
+    ESP32 awake but idle ~= I_idle - I_sleepidle
+
+That matters because the headline result — the scan is 0.2% of the budget at
+1 Hz — is measured against a baseline that a real product would not pay.
 
 Duty is **measured and reported**, not assumed: FreeRTOS tick granularity makes
 the periodic states land slightly off their nominal rate, and the firmware
