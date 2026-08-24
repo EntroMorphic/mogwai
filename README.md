@@ -53,19 +53,19 @@ enough". See [esp32_router/README.md](esp32_router/README.md).
 
 ### Just flash it
 
-One file, one offset, no toolchain and no checkout. `make image` merges
-bootloader + partition table + app + blob into a single binary, and CI attaches
-it to every tagged release:
+**[entromorphic.github.io/mogwai](https://entromorphic.github.io/mogwai/)** — plug
+in an ESP32 over USB and click. Nothing to install: it flashes over WebSerial
+from Chrome or Edge.
+
+Or one file at one offset, no toolchain and no checkout — `make image` builds it
+locally and CI attaches it to every tagged release:
 
     esptool --chip esp32 --port /dev/ttyUSB0 write_flash 0x0 mogwai-esp32.bin
 
-Or from a browser with nothing installed at all — [`flash/`](flash/) is an
-[ESP Web Tools](https://esphome.github.io/esp-web-tools/) page that flashes over
-WebSerial in Chrome or Edge.
-
-Verified the honest way rather than assumed: `erase_flash`, write that one file
-at `0x0`, and the board boots and routes with **nothing else on the chip** —
-same score, same 4437 µs.
+Verified end to end rather than assumed: the artifact published by CI was
+downloaded, written to an **erased** chip at `0x0`, and the board booted and
+routed with nothing else on the flash — `3840/3840 vectors in SRAM`, score 227,
+4431 µs.
 
 > **It erases the board.** ESP32 devkits usually ship with ESP-AT; if you want
 > it back, save it first — [board_backup/RESTORE.md](board_backup/RESTORE.md).
@@ -356,7 +356,7 @@ The layout, and what parity does *not* cover:
                        Sources are SYMLINKS into c/src
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 8 cycles
-    flash/             browser flasher (ESP Web Tools) — WebSerial, nothing to install
+    flash/             the browser flasher, published to Pages by CI on every tag
     scripts/           fetch.sh (curl only), regress.sh (72 checks), mutate.sh
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
