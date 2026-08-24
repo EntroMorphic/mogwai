@@ -49,13 +49,24 @@ jobs:
       # out of the build that just happened. Hardcoding 0x1000/0x8000/0x10000 is
       # correct only until partitions.csv moves, and a moved app would produce a
       # plausible image of exactly the right size that does not boot.
+      #
+      # Output goes INSIDE the build directory, then a host step copies it out.
+      # esp-idf-ci-action runs in a container that mounts the repo at /app/...,
+      # so ${{ github.workspace }} is a host path that does not exist in there —
+      # passing it fails with FileNotFoundError on a directory that is right
+      # in front of you on the runner.
       - name: Merge into one image
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5
           target: esp32
           path: esp32_router
-          command: idf.py merge-bin -o ${{ github.workspace }}/mogwai-esp32.bin
+          command: idf.py merge-bin -o mogwai-esp32.bin
+
+      - name: Bring the image out of the container's build dir
+        run: |
+          cp esp32_router/build/mogwai-esp32.bin mogwai-esp32.bin
+          ls -l mogwai-esp32.bin
 
       # Nothing else in this chain checks that the data which came OUT is the
       # data that went IN. A stale build dir or a wrong app would pass every
