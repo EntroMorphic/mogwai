@@ -25,7 +25,7 @@ jobs:
     name: host regression
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: make fetch
       - run: make tools
       - run: ./scripts/regress.sh
@@ -35,7 +35,7 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build PRODUCT firmware
         uses: espressif/esp-idf-ci-action@v1

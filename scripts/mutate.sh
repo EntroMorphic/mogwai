@@ -179,4 +179,14 @@ echo "=== checks NO mutation could make fail ==="
 ./scripts/regress.sh 2>&1 | grep -E '^  (PASS|SKIP)' | sed -E 's/^  (PASS|SKIP)  //' | sort -u > /tmp/_all
 sort -u "$FIRED" | grep -v '^$' > /tmp/_fired
 comm -23 /tmp/_all /tmp/_fired | sed 's/^/  UNCOVERED  /'
-echo "  ---- covered $(comm -12 /tmp/_all /tmp/_fired | wc -l | tr -d ' ') of $(wc -l < /tmp/_all | tr -d ' ') ----"
+COVERED=$(comm -12 /tmp/_all /tmp/_fired | wc -l | tr -d ' ')
+TOTAL=$(wc -l < /tmp/_all | tr -d ' ')
+echo "  ---- covered $COVERED of $TOTAL ----"
+# Persist it. The per-check lists were written to results/ but the SUMMARY only
+# ever went to stdout, so the coverage number survived in commit messages and
+# nowhere auditable. Anyone asking "is this record current?" had to re-run.
+{ echo "# mutation coverage, written by scripts/mutate.sh"
+  echo "covered $COVERED of $TOTAL"
+  echo "suite   $TOTAL checks"
+  echo "commit  $(git rev-parse --short HEAD)$(git diff --quiet || echo ' (dirty)')"
+} > results/mutation-summary.txt
