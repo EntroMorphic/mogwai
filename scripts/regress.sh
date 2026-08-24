@@ -283,6 +283,13 @@ chk "budget log reconciles with RESULTS.tsv" "$((LOGGED - PRIOR))" "$ROWS"
 
 # The docs quote this suite's size. That number went stale the moment the
 # suite grew, and nothing noticed. Check it against reality.
+# The README names the current release. A hardcoded version is exactly the kind
+# of claim that rots one tag later, so derive it: whatever the README says must
+# be the newest tag in the repo.
+README_VER=$(grep -oE 'releases/tag/v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -1 | sed 's|.*/||')
+NEWEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1)
+chk "README names the newest release tag" "${README_VER:-none}" "${NEWEST_TAG:-none}"
+
 LIVE=$((P + F + S + 1))   # +1 for this check itself; skipped still count as checks
 # Every doc that states a LIVE check count must state the same one, and it must
 # be the real one. Three bugs lived here at once: the path was `QUICKSTART.md`

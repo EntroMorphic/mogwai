@@ -58,11 +58,17 @@ enough". See [esp32_router/README.md](esp32_router/README.md).
 in an ESP32 over USB and click. Nothing to install: it flashes over WebSerial
 from Chrome or Edge.
 
-Or one file at one offset, no toolchain and no checkout — `make image` builds it
-locally and CI attaches it to every tagged release:
+Or one file at one offset, no toolchain and no checkout. The current release is
+**[v0.1.1](https://github.com/EntroMorphic/mogwai/releases/tag/v0.1.1)**; every
+tag carries the same two assets, and `make image` builds the identical file
+locally:
 
+    curl -LO https://github.com/EntroMorphic/mogwai/releases/latest/download/mogwai-esp32.bin
     esptool --chip esp32 --port /dev/ttyUSB0 write_flash 0x0 mogwai-esp32.bin
     # (older ESP-IDF ships it as `esptool.py`)
+
+A `mogwai-esp32.bin.sha256` is published beside it. What each release changed,
+and what it still does not do: [CHANGELOG.md](CHANGELOG.md).
 
 Needs an ESP32 with **4 MB of flash or more** — the partition table puts a 2 MB
 app at `0x10000`, so the image needs `0x210000` bytes. Most devkits are 4 MB.
@@ -70,7 +76,7 @@ app at `0x10000`, so the image needs `0x210000` bytes. Most devkits are 4 MB.
 Verified end to end rather than assumed: the artifact published by CI was
 downloaded, written to an **erased** chip at `0x0`, and the board booted and
 routed with nothing else on the flash — `3840/3840 vectors in SRAM`, score 227,
-4431 µs.
+4436 µs.
 
 > **It erases the board.** ESP32 devkits usually ship with ESP-AT; if you want
 > it back, save it first — [board_backup/RESTORE.md](board_backup/RESTORE.md).
@@ -82,7 +88,7 @@ routed with nothing else on the flash — `3840/3840 vectors in SRAM`, score 227
     make repl                                    # interactively
 
 Build is about a second, a full evaluation about a second, and the whole
-72-check regression suite runs in 25 s - most of which is an exhaustive 2^32
+73-check regression suite runs in 25 s - most of which is an exhaustive 2^32
 popcount proof. Full path in [doc/QUICKSTART.md](doc/QUICKSTART.md).
 
 ```
@@ -328,7 +334,7 @@ Full working, including what would falsify it:
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (72 checks) — run after any structural change
+    make regress        # full host regression (73 checks) — run after any structural change
 
 Then the device:
 
@@ -363,7 +369,7 @@ The layout, and what parity does *not* cover:
     doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 8 cycles
     flash/             the browser flasher, published to Pages by CI on every tag
-    scripts/           fetch.sh (curl only), regress.sh (72 checks), mutate.sh
+    scripts/           fetch.sh (curl only), regress.sh (73 checks), mutate.sh
     results/           every run appends a stamped row; TEST_BUDGET is the audit log
     provenance/        the only off-disk copy of three never-pushed upstream commits
     board_backup/      how to restore the board's original ESP-AT firmware
@@ -390,10 +396,10 @@ get something much worse — which is the whole reason for the name.
 The held-out split is a budgeted resource: every read is logged in
 `results/TEST_BUDGET`, and configurations are pre-registered with falsifiers
 before it is touched. Every run is stamped with the git SHA and the clean/dirty
-state of the tree. Run `make regress` after any structural change: 72 checks,
+state of the tree. Run `make regress` after any structural change: 73 checks,
 25 seconds.
 
-CI runs the same 72 checks on Linux/GCC and builds the VALIDATION, PRODUCT and
+CI runs the same 73 checks on Linux/GCC and builds the VALIDATION, PRODUCT and
 networked firmwares from `sdkconfig.defaults`, asserting the blob and the
 firmware agree on `RD`. That job exists because the code had never left
 macOS/clang, and three portability bugs were found the first time it did.

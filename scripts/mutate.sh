@@ -126,6 +126,9 @@ printf "fired %2d\n" "$(printf '%s\n' "$nm" | grep -c .)"
 git -C archive/needle_upstream update-ref "refs/heads/$UPBR" "$UPREF" 2>/dev/null
 
 run_mut "leak guard disabled entirely"       "sed -i '' 's/    if (hits)/    if (0)/' c/src/invariants.c"
+run_mut "README falls a release behind" \
+  "sed -i '' 's|releases/tag/v0.1.1|releases/tag/v0.1.0|' README.md"
+
 run_mut "doc check count goes stale"         "sed -i '' -E 's/[0-9]+ checks/40 checks/g' README.md"
 
 # --- checks added later that no mutation reached ---------------------------

@@ -24,7 +24,7 @@ jobs:
       - name: Verify corpus checksums
         run: shasum -a 256 -c data/SHA256
 
-      # 72 checks: build with zero warnings, an exhaustive 2^32 popcount proof,
+      # 73 checks: build with zero warnings, an exhaustive 2^32 popcount proof,
       # blob layout vs its own documentation, the six shipped-config numbers, all
       # four leak guards, and the negative results that must keep reproducing.
       # Two archive checks skip here by design — archive/ is local-only.
