@@ -49,7 +49,7 @@ the score fell below the threshold, or the nearest match was not a command.
 
     make ship        # the shipped operating point — reproduces README's table (~0.7 s)
     make compare     # auto-tuned threshold instead (these differ; see EXPERIMENTS.md)
-    make regress     # 76 checks incl. an exhaustive 2^32 proof (~25 s)
+    make regress     # 79 checks incl. an exhaustive 2^32 proof (~25 s)
 
 `make testset` evaluates on held-out data and **burns one unit of a deliberately
 scarce budget** — read [doc/METHOD.md](METHOD.md) before you spend one.

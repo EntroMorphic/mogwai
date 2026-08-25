@@ -234,6 +234,35 @@ chk "LICENSE is MIT" "$(grep -c '^MIT License$' LICENSE)" "1"
 chk "README states the licence" "$(grep -c '\[MIT\](LICENSE)' README.md)" "1"
 chk "QUICKSTART present and tracked" "$([ -f doc/QUICKSTART.md ] && git ls-files doc/QUICKSTART.md | wc -l | tr -d ' ')" "1"
 
+# The README's licence section lists what the MIT grant does NOT cover. During
+# the fetch.sh hardening (b9466eb) the new "immutable revisions" paragraph was
+# spliced into the middle of the needle-upstream.bundle bullet, deleting its
+# subject line. What survived read as a continuation of the corpora bullet, and
+# the link checker passed it: links resolve, prose mangled. A licence section
+# that misstates what it does not cover is a legal-adjacent defect, so pin the
+# bullet's existence and shape, not just its links.
+LIC_BULLET=$(grep -cE '^- \*\*`provenance/needle-upstream\.bundle`\*\* is a git bundle of$' README.md)
+LIC_TAIL=$(grep -cE '^  provenance under its own terms\. This project shares no code with it\.$' README.md)
+chk "README licence bullet for the provenance bundle is intact" "$LIC_BULLET$LIC_TAIL" "11"
+# ...and the same edit orphaned this sentence by deleting what it qualified.
+# Every "retained for" line must be preceded by the bullet subject that
+# qualifies it. grep -B1 would count the CONTEXT line as a match too, so walk
+# with awk and test the actual previous line.
+ORPHAN=$(awk 'prev !~ /is a git bundle of/ && /retained for/ {n++} {prev=$0} END{print n+0}' README.md)
+chk "no orphaned 'retained for provenance' fragment" "$ORPHAN" "0"
+
+echo "=== CI SUPPLY CHAIN ==="
+# Every workflow action must be pinned to a full commit SHA. A moving ref —
+# a tag, and especially a BRANCH — puts a third party in the release path:
+# espressif/esp-idf-ci-action@v1 was found to resolve to the v1 BRANCH, not a
+# tag, so any push to that branch rebuilt our releases. The release workflow
+# attaches binaries that strangers flash to hardware; it runs on these actions.
+# Full 40-hex SHA required; short SHAs and vX.Y tags both still move-trust.
+PIN_BAD=$(grep -hE '^[[:space:]]*-?[[:space:]]*uses:' .github/workflows/*.yml \
+  | sed -E 's/.*uses:[[:space:]]*//; s/#.*//; s/[[:space:]]*$//' \
+  | grep -vE '^[^@]+@[0-9a-f]{40}$' || true)
+chk "every workflow action pinned to a commit SHA" "${PIN_BAD:-none}" "none"
+
 echo "=== DOCS ==="
 b=0
 for f in README.md doc/*.md journal/README.md esp32_router/README.md provenance/README.md results/README.md; do

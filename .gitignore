@@ -1,7 +1,9 @@
 # ─── build output ────────────────────────────────────────────────────────────
 # All regenerable. The ESP-IDF trees were tracked once (~4400 files, 7 copies of
-# a 5.8 MB compile_commands.json) and are most of why .git is 123 MB for a 16 MB
-# working tree. That history also made the first push to GitHub time out.
+# a 5.8 MB compile_commands.json) and are most of why .git is far larger than
+# the working tree for a fresh clone (measured ~90 MB in Aug 2026; it grows with
+# history and does not shrink when files are later ignored). That history also
+# made the first push to GitHub time out.
 c/bin/
 build/
 */build/
