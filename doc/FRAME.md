@@ -3,6 +3,10 @@
 **This is exploratory research. There is no product and no real user.**
 Declared 2026-08-19, revised 2026-08-21.
 
+> The README is written for users of the router; this file is where the
+> research-grade qualifications live. Everything below qualifies every figure
+> the README quotes, and it is stated here rather than there on purpose.
+
 ## What changed since this file was first written
 
 The original frame said the domain was *invented by the assistant* and the
@@ -40,6 +44,30 @@ success means. Do not quote them as product metrics.
 **And read the right column.** `recall` is blind to false actuations by
 construction. For an actuator, `fa` — fired on something that was not a command
 — is the number that matters.
+
+## How many times the held-out set has been read
+
+The held-out split has been read across **evaluations #2 through #9** (see
+`results/TEST_BUDGET`; #1 is VOID). Every read was pre-registered with
+falsifiers and logged against a budget, which is the discipline that makes
+repeated reads defensible — but independence erodes with each one, and **84.1%
+is not as clean a number as a single-shot measurement would be**. This
+qualification applies to every held-out figure in the README; the README says
+where the governance lives and points here rather than repeating it.
+
+The pruning trade deserves the same label. The shipped index (3840 vectors,
+`RSHIP_NEGTOP`) buys a 2.7× smaller footprint and a 5.4× faster scan for **four
+extra false actuations in 2754 held-out non-commands** (0.44% against 0.29%
+unpruned). It is a regression on the property this project weighs above recall,
+taken deliberately, and it is reversible per-application — the README shows the
+`mkblob` invocation that builds the unpruned blob.
+
+The power section's product rows are **datasheet arithmetic, not measurement**:
+taken on a devkit over USB, unvalidated on a battery or bare 3.3 V supply, and
+resting on three assumptions (the 30 mA idle figure, a linear LDO, light sleep
+reaching 0.8 mA — which a live WiFi association would break outright). Treat
+them as sizing estimates. The assumptions and falsifiers are in
+[EXPERIMENTS.md](EXPERIMENTS.md#power-what-a-scan-costs-and-why-the-devkit-hides-it).
 
 ## What is genuinely established
 

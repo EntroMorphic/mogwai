@@ -15,10 +15,6 @@ The premise being tested is that **compressing an LLM onto an MCU is not
 necessary for this task**. Controlling nine IoT intents does not need 45M
 parameters; it needs a good representation and an honest threshold.
 
-> **Status: exploratory research.** There is no product and no real user, and
-> the task framing is inherited from a public dataset rather than specified by
-> anyone. Read [FRAME.md](doc/FRAME.md) before quoting any number from this repo.
-
 ## Provenance
 
 This began as an audit of [anjaustin/needle](https://github.com/anjaustin/needle)
@@ -206,21 +202,16 @@ smaller footprint and a 5.4× faster scan — the figures **as the trade was mad
 both under the v1 format — is **four extra false actuations in 2754 held-out
 non-commands**, 0.44% against 0.29%. The v2 format later took those same 3840
 vectors to 129 KB and 4.3 ms losslessly and at no accuracy cost; that is a
-separate change and does not move this trade.
-It is still a regression on the property this project weighs above recall, and
-it was taken deliberately. If your application cannot spend it, build the
-unpruned blob instead:
+separate change and does not move this trade. If your application cannot spend
+it, build the unpruned blob instead:
 
     ./c/bin/mkblob <data> out.bin --prune-negtop=0 --threshold=136
 
 The firmware lifts whatever fits and is correct either way.
 
-The held-out set has now been read across **evaluations #2 through #7**. Every
-read was pre-registered with falsifiers and logged against a budget
-(`results/TEST_BUDGET`), which is the discipline that makes repeated reads
-defensible — but independence erodes with each one, and 84.1% is not as clean a
-number as a single-shot measurement would be. This is stated here rather than
-only in [METHOD.md](doc/METHOD.md), because it qualifies every figure above.
+How the held-out split is governed — pre-registration, falsifiers, and a read
+budget — is documented in [FRAME.md](doc/FRAME.md) and
+[METHOD.md](doc/METHOD.md).
 
 ### Read `fa`, not recall
 
@@ -325,15 +316,10 @@ line silent and the actuator pins parked (`MOGWAI_POWER=1`).
 At 5.12 V and a 4.21 ms scan that is **0.496 mJ per query**, and the scan
 saturates — runs continuously — only at **238 queries/second**.
 
-### The devkit number is the misleading one
-
-Read literally, that says the router is irrelevant to power: 0.5 mW against a
-246 mW baseline at 1 query/s. But the meter reads the **whole devkit**, and the
-ESP32 datasheet puts idle at 240 MHz around 30 mA — leaving ~18 mA, **38% of the
-baseline, as USB bridge and regulator**. A product has neither.
-
-Estimated at 3.3 V with light sleep between queries (light, not deep: deep sleep
-loses SRAM, and a 137 KB resident index is the whole design):
+A devkit meter reads the whole board — USB bridge and regulator included — so
+the router's share of a real product's budget is best seen from the estimates:
+at 3.3 V with light sleep between queries (light, not deep: deep sleep loses
+SRAM, and a 137 KB resident index is the whole design):
 
 | design | avg | power | router's share | 2000 mAh |
 |---|---:|---:|---:|---:|
@@ -347,18 +333,9 @@ model the v2 format was worth **10.3%** of total power at 1 Hz and **28.2%** at
 10 Hz — where on the devkit the identical change is worth 0.2 mW of 246, which
 is invisible. Both are correct; only one is about a product.
 
-> **Not validated off USB.** Only the first table is measured. Everything below
-> it is arithmetic on a datasheet, taken on a devkit powered over USB, and no
-> part of it has been checked on a board running from a battery or a bare 3.3 V
-> supply. It rests on three assumptions, any of which would move the numbers:
-> the 30 mA idle figure; a **linear LDO**, where input current ≈ output current
-> (true for the AMS1117 most devkits carry, false for a buck converter); and
-> light sleep actually reaching 0.8 mA — which a **live network connection would
-> break outright**, and none of this models a device holding a WiFi association.
-> Treat the product rows as a sizing estimate, not a specification.
-
-Full working, including what would falsify it:
-[EXPERIMENTS.md](doc/EXPERIMENTS.md#power-what-a-scan-costs-and-why-the-devkit-hides-it).
+*Measured on a devkit over USB; the product rows are datasheet estimates — the
+assumptions, and what would falsify them, are in
+[EXPERIMENTS.md](doc/EXPERIMENTS.md#power-what-a-scan-costs-and-why-the-devkit-hides-it).*
 
 ## How it works
 
