@@ -2464,3 +2464,79 @@ The row is stamped `DIRTY`. The uncommitted change at run time was the
 minutes before. `c/src/compare.c` and `c/src/prune.c` were both committed at
 `e982968`, so the measurement came from committed code. The correct order was to
 commit the target first, and it is recorded here rather than tidied.
+
+## Test evaluation #8 — PRE-REGISTERED: does the representation claim generalise beyond IoT routing?
+
+**Why spend a unit on this.** The core claim — twin-ternary beats binary at
+matched bytes — is established on a 9-class routing problem (iot_* vs
+everything-else, `p=0.0288` held-out). That is the question the router was built
+to answer, and it is answered.
+
+But it is one task on one slice of one corpus family. The structural argument
+— binary forces "no evidence" to −1, so sparse vectors agree on noise — is
+not specific to 9 classes. It should apply to *any* NN classification where
+most dims are 0 for any given item. The question here: does it apply to the
+full 60-class MASSIVE problem, where the distinctions are finer and the
+sparsity is higher?
+
+This is not an independent corpus. SLURP is MASSIVE's parent (206 of 220 IoT
+test utterances are verbatim identical), FSC is independently collected but
+its test text is entirely in train (100% NN accuracy on every representation),
+and NLU-Eval is MASSIVE's annotation lineage. A genuinely independent corpus
+with novel test text, intent labels, and a compatible licence was not found in
+this niche. So the test is the same corpus, a different and harder task: all
+60 intents as classes, no negatives, no threshold, pure NN accuracy. The test
+split's 2949 novel utterances are the right kind of test — they are not in
+train — and the question is whether the representation gap survives a 6.7×
+class expansion.
+
+**Config:** `c/bin/multiclass data/train.json data/test.json`. Twin-ternary
+d=256 (64 B/vec) vs binary d=256 (32 B/vec) and d=512 (64 B/vec, size-matched).
+Centre built from train, NN over the full 11,514-vector index, argmax label.
+No threshold, no pruning, no polarity, no gate — this is the representation
+test, not the routing problem.
+
+**Dev evidence (validation, n=2033, NOT the test set):**
+
+    twin-ternary  d=256  64 B/vec    74.4%
+    binary        d=256  32 B/vec    70.5%
+    binary        d=512  64 B/vec    70.5%   [size-matched]
+
+    paired: twin fixed 183, binary fixed 103, p < 0.0001 SIGNIFICANT
+
+Binary d=256 == d=512 — the same saturation as the IoT claim. The gap is
++3.9 points on dev; on the 9-class IoT routing problem it was +8.6. The
+prediction is that the gap shrinks (more classes means more confusable
+pairs, so the absolute accuracy drops for both) but stays significant and
+in the same direction, and binary still saturates.
+
+**Predictions**
+
+1. **Twin > binary, p < 0.01 — SIGNIFICANT.** The dev gap is 3.9 points
+   with p < 0.0001; on 2949 test items the effect should be at least as
+   clear. Twin fixes more than binary by a margin wider than chance.
+2. **Binary d=256 == d=512 (saturation).** Binary's accuracy at double the
+   dimensions and double the bytes is the same as at d=256, because the
+   extra dimensions carry no information under the −1/+1 forcing — the
+   structural argument that the IoT result rests on.
+3. **Twin accuracy 68–76% on test.** Dev is 74.4%; test is the same
+   distribution but unseen, so a 2–6 point drop is the expected range. A
+   number outside that is worth understanding.
+4. **The gap is smaller than the 9-class gap.** 9-class IoT was +8.6
+   points; 60-class should be +2–5, because more classes means more
+   confusable pairs that no representation can separate.
+
+**Falsifiers**
+
+- **If binary d=512 > twin d=256**, the representation claim does not
+  generalise beyond the routing problem. Report it and say so.
+- **If binary d=256 ≠ d=512** (gap > 1 point), binary does not saturate on
+  this task, and the structural argument is weaker than the IoT result
+  suggested. Report it and investigate.
+- **If p ≥ 0.05**, the gap is not significant on 60 classes. Downgrade
+  the generalisation claim to "consistent with but not established".
+- **If twin accuracy < 60%**, the representation is too weak for general
+  intent classification and the router's scope should be stated as
+  "IoT routing, not general intent".
+
+Test budget: 10.

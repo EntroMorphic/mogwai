@@ -103,6 +103,10 @@ $(BIN)/blobguard: c/test/blobguard.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/rou
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/blobguard.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
 
+$(BIN)/multiclass: c/src/multiclass.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/router.h $(SRC)/ternary.h
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -o $@ c/src/multiclass.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
+
 $(BIN)/imgcheck: c/test/imgcheck.c
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/imgcheck.c
