@@ -25,9 +25,16 @@ jobs:
     name: host regression
     runs-on: ubuntu-latest
     steps:
+      # fetch-tags on BRANCH pushes only. On a tag push checkout already has
+      # the ref; asking it to fetch tags too makes it fetch the commit AND the
+      # annotated tag object into the same ref, and git refuses -- "Cannot
+      # fetch both <sha> and refs/tags/v0.1.5" -- which is how the second
+      # v0.1.5 run died. Branch pushes still need it: the regress suite
+      # compares README's version link and RELEASE_VERIFIED against the tag
+      # list, and checkout does not fetch tags by default.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          fetch-tags: true
+          fetch-tags: ${{ github.ref_type == 'branch' }}
       - run: make fetch
       - run: make tools
       # PUBLISHING_TAG excuses ONLY this tag from the flashed-and-verified
