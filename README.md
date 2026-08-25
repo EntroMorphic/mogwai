@@ -236,6 +236,35 @@ router and the cheaper one. Which you want is a deployment choice, and the
 threshold is the knob — the full operating curve is in
 [doc/EXPERIMENTS.md](doc/EXPERIMENTS.md).
 
+### Tuning the threshold
+
+The shipped threshold (136) is a deliberate middle ground: 85.9% recall on dev
+with 1 false actuation. A deployment that values responsiveness over precision
+(a smart speaker where a missed command is worse than an occasional false
+activation) can lower it. One that values safety (a relay driving a lock)
+can raise it. The trade-off, measured on the dev split:
+
+| threshold | recall | fa | missed | |
+|---|---|---|---|---|
+| 100 | 89.6% | 10 | 5 | aggressive — 10 false actuations |
+| 120 | 89.6% | 7 | 5 | |
+| **136** | **85.9%** | **1** | **14** | **shipped** |
+| 150 | 80.7% | 1 | 27 | |
+| 160 | 75.5% | 1 | 37 | conservative — 37 missed |
+| 200 | 37.0% | 0 | 121 | paranoid — rejects most commands |
+
+The useful range is 120–150. Below 120 the recall gain flattens (89.6% at
+100 is the same as at 120 — the 20-point drop buys nothing but false
+actuations). Above 150 the recall drops steeply. Build a blob at a different
+threshold, then flash it:
+
+    ./c/bin/mkblob data/train.json data/validation.json data/test.json \
+                   data/nlu_home.csv router.bin --threshold=120
+    cd esp32_router && idf.py -DPRODUCT=1 -DRD=256 -DTPOPCNT=1 build flash monitor
+
+The firmware self-checks parity at whatever threshold the blob carries, so
+`PARITY EXACT` confirms the device is running your chosen operating point.
+
 ### The representation claim generalises
 
 The 9-class result is the one the router ships on. The 60-class result is the
