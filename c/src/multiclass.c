@@ -37,7 +37,8 @@ static int js(const char *line, const char *key, char *out, int sz) {
     char pat[32]; int pl=snprintf(pat,sizeof pat,"\"%s\":",key);
     const char *p=strstr(line,pat); if(!p) return 0; p+=pl;
     while(*p==' '||*p=='\t') p++;
-    if(*p!='"') return 0; p++;
+    if(*p != '"') return 0;
+    p++;
     int i=0; while(*p&&*p!='"'&&i<sz-1){ if(*p=='\\'&&p[1])p++; out[i++]=*p++; }
     out[i]=0; return 1;
 }
