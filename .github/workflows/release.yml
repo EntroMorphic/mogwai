@@ -26,9 +26,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-tags: true
       - run: make fetch
       - run: make tools
+      # PUBLISHING_TAG excuses ONLY this tag from the flashed-and-verified
+      # check -- the record for a release can only be written after the asset
+      # exists, so its own gate would be unpassable by construction. Every
+      # older tag is still required. The next push to main runs regress with
+      # no exclusion and demands the row for this tag: publish, then verify.
       - run: ./scripts/regress.sh
+        env:
+          PUBLISHING_TAG: ${{ github.ref_name }}
 
   image:
     name: single-file image

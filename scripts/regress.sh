@@ -339,6 +339,15 @@ chk "budget log reconciles with RESULTS.tsv" "$((LOGGED - PRIOR))" "$ROWS"
 # hardware. The reasoning was "byte-equivalent modulo metadata to something
 # already verified" -- sound, and still an inference. The artifact a stranger
 # downloads is the thing that has to boot.
+#
+# ONE EXCLUSION: the tag a release run is publishing RIGHT NOW. The record can
+# only be written after the asset exists (verify-release.sh downloads the
+# published release), so requiring it in its own gate is unpassable by
+# construction -- the first v0.1.5 run died on exactly that. release.yml sets
+# PUBLISHING_TAG; when it is set, that one tag is excused here and the next
+# regress run on main -- with no exclusion -- demands the row. You cannot
+# publish past an unverified release; you can only publish one and then
+# verify it.
 RV=results/RELEASE_VERIFIED.tsv
 RV_TAGS=$(git tag -l 'v*' --sort=v:refname)
 if [ -z "$RV_TAGS" ]; then
@@ -346,6 +355,7 @@ if [ -z "$RV_TAGS" ]; then
 else
     RV_MISSING=""
     for t in $RV_TAGS; do
+        [ "$t" = "${PUBLISHING_TAG:-}" ] && continue
         grep -q "^${t}	" "$RV" 2>/dev/null || RV_MISSING="$RV_MISSING $t"
     done
     chk "every release was flashed and verified" "${RV_MISSING:-none}" "none"
