@@ -36,7 +36,8 @@ static void push(ex **a, int *n, int *c, const char *t, const char *l) {
 static int js(const char *line, const char *key, char *out, int sz) {
     char pat[32]; int pl=snprintf(pat,sizeof pat,"\"%s\":",key);
     const char *p=strstr(line,pat); if(!p) return 0; p+=pl;
-    while(*p==' '||*p=='\t') p++; if(*p!='"') return 0; p++;
+    while(*p==' '||*p=='\t') p++;
+    if(*p!='"') return 0; p++;
     int i=0; while(*p&&*p!='"'&&i<sz-1){ if(*p=='\\'&&p[1])p++; out[i++]=*p++; }
     out[i]=0; return 1;
 }
@@ -146,8 +147,10 @@ int main(int argc, char **argv){
         int tw=!strcmp(Tr[tp[q]].label,Te[q].label);
         int b2=!strcmp(Tr[bp256[q]].label,Te[q].label);
         int b5=!strcmp(Tr[bp512[q]].label,Te[q].label);
-        if(tw&&!b2) tf256++; if(b2&&!tw) bf256++;
-        if(tw&&!b5) tf512++; if(b5&&!tw) bf512++;
+        if(tw&&!b2) tf256++;
+        if(b2&&!tw) bf256++;
+        if(tw&&!b5) tf512++;
+        if(b5&&!tw) bf512++;
     }
     /* McNemar exact two-sided */
     double p256=1.0,p512=1.0;
