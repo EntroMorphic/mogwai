@@ -15,6 +15,9 @@ The premise being tested is that **compressing an LLM onto an MCU is not
 necessary for this task**. Controlling nine IoT intents does not need 45M
 parameters; it needs a good representation and an honest threshold.
 
+How to read these numbers — scope, limits, and the protocol behind every figure
+— is in [FRAME.md](doc/FRAME.md).
+
 ## Provenance
 
 This began as an audit of [anjaustin/needle](https://github.com/anjaustin/needle)
@@ -55,7 +58,7 @@ in an ESP32 over USB and click. Nothing to install: it flashes over WebSerial
 from Chrome or Edge.
 
 Or one file at one offset, no toolchain and no checkout. The current release is
-**[v0.1.4](https://github.com/EntroMorphic/mogwai/releases/tag/v0.1.4)**; every
+**[v0.1.5](https://github.com/EntroMorphic/mogwai/releases/tag/v0.1.5)**; every
 tag carries the same two assets, and `make image` builds the identical file
 locally:
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.1.5 — 2026-08-25
+
+**First release built entirely under the SHA-pinned supply chain, and flashed to
+a real board before it was announced.** Firmware source is unchanged from
+v0.1.4 — the binary differs only in version string, timestamps, and digests —
+but the CI that built it no longer trusts a single moving ref. Every workflow
+action is now pinned to a full commit SHA; previously
+`espressif/esp-idf-ci-action@v1` resolved to the v1 *branch*, so any push to
+that branch would have rebuilt this project's releases.
+
+- **README speaks to users; FRAME.md speaks to researchers.** The "exploratory
+  research, no product, no real user" banner and the research-grade caveats
+  (held-out read count, the pruning trade's framing, the power model's
+  assumptions) moved to FRAME.md — expanded there, not softened. A neutral
+  "how to read these numbers" pointer in the README intro keeps FRAME.md one
+  click away. The flasher page follows the same voice. Decision inputs a user
+  needs — the 0.44% false-actuation figure, the board-erase warning, the
+  unsigned-image disclosure — stayed in the README.
+- **Audit remediation** (`4b4304d`): the README licence bullet that `b9466eb`
+  had spliced apart is restored and now enforced by a check; the corpora bullet
+  states that ~8 MB of corpus bytes remain in `.git` history; the suite grew
+  76 → 79 checks, each new one mutation-tested to prove it fails when it should.
+
 ## v0.1.4 — 2026-08-24
 
 **Documentation only.** No source outside `doc/` and `README.md` changed, so the
