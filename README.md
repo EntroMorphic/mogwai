@@ -402,7 +402,7 @@ The layout, and what parity does *not* cover:
     README.md          you are here
     CHANGELOG.md       what shipped, and what it does not do
     Makefile           every entry point: fetch, demo, route, ship, regress, testset
-    c/src/             the entire shipping system — 10 tools + 8 shared units
+    c/src/             the entire shipping system — 12 tools + 8 shared units
     c/test/            an exhaustive 2^32 popcount proof, a blob-format validator,
                        a firmware-parser guard, and a release-image integrity check
     esp32_router/      five firmwares from one component: PRODUCT (UART in, GPIO

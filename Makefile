@@ -107,6 +107,14 @@ $(BIN)/multiclass: c/src/multiclass.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/ro
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/src/multiclass.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
 
+$(BIN)/errdump: c/src/errdump.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/router.h $(SRC)/ternary.h
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -o $@ c/src/errdump.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
+
+$(BIN)/cascade_eval: c/src/cascade_eval.c $(SRC)/cascade.c $(SRC)/router.c $(SRC)/ternary.c $(SRC)/router.h $(SRC)/ternary.h $(SRC)/cascade.h
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -o $@ c/src/cascade_eval.c $(SRC)/cascade.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
+
 $(BIN)/imgcheck: c/test/imgcheck.c
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/imgcheck.c

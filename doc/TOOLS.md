@@ -29,6 +29,8 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 | `mkblob.c` | emits `router.bin`. Refuses to guess a threshold when pruning |
 | `eval.c` | **verifies a built blob** before flashing: reference-query parity + index integrity. `c/bin/eval router.bin data/validation.json`. Cannot touch test by construction |
 | `multiclass.c` | 60-class NN accuracy test: twin-ternary vs binary at matched bytes on all MASSIVE intents. `c/bin/multiclass data/train.json data/test.json` |
+| `errdump.c` | diagnostic: dumps every 60-class error with the test text, nearest neighbour, score, and confusion matrix. `c/bin/errdump data/train.json data/test.json --confusion` |
+| `cascade_eval.c` | diagnostic: tests the word-Dice cascade rerank at varying K and alpha on 60-class NN. `c/bin/cascade_eval data/train.json data/validation.json 5` |
 
 ## Device
 

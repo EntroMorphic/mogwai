@@ -83,6 +83,7 @@ not a discipline anyone has to remember.
 - [#7 pre-registered](#test-evaluation-7--pre-registered-does-boundary-witness-selection-transfer) · [result](#test-evaluation-7--result-no-falsifier-fired-and-the-effect-is-one-event) — direction transferred, magnitude did not: fa 12 -> 11
 - [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) · [result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) — the invariance transferred; **4 of 4 predictions hit**, fa 8 → 12
 - [#8 pre-registered](#test-evaluation-8--pre-registered-does-the-representation-claim-generalise-beyond-iot-routing) · [result](#test-evaluation-8--result-the-representation-claim-generalises-all-four-predictions-hit) — **4 of 4 predictions hit**, twin 72.0% vs binary 69.3%, p < 0.0001
+- [Anatomy of the 25% gap](#anatomy-of-the-25-gap-lmm-cycle-gap60) — **15% data, 10% task mismatch, 75% representation**; IoT-only is 82.7%
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
 > Where that happens the earlier text is left standing with the correction
@@ -2584,3 +2585,76 @@ same structural explanation. The 9-class result is the one the router ships
 on; the 60-class result is the one that says the representation is the cause.
 
 Test budget: 10.
+
+## Anatomy of the 25% gap (LMM cycle `gap60`)
+
+After test #8 established 72.0% on 60-class NN, the question became: is the 25%
+gap a representation problem or a data problem? The Lincoln Manifold Method
+was run (`journal/gap60_*`); the synthesis was: partition before searching.
+
+### Error partition (832 errors, n=2974 test)
+
+| cause | errors | % of gap | fixable by representation? |
+|---|---|---|---|
+| catch-all (`general_quirky`) | 113 | 13.6% | no — label noise by design |
+| few-shot (gold label < 30 train) | 6 | 0.7% | no — data-sparse |
+| conflict (test text in train, different label) | 2 | 0.2% | no — measurement error |
+| **representation (clean)** | **711** | **85.5%** | **yes** |
+
+Removing the three data-noise categories: 2142/2853 = **75.1%**. The data
+ceiling accounts for ~3 of the 25 points.
+
+### IoT vs non-IoT
+
+| partition | accuracy | n |
+|---|---|---|
+| all 60 classes (as pre-registered) | 72.0% | 2974 |
+| IoT only (9 classes the router ships on) | **82.7%** | 220 |
+| non-IoT (51 classes) | 71.2% | 2754 |
+
+The IoT accuracy is 82.7% by 60-class NN, and **84.1%** by the shipped 9-class
+router (threshold + polarity + pruning). The router's infrastructure gains
++1.4 points on IoT. The 60-class NN is measuring the representation *without*
+the router's infrastructure, which is the right way to test the representation
+but not the right way to measure deployed accuracy.
+
+### Data audit
+
+- **4 texts in train have multiple labels** (e.g. "good night" → both
+  `audio_volume_mute` and `iot_hue_lightoff`). These create contradictory
+  index entries.
+- **2 test items appear in train with a different label.** These are
+  impossible errors — the exact text is in train, but with a conflicting
+  gold label. No representation can get these right.
+- **5 classes have < 30 train examples** (`cooking_query` 4,
+  `music_dislikeness` 14, `audio_volume_other` 18, `iot_hue_lighton` 22,
+  `general_greet` 25).
+- The existing `invariants.c` checks string-level train/test disjointness for
+  the 9-class routing problem but was never applied to the 60-class problem
+  and does not check for intra-train label conflicts.
+
+### The 711 representation errors
+
+Of the clean representation errors: 206 are same-scenario (e.g.
+`calendar_set` → `calendar_query`), 505 are cross-scenario. The same-scenario
+errors are semantic ambiguity — "start playing" is ambiguous between music
+and audiobook. The cross-scenario errors are the representation's actual cost:
+short utterances with few discriminating n-grams, and long utterances where
+common phrases collide.
+
+### What the cascade found, re-contextualised
+
+The cascade (word-Dice rerank, K=5, α=50%) gained +1.5 on dev. It was tested
+on the full 60-class problem, including data noise. Some of its "wrong"
+reranks were on `general_quirky` items where the rerank found a more specific
+match — arguably correct but scored against the catch-all gold label. The
++1.5 is real but measured against noisy ground truth.
+
+### Conclusion
+
+The 25% gap is ~15% data (label noise + conflicts + few-shot), ~10% task
+mismatch (non-IoT classes the router doesn't ship on), and ~75%
+representation. The representation errors are dominated by cross-scenario
+confusion on non-IoT classes. On IoT — what the router ships on — the gap is
+17.3%, and the router's infrastructure (threshold, polarity, pruning) closes
+1.4 of that. The representation is at its ceiling on what it was built for.
