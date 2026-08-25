@@ -44,3 +44,4 @@ enforced by regress.sh rather than done by hand: "budget log reconciles with
 RESULTS.tsv" asserts that every logged read naming the held-out split, dated
 after RESULTS.tsv begins, has a matching TEST row. The hand-done version went
 stale within a day, which is why it is a check now.
+evaluation 10: 2026-08-25T04:10:40Z  argv: data/train.json data/test.json  (multiclass tool, 60-class NN)

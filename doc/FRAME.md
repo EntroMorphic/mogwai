@@ -74,6 +74,11 @@ them as sizing estimates. The assumptions and falsifiers are in
 - Twin-ternary beats binary at **matched bytes per vector**, on the full
   operating curve, not at a single tuned point. Binary saturates: its d=256 and
   d=512 curves are identical.
+- **The representation claim generalises beyond 9-class IoT routing.** On
+  60-class MASSIVE intent classification (all intents, no threshold, no
+  negatives, pure NN accuracy), twin-ternary beats binary at matched bytes:
+  72.0% vs 69.3%, `p < 0.0001`. Binary d=256 == d=512 again — same saturation.
+  See [EXPERIMENTS.md](EXPERIMENTS.md#test-evaluation-8--pre-registered-does-the-representation-claim-generalise-beyond-iot-routing).
 - The device runs the **same arithmetic as the host**, bit-exactly, verified on
   64 reference queries at four index sizes and two dimensions.
 - The on-device cost model is **quantitative and predictive**: 59.8 ns/byte +

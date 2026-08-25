@@ -58,7 +58,7 @@ in an ESP32 over USB and click. Nothing to install: it flashes over WebSerial
 from Chrome or Edge.
 
 Or one file at one offset, no toolchain and no checkout. The current release is
-**[v0.1.5](https://github.com/EntroMorphic/mogwai/releases/tag/v0.1.5)**; every
+**[v0.1.6](https://github.com/EntroMorphic/mogwai/releases/tag/v0.1.6)**; every
 tag carries the same two assets, and `make image` builds the identical file
 locally:
 
@@ -236,6 +236,24 @@ router and the cheaper one. Which you want is a deployment choice, and the
 threshold is the knob — the full operating curve is in
 [doc/EXPERIMENTS.md](doc/EXPERIMENTS.md).
 
+### The representation claim generalises
+
+The 9-class result is the one the router ships on. The 60-class result is the
+one that says the *representation* is the cause, not the routing task. On all
+60 MASSIVE intents — no threshold, no negatives, pure nearest-neighbour
+classification — twin-ternary beats binary at matched bytes again:
+
+| | accuracy | bytes/vec | |
+|---|---|---|---|
+| twin-ternary, 2 bit/dim, d=256 | **72.0%** | 64 | |
+| binary, 1 bit/dim, d=256 | 69.3% | 32 | |
+| binary, 1 bit/dim, d=512 | 69.3% | 64 | size-matched |
+
+Paired: twin fixed 238, binary fixed 156, **p < 0.0001**. Binary d=256 == d=512
+again — the same saturation, because the extra dimensions carry no information
+under the −1/+1 forcing. Pre-registered with falsifiers; all four predictions
+held. See [doc/EXPERIMENTS.md](doc/EXPERIMENTS.md#test-evaluation-8--pre-registered-does-the-representation-claim-generalise-beyond-iot-routing).
+
 ## On hardware
 
     ESP32-D0WD-V3, 240 MHz, QIO flash @ 80 MHz, stock ESP-IDF v5.5
@@ -384,7 +402,7 @@ The layout, and what parity does *not* cover:
     README.md          you are here
     CHANGELOG.md       what shipped, and what it does not do
     Makefile           every entry point: fetch, demo, route, ship, regress, testset
-    c/src/             the entire shipping system — 9 tools + 8 shared units
+    c/src/             the entire shipping system — 10 tools + 8 shared units
     c/test/            an exhaustive 2^32 popcount proof, a blob-format validator,
                        a firmware-parser guard, and a release-image integrity check
     esp32_router/      five firmwares from one component: PRODUCT (UART in, GPIO

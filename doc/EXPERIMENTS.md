@@ -82,6 +82,7 @@ not a discipline anyone has to remember.
   - [With WiFi running it is 70% resident](#with-wifi-running-it-is-70-resident-not-100) — 9.3 ms under the v1 format. **v2 removed this** — 100% resident and 4.3 ms with the radio associated
 - [#7 pre-registered](#test-evaluation-7--pre-registered-does-boundary-witness-selection-transfer) · [result](#test-evaluation-7--result-no-falsifier-fired-and-the-effect-is-one-event) — direction transferred, magnitude did not: fa 12 -> 11
 - [#6 pre-registered](#test-evaluation-6--pre-registered-does-the-pruning-cost-transfer) · [result](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted) — the invariance transferred; **4 of 4 predictions hit**, fa 8 → 12
+- [#8 pre-registered](#test-evaluation-8--pre-registered-does-the-representation-claim-generalise-beyond-iot-routing) · [result](#test-evaluation-8--result-the-representation-claim-generalises-all-four-predictions-hit) — **4 of 4 predictions hit**, twin 72.0% vs binary 69.3%, p < 0.0001
 
 > Sections are chronological, so later ones sometimes **overturn** earlier ones.
 > Where that happens the earlier text is left standing with the correction
@@ -2538,5 +2539,48 @@ in the same direction, and binary still saturates.
 - **If twin accuracy < 60%**, the representation is too weak for general
   intent classification and the router's scope should be stated as
   "IoT routing, not general intent".
+
+Test budget: 10.
+
+## Test evaluation #8 — RESULT: the representation claim generalises, all four predictions hit
+
+    twin-ternary  d=256  64 B/vec    72.0%  (2142/2974)
+    binary        d=256  32 B/vec    69.3%  (2060/2974)
+    binary        d=512  64 B/vec    69.3%  (2060/2974)  [size-matched]
+
+    paired vs binary d=256:  twin fixed 238, binary fixed 156   p < 0.0001 SIGNIFICANT
+    paired vs binary d=512:  twin fixed 238, binary fixed 156   p < 0.0001 SIGNIFICANT
+
+**The representation claim generalises beyond the 9-class routing problem.**
+Twin-ternary beats binary at matched bytes on 60-class intent classification,
+p < 0.0001 — a stronger signal than the 9-class result (p=0.0288), because
+2974 test items give more power than 220.
+
+**All four predictions held. No falsifier fired.**
+
+### Predictions scored: 4 of 4
+
+| # | predicted | actual | |
+|---|---|---|---|
+| 1 | twin > binary, p < 0.01 | twin +2.7, p < 0.0001 | **hit** |
+| 2 | binary d=256 == d=512 | 69.3% == 69.3%, identical | **hit** |
+| 3 | twin accuracy 68–76% | 72.0% | **hit** |
+| 4 | gap +2–5 (smaller than 9-class +8.6) | +2.7 | **hit** |
+
+The gap narrowed from +8.6 (9-class) to +2.7 (60-class), as predicted: more
+classes means more confusable pairs that no representation can separate, so
+the ceiling drops for both. But the structural property — binary saturates
+because it forces "no evidence" to −1 — holds on 60 classes exactly as it
+holds on 9. Binary d=256 and d=512 are byte-for-byte the same accuracy, because
+the extra 256 dimensions carry no information under the −1/+1 forcing.
+
+### What this establishes
+
+The core claim is no longer "twin-ternary beats binary on 9 IoT intents". It
+is "twin-ternary beats binary at matched bytes, and binary saturates, on
+intent classification" — demonstrated on two tasks (9-class routing and
+60-class NN) on the same corpus, with the same size-matched control, and the
+same structural explanation. The 9-class result is the one the router ships
+on; the 60-class result is the one that says the representation is the cause.
 
 Test budget: 10.

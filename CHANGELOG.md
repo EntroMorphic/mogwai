@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.1.6 — 2026-08-25
+
+**The representation claim generalises beyond 9-class IoT routing.** Pre-registered
+as test evaluation #8 with four predictions and four falsifiers, then run once on
+the held-out test set: all four predictions held, no falsifier fired.
+
+- On all 60 MASSIVE intents (no threshold, no negatives, pure NN accuracy),
+  twin-ternary beats binary at matched bytes: **72.0% vs 69.3%, p < 0.0001**.
+  Binary d=256 == d=512 again — the same saturation. The gap is +2.7 (vs the
+  9-class +8.6), as predicted: more classes means more confusable pairs, so the
+  ceiling drops for both.
+- New tool `c/src/multiclass.c`: 60-class NN evaluation, reuses the router core,
+  no float on the hot path, no Python. Built by the existing Makefile pattern.
+- FRAME.md's "what is genuinely established" now lists the 60-class result.
+
+The search for an independent corpus is documented in EXPERIMENTS.md: SLURP is
+MASSIVE's parent (206/220 verbatim), FSC is independent but its test text is
+entirely in train (100% NN on every representation — tests speaker robustness,
+not the representation), NLU-Eval is MASSIVE's lineage. The 60-class test is
+the same corpus, a harder task.
+
 ## v0.1.5 — 2026-08-25
 
 **First release built entirely under the SHA-pinned supply chain, and flashed to
