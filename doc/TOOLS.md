@@ -31,6 +31,7 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 | `multiclass.c` | 60-class NN accuracy test: twin-ternary vs binary at matched bytes on all MASSIVE intents. `c/bin/multiclass data/train.json data/test.json` |
 | `errdump.c` | diagnostic: dumps every 60-class error with the test text, nearest neighbour, score, and confusion matrix. `c/bin/errdump data/train.json data/test.json --confusion` |
 | `cascade_eval.c` | diagnostic: tests the word-Dice cascade rerank at varying K and alpha on 60-class NN. `c/bin/cascade_eval data/train.json data/validation.json 5` |
+| `choice_probe.c` | runtime-choice research probe: encodes an arbitrary query and candidate descriptions with the current Mogwai encoder, then reports direct scores plus exact top-k neighborhood overlap/class signatures. Diagnostic only: `combo` is not a production decision rule. First step before learned semantic hash or NSW. `c/bin/choice_probe --demo --k=8`; built-in red team: `c/bin/choice_probe --redteam` |
 
 ## Device
 
