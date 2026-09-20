@@ -59,6 +59,7 @@ int main(void) {
     runtime_candidate_t parsed[2];
     int parsed_n = -1;
     size_t written = 999;
+    int32_t score = 12345;
 
     memset(&r, 0, sizeof r);
     memset(many, 0, sizeof many);
@@ -130,6 +131,12 @@ int main(void) {
     chk("empty candidate blob writes", r_runtime_write_candidates(blob, sizeof blob, NULL, 0, &written) == 0 && written == 8);
     chk("empty candidate blob parses without output", r_runtime_parse_candidates(blob, written, NULL, 0, &parsed_n) == 0 && parsed_n == 0);
     chk("nonempty candidate blob needs output", r_runtime_parse_candidates(blob2, sizeof blob2, NULL, 2, &parsed_n) == -1 && parsed_n == 0);
+    chk("code score rejects bad bits", r_runtime_code_score(0, 0, 0, &score) == -1 && r_runtime_code_score(0, 0, 65, &score) == -1 && r_runtime_code_score(0, 0, 1, NULL) == -1);
+    chk("code score exact match", r_runtime_code_score(0x1234, 0x1234, 16, &score) == 0 && score == 256);
+    chk("code score full mismatch one bit", r_runtime_code_score(0, 1, 1, &score) == 0 && score == -256);
+    chk("code score half mismatch", r_runtime_code_score(0x0, 0x3, 4, &score) == 0 && score == 0);
+    chk("code score masks high bits", r_runtime_code_score(0, 0xfffffffffffffff0ull, 4, &score) == 0 && score == 256);
+    chk("code score supports 64 bits", r_runtime_code_score(0, ~0ull, 64, &score) == 0 && score == -256);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;

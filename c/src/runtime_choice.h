@@ -86,5 +86,9 @@ int r_runtime_write_candidates(uint8_t *dst,
                                const runtime_candidate_t *cands,
                                int n_cands,
                                size_t *written);
+int r_runtime_code_score(uint64_t query_code,
+                         uint64_t candidate_code,
+                         int bits,
+                         int32_t *score_out);
 
 #endif

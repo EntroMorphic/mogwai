@@ -57,6 +57,17 @@ static void rtc_put64(uint8_t *p, uint64_t v) {
 }
 static void rtc_puti32(uint8_t *p, int32_t v) { rtc_put32(p, (uint32_t)v); }
 
+int r_runtime_code_score(uint64_t query_code,
+                         uint64_t candidate_code,
+                         int bits,
+                         int32_t *score_out) {
+    if (!score_out || bits < 1 || bits > 64) return -1;
+    uint64_t mask = bits == 64 ? ~0ull : ((1ull << bits) - 1ull);
+    int dist = __builtin_popcountll((query_code ^ candidate_code) & mask);
+    *score_out = ((bits - 2 * dist) * 256) / bits;
+    return 0;
+}
+
 size_t r_runtime_candidates_size(int n_cands) {
     if (n_cands < 0 || n_cands > RUNTIME_CHOICE_MAX_CANDIDATES) return 0;
     return 8 + (size_t)n_cands * RTC_CAND_RECORD_BYTES;
