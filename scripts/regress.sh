@@ -31,7 +31,7 @@ chk "tools+tests build with zero warnings" "$BUILD_N" "0"
 if [ "$BUILD_N" != "0" ]; then
   printf '%s\n' "$BUILD_OUT" | grep -E 'warning|error' | head -20 | sed 's/^/        /'
 fi
-chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "21"
+chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "22"
 
 echo "=== CORPUS ==="
 chk "corpus checksums" "$(shasum -a 256 -c data/SHA256 2>/dev/null | grep -c OK)" "4"
@@ -239,6 +239,7 @@ chk "runtime_choice_bit_loo isolates the late bit" "$(c/bin/runtime_choice_eval 
 chk "runtime_choice production parity proves frozen cases" "$(c/bin/runtime_choice_eval --production-parity 2>/dev/null | grep -c '^RUNTIME_CHOICE_PRODUCTION_PARITY checks=4/4 score=100/100$')" "1"
 chk "runtime_choice production API fails closed" "$(c/bin/runtime_choice_api 2>/dev/null | grep -c '^RUNTIME_CHOICE_API checks=90/90$')" "1"
 chk "runtime_choice production promotion cases pass" "$(c/bin/runtime_choice_promotion 2>/dev/null | grep -c '^RUNTIME_CHOICE_PROMOTION checks=15/15$')" "1"
+chk "runtime_choice device parity and budget pins pass" "$(c/bin/runtime_choice_device 2>/dev/null | grep -c '^RUNTIME_CHOICE_DEVICE checks=9/9$')" "1"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that
 # claim was first checked.

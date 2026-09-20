@@ -269,12 +269,20 @@ Acceptance gates:
 
 ### P0.7 Add Firmware and Blob Regression Pins
 
-Status: **started**. The `RTC1` parser and writer are now regression-pinned for
+Status: **complete for host firmware-equivalent promotion**. The `RTC1` parser and writer are now regression-pinned for
 exact EOF, bad counts, missing output storage, reserved bytes, text termination,
 hidden trailing text, factor/value mismatches, unknown factor bits, and invalid
 polarity/color/composition/support enum values. `RTC1` has no offsets, so offset
 corruption is structurally not applicable to this format. The maximum serialized
 candidate-set size is pinned as `RTC_CAND_MAX_BYTES == 9000` bytes.
+
+`c/test/runtime_choice_device.c` is the firmware-equivalent runtime-choice parity
+pin. It exercises the same C scorer/parser used by firmware-compatible builds at
+the worst-case candidate count (`32`), pins exact selected candidate, `NONE`,
+score, runner-up, margin, refusal reason, factor refusal reason, `RTC1`
+round-trip parity, and a deterministic score-work ceiling of `32 * 64 == 2048`
+bit comparisons. Physical ESP32 flash/monitor remains a separate hardware check,
+matching the repository's existing policy for board-attached validation.
 
 Deliverable: regression checks equivalent in seriousness to the current blob and
 router guardrails.

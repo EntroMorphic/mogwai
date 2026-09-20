@@ -68,6 +68,7 @@ signature, which is why `make tools` now exists.
 | `imgcheck.c` | the flashable image contains the **shipped blob, verbatim** — not a checksum of the image (which says nothing about its contents) and not the header alone (which survives a corrupted body). Release-time integrity: nothing else in the build → embed → merge chain checks that what came out is what went in |
 | `runtime_choice_api.c` | the production runtime-choice API boundary fails closed: malformed inputs reject, empty sets abstain, and valid calls return unsupported until the scorer is promoted |
 | `runtime_choice_promotion.c` | P0 production-promotion runtime-choice cases over explicit query/candidate records: expected winners and expected factor-refusal attribution |
+| `runtime_choice_device.c` | firmware-equivalent runtime-choice parity and budget pins: worst-case 32-candidate flat scoring, `RTC1` round-trip parity, exact score/margin/reason, and serialized/operation ceilings |
 | `scripts/verify-release.sh` | downloads a **published** release, checks the published sha256 describes the published bytes, erases the chip, flashes it, and asserts the board comes up 100% resident with 0 MISMATCHED, actuates on a known command at the expected score, and rejects a non-command. Appends to `results/RELEASE_VERIFIED.tsv`, which `regress.sh` checks has a row for every tag |
 
 ## Compile-time switches

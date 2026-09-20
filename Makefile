@@ -127,8 +127,12 @@ $(BIN)/runtime_choice_promotion: c/test/runtime_choice_promotion.c $(SRC)/runtim
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/runtime_choice_promotion.c $(SRC)/runtime_choice.c $(SRC)/router.c $(LDLIBS)
 
+$(BIN)/runtime_choice_device: c/test/runtime_choice_device.c $(SRC)/runtime_choice.c $(SRC)/runtime_choice.h $(SRC)/router.c $(SRC)/router.h
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -o $@ c/test/runtime_choice_device.c $(SRC)/runtime_choice.c $(SRC)/router.c $(LDLIBS)
+
 .PHONY: tools
-tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard $(BIN)/imgcheck $(BIN)/runtime_choice_api $(BIN)/runtime_choice_promotion
+tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard $(BIN)/imgcheck $(BIN)/runtime_choice_api $(BIN)/runtime_choice_promotion $(BIN)/runtime_choice_device
 	@echo "  all tools + tests built: $$(ls $(BIN) | tr '\n' ' ')"
 
 # Full host regression. Run after any structural change.
