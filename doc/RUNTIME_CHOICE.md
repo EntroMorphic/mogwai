@@ -166,15 +166,18 @@ goes through a separate blind holdout mode:
 The holdout reports attribution so perfect accuracy cannot hide rule dependence:
 
 ```text
-attribution learned_accept=0 learned_reject=0 topology_rescue=0 operator_factor=7 hard_ood_veto=5 residual_rescue=0 wrong=0
+attribution learned_accept=1 learned_reject=0 topology_rescue=0 operator_factor=7 hard_ood_veto=8 residual_rescue=1 wrong=0
 ```
 
-On the first 12-case blind holdout, polarity-aware semhash direct, semhash
-neighborhood, and residual all reach `12/12`, with `7/7` learned in-domain
-coverage and `5/5` OOD rejection. The holdout did expose one real gap before
-pinning: `avoid increasing ...` was not recognized as an upward brightness axis
-because `increasing` was missing from the factorized polarity vocabulary. That
-was remediated at the axis level rather than by adding a phrase seed.
+On the current 17-case blind holdout, residual reaches `17/17`, while
+polarity-aware semhash direct and semhash neighborhood reach `16/17`, with `8/9`
+learned in-domain coverage and `8/8` OOD rejection. The holdout exposed two real
+gaps before pinning: `avoid increasing ...` was not recognized as an upward
+brightness axis because `increasing` was missing from the factorized polarity
+vocabulary, and `activate the hallway lamps` still needs residual rescue rather
+than learned support. Metaphorical OOD cases such as `brighten my day`,
+`increase the account balance`, and `dim the appetite` are counted as hard OOD
+vetoes, not learned rejects.
 
 For atomic failure analysis:
 
