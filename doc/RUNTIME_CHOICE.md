@@ -134,12 +134,12 @@ compatibility, gated by the existing `none` manifold basin and a conservative
 query-knownness floor for low-energy OOD queries. The learned projection also
 receives a tiny audited seed set of bridge positives and hard OOD negatives;
 these seeds update only the host learned weights and are not inserted into the
-exact top-k index. Red-team expansion added a
-negation polarity case and a near-class OOD case (`light rail refund`) that uses
-IoT vocabulary but should still be `NONE`. The residual path gets the current
-ten-case probe to `10/10`, preserves `NONE` on all three OOD cases, and removes
-polarity failures. After seeded projection, `semhash_neighborhood` also reaches
-`10/10` on this probe.
+exact top-k index. Red-team expansion now includes holdout bridge, contraction
+negation, and near-class OOD cases. The residual path gets the current
+thirteen-case probe to `13/13`, preserves `NONE` on all four OOD cases, and
+removes polarity failures. After seeded projection, `semhash_neighborhood`
+reaches `12/13`; its miss is the contraction-negation holdout, where learned
+semhash gates to `NONE` but residual polarity still selects correctly.
 
 The evaluator has a built-in red team:
 
@@ -150,9 +150,9 @@ For atomic failure analysis:
     c/bin/runtime_choice_eval --details
 
 It pins case validity, neighborhood improvements, collision-rate invariance
-across abstain gates, negation handling, near-class OOD abstention, abstain
-reachability cleanup, reachability accounting, and out-of-domain wrong-act
-accounting.
+across abstain gates, negation handling including normalized `don't` -> `don t`,
+near-class OOD abstention, abstain reachability cleanup, reachability
+accounting, and out-of-domain wrong-act accounting.
 
 ## Atomic floor
 
@@ -170,7 +170,7 @@ Measured floor before seeded projection:
 | 8 | Negated query has `qpol=-1`; raw/topology/semhash all choose `on`; residual chooses `off` because polarity compatibility is `+80` for off and `-120` for on | Polarity is an independent action factor, not something general similarity handles safely. |
 | 9 | Query `light rail refund` has `knownness=98`, below `RESIDUAL_KNOWN_GATE=120`; all non-residual variants choose candidate 2, residual gates to `NONE` | Near-class OOD remains the hard OOD floor; query-knownness is currently the measured guardrail. |
 
-Seeded projection lifts that floor on the current ten-case probe:
+Seeded projection lifted that floor on the ten-case probe:
 
 | Case | Exact measurement after seeding | Meaning |
 |---:|---|---|
@@ -178,6 +178,13 @@ Seeded projection lifts that floor on the current ten-case probe:
 | 5 | Query semhash prediction becomes `none`; all learned variants gate to `NONE` | The original OOD collapse is fixed on this probe. |
 | 9 | Query semhash prediction becomes `none`; learned variants gate to `NONE`, and residual also gates by `knownness=98 < 120` | Near-class OOD is protected both by learned `none` and by the residual knownness guard. |
 
-The current floor is no longer this ten-case probe. The next floor must be found
-by expanding adversarial bridges, OOD negatives, and polarity/negation cases
-until one of those guarantees breaks under measurement.
+The current thirteen-case red team found the next floor:
+
+| Case | Exact measurement | Meaning |
+|---:|---|---|
+| 11 | Query `please don't brighten the hallway` normalizes contraction negation to `don t`; residual now parses `qpol=-1` and chooses `dim`, but `semhash_direct` and `semhash_neighborhood` gate to `NONE`; residual winner has `reachable=no` | Correctness is restored by explicit polarity, but the learned representation has not yet bridged contraction-negation phrasing. |
+| 12 | Query `refund the light rail pass` has `knownness=117 < 120`; semhash predicts `none`, and residual gates to `NONE` | Near-class OOD remains protected after the holdout expansion. |
+
+The current floor is therefore contraction-negation reachability: make case 11
+reachable in learned-code space without weakening the `NONE` and knownness gates
+that protect cases 5, 6, 9, and 12.

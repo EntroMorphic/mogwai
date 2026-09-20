@@ -223,7 +223,7 @@ chk "--route output is clean (no diagnostics at all)" \
 chk "choice_probe red-team passes 100/100" "$(c/bin/choice_probe --redteam 2>/dev/null | grep -c '^REDTEAM checks=27/27 score=100/100$')" "1"
 chk "semhash_probe red-team passes 100/100" "$(c/bin/semhash_probe --redteam 2>/dev/null | grep -c '^SEMHASH_REDTEAM checks=15/15 score=100/100$')" "1"
 chk "runtime_choice_eval reports architecture decision" "$(c/bin/runtime_choice_eval 2>/dev/null | grep -c '^decision: residual_combo beats the current champion; keep combined evidence and expand the adversarial set\.$')" "1"
-chk "runtime_choice_eval red-team passes 100/100" "$(c/bin/runtime_choice_eval --redteam 2>/dev/null | grep -c '^RUNTIME_CHOICE_EVAL_REDTEAM checks=47/47 score=100/100$')" "1"
+chk "runtime_choice_eval red-team passes 100/100" "$(c/bin/runtime_choice_eval --redteam 2>/dev/null | grep -c '^RUNTIME_CHOICE_EVAL_REDTEAM checks=57/57 score=100/100$')" "1"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that
 # claim was first checked.

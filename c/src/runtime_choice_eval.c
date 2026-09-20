@@ -54,7 +54,13 @@ static testcase_t CASES[] = {
     {"do not turn on the bedroom lights", "polarity,negation,unbridged", 1, 3,
      {"turn the bedroom lights on", "turn the bedroom lights off", "make the bedroom brighter"}},
     {"light rail refund", "out-of-domain,near-class-negative", -1, 3,
-     {"turn the lights off", "change the lights to red", "issue a rail refund"}}
+     {"turn the lights off", "change the lights to red", "issue a rail refund"}},
+    {"make the lounge less bright", "paraphrase,polarity,holdout-bridge", 0, 3,
+     {"lower the brightness in the lounge", "raise the brightness in the lounge", "turn the lounge lights off"}},
+    {"please don't brighten the hallway", "polarity,negation,holdout", 1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"refund the light rail pass", "out-of-domain,near-class-negative,holdout", -1, 3,
+     {"turn the light off", "change the light to red", "issue a transit refund"}}
 };
 
 static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
@@ -135,7 +141,7 @@ static int has_word(const char *text,const char *word){
 
 static int polarity(const char *text){
     int up=0,down=0;
-    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don't")||has_word(text,"do not")||has_word(text,"never");
+    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"don't")||has_word(text,"do not")||has_word(text,"never");
     const char *ups[]={"increase","raise","brighter","brighten","bright","on",NULL};
     const char *downs[]={"decrease","lower","dim","dimmer","dark","darker","darken","less","off",NULL};
     for(int i=0;ups[i];i++) if(has_word(text,ups[i])) up=1;
@@ -302,7 +308,7 @@ static void rt(const char *name,int ok){ rt_total++; if(ok)rt_pass++; else print
 
 static int redteam(void){
     int n=(int)(sizeof CASES/sizeof CASES[0]);
-    rt("case count pinned",n==10);
+    rt("case count pinned",n==13);
     for(int i=0;i<n;i++){
         rt("case has enough choices",CASES[i].nc>=2&&CASES[i].nc<=MAXC);
         rt("correct index valid or NONE",CASES[i].correct==-1||(CASES[i].correct>=0&&CASES[i].correct<CASES[i].nc));
@@ -317,13 +323,15 @@ static int redteam(void){
     rt("reachable-not-selected still visible before NSW",st[2].r_not_sel>0);
     rt("semhash neighborhood reduces selected-not-reachable",st[3].sel_not_r<st[0].sel_not_r);
     rt("semhash neighborhood no longer wrong-acts on OOD",st[3].wrong==0);
-    rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==3);
+    rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==4);
     rt("residual handles added negation and near-class OOD",st[4].ok==n&&st[4].wrong==0&&st[4].miss==0);
     decision_t bridge_sem=decide(&CASES[3],3), bridge_res=decide(&CASES[3],4);
     rt("seeded semhash creates case3 reachability",bridge_sem.winner==CASES[3].correct&&bridge_sem.reachable==1);
     rt("residual preserves case3 reachability",bridge_res.winner==CASES[3].correct&&bridge_res.reachable==1);
     decision_t neg=decide(&CASES[8],4), near_ood=decide(&CASES[9],4);
     rt("residual negation chooses off",neg.winner==CASES[8].correct);
+    neg=decide(&CASES[11],4);
+    rt("residual contraction negation chooses dim",neg.winner==CASES[11].correct);
     rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
     rt("near-class OOD abstains",near_ood.winner==-1);
     rt("near-class OOD abstain is not reachable",near_ood.reachable==0);
