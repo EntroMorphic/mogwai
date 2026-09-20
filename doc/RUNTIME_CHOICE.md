@@ -198,6 +198,19 @@ path. The first code-width red-team added non-lighting semantic-code probes
 1 through 20 bits now lose at least one case, and 21 through 64 bits preserve all
 frozen/holdout behavior.
 
+The bit-width cliff is explained by:
+
+    c/bin/runtime_choice_eval --bit-forensic
+
+The final failing width is pinned as:
+
+```text
+BIT_FLOOR_FAIL bits=20 set=holdout_c case=10 correct=0 winner=1 query="clean the flat" winner_text="make coffee"
+```
+
+So the transition from 20 to 21 bits is currently the semantic-code separation
+between cleaning and coffee, not a lighting or referent-binding failure.
+
 The evaluator has a built-in red team:
 
     c/bin/runtime_choice_eval --redteam

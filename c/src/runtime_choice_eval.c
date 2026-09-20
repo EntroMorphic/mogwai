@@ -832,14 +832,53 @@ static int bit_floor_sweep(void){
     return 0;
 }
 
-static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam|--floor|--bit-floor]\n"); }
+static void note_bit_failure(const testcase_t *cases,int n,const char *set,int bits,int *seen){
+    if(*seen) return;
+    for(int i=0;i<n;i++){
+        decision_t d=decide(&cases[i],2);
+        int ok=(cases[i].correct<0) ? d.winner<0 : d.winner==cases[i].correct;
+        if(!ok){
+            const char *winner=d.winner<0 ? "NONE" : cases[i].choice[d.winner];
+            printf("BIT_FLOOR_FAIL bits=%d set=%s case=%d correct=%d winner=%d query=\"%s\" winner_text=\"%s\" score=%d margin=%d knownness=%d locrej=%d\n",
+                   bits,set,i,cases[i].correct,d.winner,cases[i].query,winner,d.score,d.margin,d.knownness,d.location_reject);
+            *seen=1;
+            return;
+        }
+    }
+}
+
+static int bit_floor_forensic(void){
+    int save_bits=CODE_BITS, save_factors=FACTORS;
+    FACTORS=FF_ALL;
+    printf("runtime_choice_bit_forensic topology_free_direct max_bits=%d\n",HD);
+    printf("bits\tfrozen_wrong\ta_wrong\tb_wrong\tc_wrong\ttotal_wrong\tmiss\tlearned\tin_domain\n");
+    for(int bits=1;bits<=HD;bits++){
+        stats_t base[5], a[5], b[5], c[5]; attr_t aa,bb,cc; int seen=0;
+        CODE_BITS=bits;
+        int nb=eval_all(base,0), na=eval_holdout(a,&aa,0), nbb=eval_holdout_b(b,&bb,0), nc=eval_holdout_c(c,&cc,0);
+        int wrong=base[2].wrong+a[2].wrong+b[2].wrong+c[2].wrong;
+        int miss=base[2].miss+a[2].miss+b[2].miss+c[2].miss;
+        int learned=base[2].learned_reachable+a[2].learned_reachable+b[2].learned_reachable+c[2].learned_reachable;
+        int ind=in_domain_cases()+in_domain_set(HOLDOUT,na)+in_domain_set(HOLDOUT_B,nbb)+in_domain_set(HOLDOUT_C,nc);
+        printf("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",bits,base[2].wrong,a[2].wrong,b[2].wrong,c[2].wrong,wrong,miss,learned,ind);
+        note_bit_failure(CASES,nb,"frozen",bits,&seen);
+        note_bit_failure(HOLDOUT,na,"holdout_a",bits,&seen);
+        note_bit_failure(HOLDOUT_B,nbb,"holdout_b",bits,&seen);
+        note_bit_failure(HOLDOUT_C,nc,"holdout_c",bits,&seen);
+    }
+    CODE_BITS=save_bits; FACTORS=save_factors;
+    printf("RUNTIME_CHOICE_BIT_FORENSIC done=64\n");
+    return 0;
+}
+
+static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam|--floor|--bit-floor|--bit-forensic]\n"); }
 
 int main(int argc,char **argv){
     const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
-    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,floor=0,bit_floor=0,arg=1;
+    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,floor=0,bit_floor=0,bit_forensic=0,arg=1;
     if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
-    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else if(!strcmp(argv[i],"--floor"))floor=1; else if(!strcmp(argv[i],"--bit-floor"))bit_floor=1; else {usage();return 1;} }
-    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red+floor+bit_floor>1){usage();return 1;}
+    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else if(!strcmp(argv[i],"--floor"))floor=1; else if(!strcmp(argv[i],"--bit-floor"))bit_floor=1; else if(!strcmp(argv[i],"--bit-forensic"))bit_forensic=1; else {usage();return 1;} }
+    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red+floor+bit_floor+bit_forensic>1){usage();return 1;}
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash(); train_seeded_projection();
     if(red)return redteam();
     if(holdout_red)return holdout_redteam();
@@ -847,6 +886,7 @@ int main(int argc,char **argv){
     if(holdout_c_red)return holdout_c_redteam();
     if(floor)return floor_sweep();
     if(bit_floor)return bit_floor_sweep();
+    if(bit_forensic)return bit_floor_forensic();
     if(details){dump_details();return 0;}
     if(holdout_c){
         stats_t st[5]; attr_t attr; int n=eval_holdout_c(st,&attr,1); int in_domain=in_domain_set(HOLDOUT_C,n);

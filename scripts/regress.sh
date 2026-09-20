@@ -229,6 +229,7 @@ chk "runtime_choice_holdout_b red-team passes 100/100" "$(c/bin/runtime_choice_e
 chk "runtime_choice_holdout_c red-team passes 100/100" "$(c/bin/runtime_choice_eval --holdout-c-redteam 2>/dev/null | grep -c '^RUNTIME_CHOICE_HOLDOUT_C_REDTEAM checks=51/51 score=100/100$')" "1"
 chk "runtime_choice_floor pins the factor floor" "$(c/bin/runtime_choice_eval --floor 2>/dev/null | grep -c '^RUNTIME_CHOICE_FLOOR passing_masks=1/32$')" "1"
 chk "runtime_choice_bit_floor pins semhash width" "$(c/bin/runtime_choice_eval --bit-floor 2>/dev/null | grep -c '^RUNTIME_CHOICE_BIT_FLOOR min_bits=21 passing=44/64$')" "1"
+chk "runtime_choice_bit_forensic explains the cliff" "$(c/bin/runtime_choice_eval --bit-forensic 2>/dev/null | grep -c '^BIT_FLOOR_FAIL bits=20 set=holdout_c case=10 correct=0 winner=1 query="clean the flat" winner_text="make coffee"')" "1"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that
 # claim was first checked.
