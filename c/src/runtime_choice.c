@@ -58,6 +58,22 @@ int r_choose_runtime(const router_t *r,
             rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
             return -1;
         }
+        if (cands[i].polarity < RTC_POLARITY_NEGATIVE || cands[i].polarity > RTC_POLARITY_POSITIVE) {
+            rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
+            return -1;
+        }
+        if (cands[i].color > RTC_COLOR_BLUE) {
+            rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
+            return -1;
+        }
+        if (cands[i].composition & ~RTC_COMP_KNOWN_MASK) {
+            rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
+            return -1;
+        }
+        if (cands[i].support > RTC_SUPPORT_OOD) {
+            rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
+            return -1;
+        }
     }
 
     /* P0 scaffold only: until the flat semhash+factor scorer is promoted behind

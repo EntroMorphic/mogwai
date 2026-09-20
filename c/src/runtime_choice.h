@@ -14,6 +14,25 @@
 #define RTC_FACTOR_SUPPORT     0x10u
 #define RTC_FACTOR_KNOWN_MASK  (RTC_FACTOR_POLARITY|RTC_FACTOR_COLOR|RTC_FACTOR_COMPOSITION|RTC_FACTOR_LOCATION|RTC_FACTOR_SUPPORT)
 
+#define RTC_POLARITY_NEGATIVE (-1)
+#define RTC_POLARITY_NONE       0
+#define RTC_POLARITY_POSITIVE   1
+
+#define RTC_COLOR_NONE 0u
+#define RTC_COLOR_RED  1u
+#define RTC_COLOR_BLUE 2u
+
+#define RTC_COMP_LIGHTING    0x01u
+#define RTC_COMP_ACTIVATION  0x02u
+#define RTC_COMP_KNOWN_MASK  (RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION)
+
+#define RTC_LOCATION_NONE 0u
+
+#define RTC_SUPPORT_UNKNOWN     0u
+#define RTC_SUPPORT_SUPPORTED   1u
+#define RTC_SUPPORT_UNSUPPORTED 2u
+#define RTC_SUPPORT_OOD         3u
+
 typedef enum {
     RTC_REASON_OK = 0,
     RTC_REASON_NONE_NO_CANDIDATES,
@@ -30,6 +49,11 @@ typedef struct {
     int32_t sem_score;
     /* Bitset of RTC_FACTOR_* values. Unknown bits are malformed input. */
     uint32_t factor_flags;
+    int8_t polarity;
+    uint8_t color;
+    uint8_t composition;
+    uint8_t location_id;
+    uint8_t support;
 } runtime_candidate_t;
 
 typedef struct {

@@ -86,8 +86,10 @@ Acceptance gates:
 
 ### P0.2 Freeze the Runtime Candidate Format
 
-Status: **started**. `runtime_candidate_t` now has bounded text, a 64-bit
-semantic code, a semantic score, and named factor bits. Unknown factor bits are
+Status: **format fields frozen, parser/serialization not done**.
+`runtime_candidate_t` now has bounded text, a 64-bit semantic code, semantic
+score, named factor bits, explicit polarity, color, composition, location id,
+and support state. Unknown factor bits or out-of-range factor values are
 malformed input and fail closed.
 
 Red-team iteration 2026-09-20: empty query/candidate text is malformed,

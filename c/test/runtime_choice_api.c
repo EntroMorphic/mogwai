@@ -19,12 +19,16 @@ int main(void) {
     router_t r;
     runtime_choice_t out;
     runtime_choice_t out2;
-    runtime_candidate_t one[1] = {{"make coffee", 0, 0, 0}};
-    runtime_candidate_t dup[2] = {{"make coffee", 1, 2, RTC_FACTOR_POLARITY}, {"make coffee", 1, 2, RTC_FACTOR_POLARITY}};
-    runtime_candidate_t perm_a[2] = {{"make coffee", 1, 2, RTC_FACTOR_POLARITY}, {"clean the flat", 3, 4, RTC_FACTOR_SUPPORT}};
-    runtime_candidate_t perm_b[2] = {{"clean the flat", 3, 4, RTC_FACTOR_SUPPORT}, {"make coffee", 1, 2, RTC_FACTOR_POLARITY}};
-    runtime_candidate_t empty_text[1] = {{"", 0, 0, 0}};
-    runtime_candidate_t bad_flags[1] = {{"make coffee", 0, 0, 0x80000000u}};
+    runtime_candidate_t one[1] = {{"make coffee", 0, 0, 0, 0, 0, 0, 0, 0}};
+    runtime_candidate_t dup[2] = {{"make coffee", 1, 2, RTC_FACTOR_POLARITY, 1, 0, 0, 0, 0}, {"make coffee", 1, 2, RTC_FACTOR_POLARITY, 1, 0, 0, 0, 0}};
+    runtime_candidate_t perm_a[2] = {{"make coffee", 1, 2, RTC_FACTOR_POLARITY, 1, 0, 0, 0, 0}, {"clean the flat", 3, 4, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED}};
+    runtime_candidate_t perm_b[2] = {{"clean the flat", 3, 4, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED}, {"make coffee", 1, 2, RTC_FACTOR_POLARITY, 1, 0, 0, 0, 0}};
+    runtime_candidate_t empty_text[1] = {{"", 0, 0, 0, 0, 0, 0, 0, 0}};
+    runtime_candidate_t bad_flags[1] = {{"make coffee", 0, 0, 0x80000000u, 0, 0, 0, 0, 0}};
+    runtime_candidate_t bad_pol[1] = {{"make coffee", 0, 0, RTC_FACTOR_POLARITY, 2, 0, 0, 0, 0}};
+    runtime_candidate_t bad_color[1] = {{"make coffee", 0, 0, RTC_FACTOR_COLOR, 0, 99, 0, 0, 0}};
+    runtime_candidate_t bad_comp[1] = {{"make coffee", 0, 0, RTC_FACTOR_COMPOSITION, 0, 0, 0x80, 0, 0}};
+    runtime_candidate_t bad_support[1] = {{"make coffee", 0, 0, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, 99}};
     runtime_candidate_t many[RUNTIME_CHOICE_MAX_CANDIDATES + 1];
     char too_long[RUNTIME_CHOICE_MAX_TEXT + 2];
 
@@ -45,9 +49,13 @@ int main(void) {
     chk("missing candidate text rejected", r_choose_runtime(&r, "x", &(runtime_candidate_t){0}, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
     chk("empty candidate text rejected", r_choose_runtime(&r, "x", empty_text, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
     chk("unknown factor flags rejected", r_choose_runtime(&r, "x", bad_flags, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("bad polarity rejected", r_choose_runtime(&r, "x", bad_pol, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("bad color rejected", r_choose_runtime(&r, "x", bad_color, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("bad composition rejected", r_choose_runtime(&r, "x", bad_comp, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("bad support rejected", r_choose_runtime(&r, "x", bad_support, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
     chk("empty query rejected", r_choose_runtime(&r, "", one, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_QUERY && out.winner == -1);
     chk("overlong query rejected", r_choose_runtime(&r, too_long, one, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_QUERY && out.winner == -1);
-    chk("overlong candidate rejected", r_choose_runtime(&r, "x", &(runtime_candidate_t){too_long, 0, 0, 0}, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("overlong candidate rejected", r_choose_runtime(&r, "x", &(runtime_candidate_t){too_long, 0, 0, 0, 0, 0, 0, 0, 0}, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
     chk("duplicate candidates accepted before scoring", r_choose_runtime(&r, "brew espresso", dup, 2, &out) == 0 && out.reason == RTC_REASON_UNSUPPORTED_SCORER && out.winner == -1);
     chk("non-scoring outcome order invariant", r_choose_runtime(&r, "brew espresso", perm_a, 2, &out) == 0 && r_choose_runtime(&r, "brew espresso", perm_b, 2, &out2) == 0 && same_none(out, out2));
     chk("reason names are stable", !strcmp(r_runtime_reason_name(RTC_REASON_UNSUPPORTED_SCORER), "unsupported_scorer") && !strcmp(r_runtime_reason_name((runtime_choice_reason_t)999), "unknown"));
