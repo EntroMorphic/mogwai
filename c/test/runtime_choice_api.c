@@ -55,8 +55,10 @@ int main(void) {
     runtime_candidate_t many[RUNTIME_CHOICE_MAX_CANDIDATES + 1];
     char too_long[RUNTIME_CHOICE_MAX_TEXT + 2];
     uint8_t blob[8 + 2 * RTC_CAND_RECORD_BYTES + 1];
+    uint8_t blob2[8 + 2 * RTC_CAND_RECORD_BYTES];
     runtime_candidate_t parsed[2];
     int parsed_n = -1;
+    size_t written = 999;
 
     memset(&r, 0, sizeof r);
     memset(many, 0, sizeof many);
@@ -116,6 +118,12 @@ int main(void) {
     make_blob(blob, 1);
     put32(blob + 8 + 12, 0);
     chk("candidate blob factor mismatch rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    chk("candidate blob size helper", r_runtime_candidates_size(2) == 8 + 2 * RTC_CAND_RECORD_BYTES && r_runtime_candidates_size(-1) == 0 && r_runtime_candidates_size(RUNTIME_CHOICE_MAX_CANDIDATES + 1) == 0);
+    chk("candidate blob writer rejects small buffer", r_runtime_write_candidates(blob2, sizeof blob2 - 1, perm_a, 2, &written) == -2 && written == 0);
+    chk("candidate blob writer rejects malformed", r_runtime_write_candidates(blob2, sizeof blob2, hidden_pol, 1, &written) == -3 && written == 0);
+    chk("candidate blob writer round trips", r_runtime_write_candidates(blob2, sizeof blob2, perm_a, 2, &written) == 0 && written == 8 + 2 * RTC_CAND_RECORD_BYTES && r_runtime_parse_candidates(blob2, written, parsed, 2, &parsed_n) == 0 && parsed_n == 2 && parsed[0].sem_code == perm_a[0].sem_code && parsed[1].support == perm_a[1].support && !strcmp(parsed[1].text, perm_a[1].text));
+    memset(blob, 0xff, sizeof blob);
+    chk("candidate blob writer zero pads", r_runtime_write_candidates(blob, sizeof blob, one, 1, &written) == 0 && blob[8 + 24 + strlen(one[0].text) + 1] == 0 && blob[8 + 21] == 0 && blob[8 + 22] == 0 && blob[8 + 23] == 0);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;

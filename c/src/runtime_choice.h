@@ -80,5 +80,11 @@ int r_runtime_parse_candidates(const uint8_t *base,
                                runtime_candidate_t *out,
                                int cap,
                                int *n_out);
+size_t r_runtime_candidates_size(int n_cands);
+int r_runtime_write_candidates(uint8_t *dst,
+                               size_t cap,
+                               const runtime_candidate_t *cands,
+                               int n_cands,
+                               size_t *written);
 
 #endif

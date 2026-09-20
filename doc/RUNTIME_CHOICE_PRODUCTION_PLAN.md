@@ -86,7 +86,7 @@ Acceptance gates:
 
 ### P0.2 Freeze the Runtime Candidate Format
 
-Status: **format fields frozen, parser/serialization not done**.
+Status: **complete for the candidate data contract**.
 `runtime_candidate_t` now has bounded text, a 64-bit semantic code, semantic
 score, named factor bits, explicit polarity, color, composition, location id,
 and support state. Unknown factor bits or out-of-range factor values are
@@ -98,6 +98,8 @@ parser is bounded and allocation-free: exact EOF is required, candidate count is
 capped by `RUNTIME_CHOICE_MAX_CANDIDATES`, every fixed-size record contains a
 NUL-terminated zero-padded text field, reserved bytes must be zero, and parsed
 records pass the same candidate validator as direct API calls.
+`r_runtime_write_candidates()` is the deterministic C encoder for the same
+format, and round-trip tests pin writer/parser equivalence.
 
 Red-team iteration 2026-09-20: factor flags and factor values must now agree
 exactly. A value without its flag, or a flag with the neutral value, is malformed

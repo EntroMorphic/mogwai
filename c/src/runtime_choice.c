@@ -43,6 +43,44 @@ static int rtc_validate_candidate(const runtime_candidate_t *c) {
 static uint32_t rtc_u32(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return v; }
 static uint64_t rtc_u64(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return v; }
 static int32_t rtc_i32(const uint8_t *p) { int32_t v; memcpy(&v, p, 4); return v; }
+static void rtc_put32(uint8_t *p, uint32_t v) { memcpy(p, &v, 4); }
+static void rtc_put64(uint8_t *p, uint64_t v) { memcpy(p, &v, 8); }
+static void rtc_puti32(uint8_t *p, int32_t v) { memcpy(p, &v, 4); }
+
+size_t r_runtime_candidates_size(int n_cands) {
+    if (n_cands < 0 || n_cands > RUNTIME_CHOICE_MAX_CANDIDATES) return 0;
+    return 8 + (size_t)n_cands * RTC_CAND_RECORD_BYTES;
+}
+
+int r_runtime_write_candidates(uint8_t *dst,
+                               size_t cap,
+                               const runtime_candidate_t *cands,
+                               int n_cands,
+                               size_t *written) {
+    if (written) *written = 0;
+    if (!dst || !cands || !written) return -1;
+    size_t need = r_runtime_candidates_size(n_cands);
+    if (!need || need > cap) return -2;
+    for (int i = 0; i < n_cands; i++) if (!rtc_validate_candidate(&cands[i])) return -3;
+
+    memset(dst, 0, need);
+    rtc_put32(dst, RTC_CAND_MAGIC);
+    rtc_put32(dst + 4, (uint32_t)n_cands);
+    uint8_t *p = dst + 8;
+    for (int i = 0; i < n_cands; i++, p += RTC_CAND_RECORD_BYTES) {
+        rtc_put64(p, cands[i].sem_code);
+        rtc_puti32(p + 8, cands[i].sem_score);
+        rtc_put32(p + 12, cands[i].factor_flags);
+        p[16] = (uint8_t)cands[i].polarity;
+        p[17] = cands[i].color;
+        p[18] = cands[i].composition;
+        p[19] = cands[i].location_id;
+        p[20] = cands[i].support;
+        memcpy(p + 24, cands[i].text, strlen(cands[i].text) + 1);
+    }
+    *written = need;
+    return 0;
+}
 
 int r_runtime_parse_candidates(const uint8_t *base,
                                size_t have,
