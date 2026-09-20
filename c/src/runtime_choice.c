@@ -26,12 +26,18 @@ int r_choose_runtime(const router_t *r,
         return -1;
     }
 
-    if (strnlen(query, RUNTIME_CHOICE_MAX_TEXT + 1) > RUNTIME_CHOICE_MAX_TEXT) {
-        rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
+    size_t qlen = strnlen(query, RUNTIME_CHOICE_MAX_TEXT + 1);
+    if (qlen == 0 || qlen > RUNTIME_CHOICE_MAX_TEXT) {
+        rtc_none(out, RTC_REASON_MALFORMED_QUERY);
         return -1;
     }
     for (int i = 0; i < n_cands; i++) {
-        if (!cands[i].text || strnlen(cands[i].text, RUNTIME_CHOICE_MAX_TEXT + 1) > RUNTIME_CHOICE_MAX_TEXT) {
+        if (!cands[i].text) {
+            rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
+            return -1;
+        }
+        size_t clen = strnlen(cands[i].text, RUNTIME_CHOICE_MAX_TEXT + 1);
+        if (clen == 0 || clen > RUNTIME_CHOICE_MAX_TEXT) {
             rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
             return -1;
         }

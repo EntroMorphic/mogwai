@@ -87,6 +87,11 @@ Status: **started**. `runtime_candidate_t` now has bounded text, a 64-bit
 semantic code, a semantic score, and named factor bits. Unknown factor bits are
 malformed input and fail closed.
 
+Red-team iteration 2026-09-20: empty query/candidate text is malformed,
+overlong query text now reports `RTC_REASON_MALFORMED_QUERY` instead of a
+candidate failure, nonzero `n_cands` with `NULL` candidates rejects, and maximum
+candidate count is pinned as accepted-but-unsupported until the scorer ships.
+
 Deliverable: a compact candidate representation that can be supplied per request
 or serialized into a runtime-choice blob.
 
