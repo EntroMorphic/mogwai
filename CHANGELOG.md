@@ -252,8 +252,10 @@ booting it with nothing else on the flash.
 - **Nine IoT intents** from a public dataset. Not a general NLU.
 - **0.44% false actuations** on held-out negatives. Real, deliberate, and the
   price of pruning the index to fit SRAM.
-- **One board.** ESP32-D0WD-V3 only; the popcount table, DRAM placement and QIO
-  result are specific to LX6 with no SIMD.
+- **Production release validated on one board.** ESP32-D0WD-V3 only for the
+  release image, pins, WiFi reserve and power numbers. The later validation
+  harness also reaches `PARITY EXACT` on ESP32-C6FH4, but that is not a product
+  validation.
 - **GPIO16/17 are the PSRAM lines on WROVER modules.** Override the pins at
   build time if you have one.
 - **Power figures beyond the measured 23 mA are estimates** from a datasheet, on

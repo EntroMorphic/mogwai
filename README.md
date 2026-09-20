@@ -292,6 +292,12 @@ held. See [doc/EXPERIMENTS.md](doc/EXPERIMENTS.md#test-evaluation-8--pre-registe
     unpruned, 10500 vectors / 656 KB  43.5 ms   (1 core)   26.7 ms  (2 cores) †
     parity vs host                    64/64 class and score, bit-exact
 
+The validation harness also runs on ESP32-C6FH4 (`esp32c6`, 160 MHz, single-core
+RISC-V) with `PARITY EXACT`, 64/64 class and score. Its full-index one-core path
+measured about 9.6 ms; dual-core rows are skipped because the target has one core.
+That proves the blob/parser/scoring path is portable beyond Xtensa, not that the
+C6 product firmware, pins, WiFi reserve or power budget have been validated.
+
 † v1 layout, not re-run under v2.
 ‡ measured associated (DHCP lease held) and unchanged by it: 4.33–4.52 ms
   associated against 4.29–4.51 ms merely initialised. A live TLS fetch over the

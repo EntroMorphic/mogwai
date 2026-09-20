@@ -6,6 +6,8 @@ measured rather than a copy of it.
 
     idf.py -DPRODUCT=1 -DRD=256 -DTPOPCNT=1 build flash monitor   # the device
     idf.py            -DRD=256 -DTPOPCNT=1 build flash monitor    # validation
+    idf.py -B build-c6 -DSDKCONFIG=sdkconfig.c6 -DIDF_TARGET=esp32c6 \
+           -DRD=256 -DTPOPCNT=1 build flash monitor               # C6 validation
 
 ## `PRODUCT=1` — the device
 
@@ -65,6 +67,33 @@ Expect a few minutes of output. `PARITY EXACT` is the line that matters: it is
 printed only when class **and** bit-exact score match on all 64 references.
 Anything else means the device and host disagree — see
 [../doc/BLOB_FORMAT.md](../doc/BLOB_FORMAT.md).
+
+The validation firmware also builds and runs on ESP32-C6. The C6 is single-core,
+so the harness skips `bench_mt()` and every two-core path; that is expected, not
+a missing result. Timing uses the Xtensa cycle counter only on classic ESP32 and
+falls back to `esp_timer_get_time()` scaled by `CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ`
+on RISC-V targets. A 1.5 s startup delay is intentional: USB-serial/JTAG on the
+C6 can re-enumerate during reset, and without the delay early benchmark output is
+easy to miss.
+
+Measured validation boards:
+
+| board | target | cores | CPU | validation result |
+|---|---:|---:|---:|---|
+| ESP32-D0WD-V3 | `esp32` | 2 | 240 MHz | `PARITY EXACT`, 64/64 class and score |
+| ESP32-C6FH4 | `esp32c6` | 1 | 160 MHz | `PARITY EXACT`, 64/64 class and score |
+
+Representative full-index validation timings from the same harness:
+
+| board | full index, 1 core | full index, 2 cores | small cache-resident index |
+|---|---:|---:|---:|
+| ESP32-D0WD-V3 | 9407 us | 5329 us | measured by `redteam()` |
+| ESP32-C6FH4 | 9635 us | skipped, single-core | ~691 us |
+
+The takeaway is not that C6 is a drop-in production target. It proves the blob,
+integer scoring, exception format, parser and parity harness are portable beyond
+Xtensa. Production actuation, pin assignment, WiFi behaviour and power still need
+their own target-specific validation.
 
 ## `MOGWAI_WIFI=1` — the device with a network
 

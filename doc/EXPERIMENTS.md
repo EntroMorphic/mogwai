@@ -76,6 +76,7 @@ not a discipline anyone has to remember.
 - [The sign plane is an exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane) — 0.16% of dims are `-1`; store those, not 120 KB of bit-plane. **Lossless**, 64 → 34.4 B/vector, 6.46 → 4.3 ms, and 100% resident with WiFi up
 - [The IRAM-only fallback, exercised](#the-iram-only-fallback-exercised) — dormant under v2, so it was forced: 1536 of 3840 vectors into the pool `malloc` cannot reach. Bit-identical routing, **+232 ns/vector (20%)**
 - [Power: what a scan costs](#power-what-a-scan-costs-and-why-the-devkit-hides-it) — 23 mA, 0.496 mJ/query. On a devkit that is 0.2% of the budget; on a **sleeping product it is ~10%**, and the devkit reading is the misleading one
+- [ESP32-C6 validation](#esp32-c6-validation-what-portable-means-and-what-it-does-not) — host/device parity survives RISC-V; dual-core conclusions do not apply to the single-core C6
 - [Chunked SRAM residency](#chunked-sram-residency-the-index-does-not-need-one-allocation) — free heap is a **sum of regions**; one malloc can never fit. 43.9 → 34.3 ms at no accuracy cost
 - [How few negatives does rejection need?](#how-few-negatives-does-rejection-need) — negatives cost `fa` only, never `missed`; the knee is a function of the fa budget
 - [The shipped index is pruned to 3840 vectors](#the-shipped-index-is-pruned-to-240-kb-for-full-sram-residency) — 100% resident, 34.3 → 6.3 ms in the v1 format (v2 took it to 4.3); the price is `fa` 1 → 6 and nothing else
@@ -1676,6 +1677,69 @@ and it rests on three things worth naming:
 The `sleepidle` and `sleep1hz` states exist in the probe and would replace most
 of this with measurement. They are unread — this is deliberately the estimate
 that can be made without further instrumentation.
+
+## ESP32-C6 validation: what portable means, and what it does not
+
+The first shipping hardware proof was on ESP32-D0WD-V3: Xtensa LX6, two cores,
+240 MHz, QIO flash at 80 MHz. That proved the shipping blob and the classic ESP32
+product path, but it left an architectural question open: did the validation
+harness depend on Xtensa-only details, or did it actually prove the integer format
+and scoring code could run unchanged on another ESP32-class target?
+
+We put the validation firmware on two ESP32-C6FH4 boards. The useful result is
+boring and strong:
+
+    PARITY EXACT
+    class agreement 64/64
+    score agreement 64/64
+
+That is the same proof as on classic ESP32: the device parses the same blob,
+routes the same 64 embedded reference queries, and produces the same winning class
+and bit-exact score as the host. It covers the blob v2 exception format, parser,
+integer scoring, polarity application and the generated reference data. It does
+not spend held-out data and does not retune the model.
+
+### What had to change
+
+The original harness assumed classic ESP32 in three places that were not part of
+the router itself:
+
+| assumption | classic ESP32 | ESP32-C6 | fix |
+|---|---|---|---|
+| cycle counter | `XTHAL_GET_CCOUNT()` | RISC-V target, no Xtensa macro | use Xtensa counter only under `CONFIG_IDF_TARGET_ESP32`; otherwise use `esp_timer_get_time()` scaled by CPU MHz |
+| cores | dual-core | single-core | skip `bench_mt()`, two-core red-team rows and zero-work dispatch timing when `ci.cores == 1` |
+| serial reset | UART bridge stayed visible enough for early output | USB-serial/JTAG can re-enumerate during reset | delay 1.5 s at startup before benchmark output |
+
+Two benchmark hygiene fixes came out of the same run. The standalone flash-to-DRAM
+`memcpy` test now consumes a byte from the destination so the compiler cannot
+erase the copy, and the double-buffered/two-stage comparisons measure their
+straight-scan baseline on the target instead of printing a hardcoded classic-ESP32
+number.
+
+### Measured board notes
+
+| board | target | cores | CPU | parity | full index, one core | full index, two cores | small index |
+|---|---:|---:|---:|---|---:|---:|---:|
+| ESP32-D0WD-V3 | `esp32` | 2 | 240 MHz | 64/64 class and score | 9407 us | 5329 us | measured by `redteam()` |
+| ESP32-C6FH4 | `esp32c6` | 1 | 160 MHz | 64/64 class and score | ~9635 us | skipped | ~691 us |
+
+The classic ESP32 number above is the validation harness's current v2 path, not
+the older 43.5 ms flash-mapped v1 path discussed elsewhere. The C6 small-index
+number is useful only as a cache-resident sanity check; the full-index path is the
+number to compare.
+
+### What this does and does not prove
+
+This closes one portability risk: Mogwai's shipped representation and integer
+router are not accidentally Xtensa-only. The same source builds for Xtensa and
+RISC-V under ESP-IDF 5.5, and the validation proof is exact on both.
+
+It does **not** make C6 a validated production target. The product firmware still
+needs target-specific work before that claim is true: pin assignments, actuator
+safety, WiFi/TLS heap reserve, flash mode, power states, and release-image flashing
+all need to be measured on the C6 the same way they were measured on classic ESP32.
+The C6 is also single-core, so every conclusion that used the second core on
+classic ESP32 is explicitly inapplicable there.
 
 ## Chunked SRAM residency: the index does not need one allocation
 
