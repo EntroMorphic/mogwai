@@ -136,9 +136,10 @@ query-knownness floor for low-energy OOD queries. The learned projection also
 receives a tiny audited seed set of bridge positives and hard OOD negatives;
 these seeds update only the host learned weights and are not inserted into the
 exact top-k index. Red-team expansion now includes holdout bridge, contraction
-negation, inverse negation, and near-class OOD cases. The residual path gets the
-current sixteen-case probe to `16/16`, preserves `NONE` on all four OOD cases,
-and removes polarity failures. `semhash_neighborhood` reaches `12/16`: its
+negation, inverse negation, `keep ... from getting ...` negation, and near-class
+OOD cases. The residual path gets the current eighteen-case probe to `18/18`,
+preserves `NONE` on all four OOD cases, and removes polarity failures.
+`semhash_neighborhood` reaches `12/18`: its
 remaining misses are negation/composition cases where learned semhash either
 gates to `NONE` or takes the non-negated brightening route, while residual
 polarity still selects correctly.
@@ -180,7 +181,7 @@ Seeded projection lifted that floor on the ten-case probe:
 | 5 | Query semhash prediction becomes `none`; all learned variants gate to `NONE` | The original OOD collapse is fixed on this probe. |
 | 9 | Query semhash prediction becomes `none`; learned variants gate to `NONE`, and residual also gates by `knownness=98 < 120` | Near-class OOD is protected both by learned `none` and by the residual knownness guard. |
 
-The current sixteen-case red team found the next floor:
+The current eighteen-case red team found the next floor:
 
 | Case | Exact measurement | Meaning |
 |---:|---|---|
@@ -189,9 +190,11 @@ The current sixteen-case red team found the next floor:
 | 13 | Query `don't increase the hallway brightness`; residual chooses `dim`, but learned semhash still chooses the non-negated brightening route | Semhash has not learned negated-increase composition. |
 | 14 | Query `do not make the hallway brighter`; residual chooses `dim` only after polarity mismatch becomes a structural penalty (`-260`) | Strong raw topology for the literal brightening phrase can overpower weak polarity penalties. |
 | 15 | Query `don't dim the hallway`; valid inverse-negation route has `knownness=107`, below the generic OOD floor, so residual must not apply the low-knownness gate when an explicit polarity route exists | Knownness is an OOD guard, not a veto over explicit polarity routes. |
+| 16 | Query `keep the hallway from getting brighter`; top raw basin is `none`, so residual must not let `none` override an explicit polarity route | `none` is a manifold gate for unsupported queries, not a veto over explicit compositional polarity. |
+| 17 | Query `keep the hallway from getting darker`; residual selects `brighten` only after `from` is treated as a negation cue and polarity mismatch is structural | The route channel needs normalized phrase-level negation, not just token antonyms. |
 
 The current floor is therefore compositional negation reachability: make cases
-11, 13, 14, and 15 reachable in learned-code space without weakening the `NONE`
+11, 13, 14, 15, 16, and 17 reachable in learned-code space without weakening the `NONE`
 and knownness gates that protect cases 5, 6, 9, and 12. Residual rescues are
 tracked separately from learned-reachable successes so this does not disappear
 inside aggregate accuracy.

@@ -66,6 +66,10 @@ static testcase_t CASES[] = {
     {"do not make the hallway brighter", "polarity,negation,holdout", 1, 3,
      {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
     {"don't dim the hallway", "polarity,negation,inverse-holdout", 0, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}},
+    {"keep the hallway from getting brighter", "polarity,negation,holdout", 1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"keep the hallway from getting darker", "polarity,negation,inverse-holdout", 0, 3,
      {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}}
 };
 
@@ -145,9 +149,16 @@ static int has_word(const char *text,const char *word){
     return 0;
 }
 
+static int has_phrase(const char *text,const char *phrase){
+    char b[512],p[128]; r_norm(text,b,sizeof b); r_norm(phrase,p,sizeof p);
+    int pl=(int)strlen(p);
+    for(char *s=b;*s;s++) if(!strncmp(s,p,(size_t)pl) && (s==b||s[-1]==' ') && (s[pl]==0||s[pl]==' ')) return 1;
+    return 0;
+}
+
 static int polarity(const char *text){
     int up=0,down=0;
-    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"don't")||has_word(text,"do not")||has_word(text,"never");
+    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"don't")||has_phrase(text,"do not")||has_word(text,"never")||has_word(text,"from");
     const char *ups[]={"increase","raise","brighter","brighten","bright","on",NULL};
     const char *downs[]={"decrease","lower","dim","dimmer","dark","darker","darken","less","off",NULL};
     for(int i=0;ups[i];i++) if(has_word(text,ups[i])) up=1;
@@ -212,8 +223,8 @@ static decision_t decide(const testcase_t *tc,int variant){
     int q_top=R.label[qn[0].idx];
     int q_known=0; for(int i=0;i<K;i++)q_known+=qn[i].score; q_known/=K;
     d.knownness=q_known;
-    int q_none = (variant<2 || variant==4) ? !strcmp(R.names[q_top],"none") : !strcmp(R.names[q.pred],"none");
     int qp=polarity(tc->query);
+    int q_none = variant<2 ? !strcmp(R.names[q_top],"none") : variant==4 ? (!qp && !strcmp(R.names[q_top],"none")) : !strcmp(R.names[q.pred],"none");
     for(int i=0;i<tc->nc;i++){
         topk(tc->choice[i],cn[i],K,&cv[i],&ca[i]); hist(cn[i],K,ch[i]); cs[i]=sem_encode(tc->choice[i]);
         int direct=t_score_pre(&qv,&cv[i],qa,ca[i]); int ov=overlap(qn,cn[i],K); int hd=hist_dot(qh,ch[i]); int code=code_score(q.code,cs[i].code);
@@ -317,7 +328,7 @@ static void rt(const char *name,int ok){ rt_total++; if(ok)rt_pass++; else print
 
 static int redteam(void){
     int n=(int)(sizeof CASES/sizeof CASES[0]);
-    rt("case count pinned",n==16);
+    rt("case count pinned",n==18);
     for(int i=0;i<n;i++){
         rt("case has enough choices",CASES[i].nc>=2&&CASES[i].nc<=MAXC);
         rt("correct index valid or NONE",CASES[i].correct==-1||(CASES[i].correct>=0&&CASES[i].correct<CASES[i].nc));
@@ -347,6 +358,11 @@ static int redteam(void){
     rt("residual do-not-brighter chooses dim",neg.winner==CASES[14].correct);
     neg=decide(&CASES[15],4);
     rt("residual inverse negation chooses brighten",neg.winner==CASES[15].correct);
+    neg=decide(&CASES[16],4);
+    rt("residual keep-from-brighter chooses dim",neg.winner==CASES[16].correct);
+    neg=decide(&CASES[17],4);
+    rt("residual keep-from-darker chooses brighten",neg.winner==CASES[17].correct);
+    rt("residual route-state counts pinned",st[4].learned_reachable==11&&st[4].residual_rescue==3&&st[4].unsupported==4);
     rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
     rt("near-class OOD abstains",near_ood.winner==-1);
     rt("near-class OOD abstain is not reachable",near_ood.reachable==0);
