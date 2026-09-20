@@ -61,7 +61,8 @@ the flat scorer is promoted behind it. Exact score ties, once scoring lands,
 resolve to the lowest candidate index in the caller's original order.
 `c/test/runtime_choice_api.c` pins this boundary.
 
-The text API remains fail-closed until text-to-query-record encoding exists.
+The text API remains fail-closed until learned text-to-semcode generation is
+productionized behind the query encoder.
 `r_choose_runtime_precomputed()` is the production entry point for callers that
 already have a bounded query semcode/factor record; it delegates to the flat
 direct scorer and preserves factor-refusal attribution.
@@ -153,7 +154,7 @@ it validates candidates, ranks by code score only, ignores `sem_score`, and
 resolves exact ties to the lowest original candidate index. Query-code production
 is proven in `runtime_choice_eval --production-parity` by feeding the production
 flat scorer the frozen evaluator's learned semcodes. Device parity is still a
-firmware gate under P0.7.
+firmware-equivalent gate pinned under P0.7.
 
 `r_runtime_make_query()` is the deterministic text-to-query-record bridge for
 explicit factors. It derives bounded polarity, color, composition, location, and
@@ -281,8 +282,9 @@ pin. It exercises the same C scorer/parser used by firmware-compatible builds at
 the worst-case candidate count (`32`), pins exact selected candidate, `NONE`,
 score, runner-up, margin, refusal reason, factor refusal reason, `RTC1`
 round-trip parity, and a deterministic score-work ceiling of `32 * 64 == 2048`
-bit comparisons. Physical ESP32 flash/monitor remains a separate hardware check,
-matching the repository's existing policy for board-attached validation.
+bit comparisons via `RTC_SCORE_MAX_BIT_COMPARISONS`. Physical ESP32 flash/monitor
+remains a separate hardware check, matching the repository's existing policy for
+board-attached validation.
 
 Deliverable: regression checks equivalent in seriousness to the current blob and
 router guardrails.
@@ -290,7 +292,7 @@ router guardrails.
 Required tests:
 
 - runtime-choice data parser rejects truncation, trailing bytes, bad counts, bad
-  offsets, and invalid enum/reason values
+  offsets, and invalid enum field values
 - host/device parity for candidate, `NONE`, score/margin if exposed, and refusal
   reason
 - malformed candidate lists fail closed
@@ -299,7 +301,7 @@ Required tests:
 
 ### P0.8 Decide the Runtime Memory and Update Model
 
-Status: **decided for the first production path**. Runtime meanings are supplied
+Status: **complete for the first production path**. Runtime meanings are supplied
 per request as a bounded explicit query record plus at most
 `RUNTIME_CHOICE_MAX_CANDIDATES` candidate records. They are not rebuilt into
 `router.bin`, persisted in NVS/flash, or cached in an ephemeral graph. Optional
@@ -309,8 +311,10 @@ selection. Reset behavior is therefore deterministic: no runtime-choice state
 survives outside the caller-owned request/blob.
 
 Current worst-case serialized candidate storage is `RTC_CAND_MAX_BYTES` (`9000`
-bytes). The C struct is not the persisted format and must not be used as a flash
-ABI because it contains a host/device pointer-sized text reference.
+bytes). Worst-case score work is `RTC_SCORE_MAX_BIT_COMPARISONS` (`2048`) bit
+comparisons for `32` candidates at `64` bits. The C struct is not the persisted
+format and must not be used as a flash ABI because it contains a host/device
+pointer-sized text reference.
 
 Deliverable: a production decision on where runtime meanings live.
 
@@ -331,10 +335,11 @@ Acceptance gates:
 
 ### P0.9 Revisit NSW Only as Candidate Generation
 
-Status: **blocked by design** until P0.1-P0.8 are complete and the flat direct
-scorer has parity against the promotion suite. No topology/NSW result is allowed
-to decide actuation; it may only propose candidates that are rescored by the flat
-semhash+factor path.
+Status: **not started, optional, and blocked from actuation authority by design**.
+P0.1-P0.8 are now satisfied for the host/firmware-equivalent flat path, so NSW
+may be revisited only as a candidate-generation experiment. No topology/NSW
+result is allowed to decide actuation; it may only propose candidates that are
+rescored by the flat semhash+factor path.
 
 Deliverable: optional graph experiment after P0.1-P0.8 are satisfied.
 

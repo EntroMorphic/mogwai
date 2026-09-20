@@ -42,7 +42,7 @@ int main(void) {
 
     chk("worst-case candidate cap pinned", RUNTIME_CHOICE_MAX_CANDIDATES == 32);
     chk("worst-case serialized bytes pinned", RTC_CAND_MAX_BYTES == 9000u);
-    chk("worst-case operation budget pinned", RUNTIME_CHOICE_MAX_CANDIDATES * 64 == 2048);
+    chk("worst-case operation budget pinned", RTC_SCORE_MAX_BIT_COMPARISONS == 2048);
     chk("worst-case flat scorer selects exact code", r_choose_runtime_precomputed(&q, 64, c, RUNTIME_CHOICE_MAX_CANDIDATES, &a, &fa) == 0 && a.reason == RTC_REASON_OK && a.winner == 17 && a.score == 656 && a.second == 192 && a.margin == 464 && fa == RTC_FACTOR_REASON_OK);
     chk("worst-case RTC1 writes", r_runtime_write_candidates(blob, sizeof blob, c, RUNTIME_CHOICE_MAX_CANDIDATES, &written) == 0 && written == RTC_CAND_MAX_BYTES);
     chk("worst-case RTC1 parses", r_runtime_parse_candidates(blob, written, parsed, RUNTIME_CHOICE_MAX_CANDIDATES, &parsed_n) == 0 && parsed_n == RUNTIME_CHOICE_MAX_CANDIDATES);
