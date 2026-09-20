@@ -126,10 +126,9 @@ not miss an in-domain action. `learned_coverage` is
 fixed zero wrong-actuation rate. The current diagnostic decision is:
 
 ```text
-decision: residual_combo beats the current champion; keep combined evidence and expand the adversarial set.
+decision: semhash_neighborhood now matches residual_combo; keep exact topology and expand the adversarial set before NSW.
 next: polarity failures are zero under residual_combo on this probe.
 next: reachable-but-not-selected exists; improve selection/rerank before NSW.
-next: residual still has selected-but-not-reachable cases; make the learned representation create the missing bridge.
 next: OOD knownness gate preserves NONE on this probe; expand OOD negatives.
 ```
 
@@ -137,18 +136,21 @@ next: OOD knownness gate preserves NONE on this probe; expand OOD negatives.
 policy: raw topology plus scaled semhash evidence plus explicit lexical polarity
 compatibility, gated by the existing `none` manifold basin and a conservative
 query-knownness floor for low-energy OOD queries. The learned projection also
-receives a tiny audited seed set of bridge positives and hard OOD negatives;
-these seeds update only the host learned weights and are not inserted into the
-exact top-k index. Red-team expansion now includes holdout bridge, contraction
+receives a tiny audited seed set of bridge positives, balanced compositional
+route positives, and hard OOD negatives; these seeds update only the host
+learned weights and are not inserted into the exact top-k index. Red-team
+expansion now includes holdout bridge, contraction
 negation, inverse negation, `keep ... from getting ...`, `avoid ...`, and
 `prevent ... from getting ...` negation, plus near-class OOD cases. The residual
 path gets the current twenty-case probe to `20/20`,
 preserves `NONE` on all four OOD cases, and removes polarity failures.
-`semhash_neighborhood` reaches `12/20`, with `commit_precision=12/13` and
-`learned_coverage=8/16`: its
-remaining misses are negation/composition cases where learned semhash either
-gates to `NONE` or takes the non-negated brightening route, while residual
-polarity still selects correctly.
+`semhash_direct` reaches `19/20`, with `commit_precision=19/20` and
+`learned_coverage=15/16`. `semhash_neighborhood` now matches `residual_combo` at
+`20/20`, with `commit_precision=20/20`, `learned_coverage=16/16`, zero wrong
+actuation, and all four OOD cases still rejected. This only held after semhash
+candidate scoring included the same explicit polarity compatibility term; the
+balanced route seeds alone made the representation more reachable but too
+permissive on literal non-negated candidates.
 
 The evaluator has a built-in red team:
 
@@ -192,21 +194,22 @@ The current twenty-case red team found the next floor:
 
 | Case | Exact measurement | Meaning |
 |---:|---|---|
-| 11 | Query `please don't brighten the hallway` normalizes contraction negation to `don t`; residual now parses `qpol=-1` and chooses `dim`, but `semhash_direct` and `semhash_neighborhood` gate to `NONE`; residual winner has `reachable=no` | Correctness is restored by explicit polarity, but the learned representation has not yet bridged contraction-negation phrasing. |
+| 11 | Query `please don't brighten the hallway` normalizes contraction negation to `don t`; balanced route seeding and polarity-aware semhash make `dim` reachable and selected | Contraction-negation phrasing is now represented, but only with the explicit route factor. |
 | 12 | Query `refund the light rail pass` has `knownness=117 < 120`; semhash predicts `none`, and residual gates to `NONE` | Near-class OOD remains protected after the holdout expansion. |
-| 13 | Query `don't increase the hallway brightness`; residual chooses `dim`, but learned semhash still chooses the non-negated brightening route | Semhash has not learned negated-increase composition. |
-| 14 | Query `do not make the hallway brighter`; residual chooses `dim` only after polarity mismatch becomes a structural penalty (`-260`) | Strong raw topology for the literal brightening phrase can overpower weak polarity penalties. |
-| 15 | Query `don't dim the hallway`; valid inverse-negation route has `knownness=107`, below the generic OOD floor, so residual must not apply the low-knownness gate when an explicit polarity route exists | Knownness is an OOD guard, not a veto over explicit polarity routes. |
-| 16 | Query `keep the hallway from getting brighter`; top raw basin is `none`, so residual must not let `none` override an explicit polarity route | `none` is a manifold gate for unsupported queries, not a veto over explicit compositional polarity. |
-| 17 | Query `keep the hallway from getting darker`; residual selects `brighten` only after `from` is treated as a negation cue and polarity mismatch is structural | The route channel needs normalized phrase-level negation, not just token antonyms. |
-| 18 | Query `avoid making the hallway brighter`; residual initially chose the literal brightening candidate until `avoid` became an explicit negation cue | Prevention verbs are polarity operators, not ordinary semantic content. |
-| 19 | Query `prevent the hallway from getting darker`; residual selects `brighten`, but only the explicit polarity route currently makes that inverse-prevention composition reliable | Learned reachability still does not cover prevention phrasing without factorized route logic. |
+| 13 | Query `don't increase the hallway brightness`; semhash direct and neighborhood now select `dim` with reachability | Negated-increase composition moved from residual rescue to learned-route support. |
+| 14 | Query `do not make the hallway brighter`; semhash direct and neighborhood now select `dim`; residual remains correct | Strong raw topology for the literal brightening phrase must be countered by a structural polarity term. |
+| 15 | Query `don't dim the hallway`; semhash direct, semhash neighborhood, and residual now select reachable `brighten` | Inverse negation is represented after balanced route seeding; keep reachable-but-not-selected visible on the remaining semhash-direct edge before NSW. |
+| 16 | Query `keep the hallway from getting brighter`; top raw basin is `none`, but semhash and residual now select reachable `dim` because explicit polarity prevents the `none` gate from vetoing the route | `none` is a manifold gate for unsupported queries, not a veto over explicit compositional polarity. |
+| 17 | Query `keep the hallway from getting darker`; semhash direct/neighborhood and residual now select reachable `brighten` | The route channel needs normalized phrase-level negation, not just token antonyms. |
+| 18 | Query `avoid making the hallway brighter`; semhash direct/neighborhood and residual now select reachable `dim` | Prevention verbs are polarity operators, not ordinary semantic content. |
+| 19 | Query `prevent the hallway from getting darker`; semhash direct/neighborhood and residual now select reachable `brighten` | Balanced inverse-prevention routes prevent one-sided dim overfitting. |
 
-The current floor is therefore compositional negation reachability: make cases
-11, 13, 14, 15, 16, 17, 18, and 19 reachable in learned-code space without weakening the `NONE`
-and knownness gates that protect cases 5, 6, 9, and 12. Residual rescues are
-tracked separately from learned-reachable successes so this does not disappear
-inside aggregate accuracy.
+The current floor is therefore no longer reachability on this probe; it is
+generalization pressure. Semhash neighborhood has `16/16` learned coverage and
+zero residual rescues, but this was achieved with audited host-only route seeds.
+The next adversarial set must test unseen inversion verbs and OOD near-misses
+without weakening the `NONE` and knownness gates that protect cases 5, 6, 9, and
+12.
 
 The next primary metric is learned coverage at fixed zero wrong-actuation rate:
 
@@ -220,6 +223,6 @@ Current runtime-choice floor:
 |---|---:|---:|---:|
 | `raw_direct` | `6/19` | `2/16` | `13/20` |
 | `raw_neighborhood` | `7/19` | `4/16` | `12/20` |
-| `semhash_direct` | `11/13` | `7/16` | `2/20` |
-| `semhash_neighborhood` | `12/13` | `8/16` | `1/20` |
-| `residual_combo` | `20/20` | `12/16` | `0/20` |
+| `semhash_direct` | `19/20` | `15/16` | `1/20` |
+| `semhash_neighborhood` | `20/20` | `16/16` | `0/20` |
+| `residual_combo` | `20/20` | `16/16` | `0/20` |

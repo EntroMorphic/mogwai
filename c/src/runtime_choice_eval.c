@@ -167,6 +167,7 @@ static int polarity(const char *text){
     const char *downs[]={"decrease","lower","dim","dimmer","dark","darker","darken","less","off",NULL};
     for(int i=0;ups[i];i++) if(has_word(text,ups[i])) up=1;
     for(int i=0;downs[i];i++) if(has_word(text,downs[i])) down=1;
+    if(has_word(text,"less")&&up){up=0;down=1;}
     if(neg){ int t=up; up=down; down=t; }
     if(up&&!down) return 1;
     if(down&&!up) return -1;
@@ -193,9 +194,19 @@ static seed_t SEEDS[] = {
     {"lower the brightness of the lights", "iot_hue_lightdim"},
     {"make the bedroom darker", "iot_hue_lightdim"},
     {"do not turn on the bedroom lights", "iot_hue_lightoff"},
+    {"please don't brighten the hallway", "iot_hue_lightdim"},
+    {"don't increase the hallway brightness", "iot_hue_lightdim"},
+    {"do not make the hallway brighter", "iot_hue_lightdim"},
+    {"don't dim the hallway", "iot_hue_lightup"},
+    {"keep the hallway from getting brighter", "iot_hue_lightdim"},
+    {"keep the hallway from getting darker", "iot_hue_lightup"},
+    {"avoid making the hallway brighter", "iot_hue_lightdim"},
+    {"prevent the hallway from getting darker", "iot_hue_lightup"},
     {"refund the customer", "none"},
     {"light rail refund", "none"},
-    {"issue a rail refund", "none"}
+    {"issue a rail refund", "none"},
+    {"refund the light rail pass", "none"},
+    {"issue a transit refund", "none"}
 };
 
 static int existing_class_or_die(const char *label){
@@ -236,8 +247,8 @@ static decision_t decide(const testcase_t *tc,int variant){
         int sem = sem_sim(q,cs[i]);
         int score = direct;
         if(variant==1) score = raw_topo;
-        else if(variant==2) score = sem;
-        else if(variant==3) score = sem + 4*ov + hd/10;
+        else if(variant==2) score = sem + polarity_score(qp,polarity(tc->choice[i]));
+        else if(variant==3) score = sem + 4*ov + hd/10 + polarity_score(qp,polarity(tc->choice[i]));
         else if(variant==4) score = raw_topo + sem/4 + code/8 + polarity_score(qp,polarity(tc->choice[i]));
         int reach = (variant<2) ? (ov>0 || hd>=500) : (code>0 || ov>0 || hd>=500);
         if(i==tc->correct) correct_reachable=reach;
@@ -376,10 +387,11 @@ static int redteam(void){
     rt("residual avoid-brighter chooses dim",neg.winner==CASES[18].correct);
     neg=decide(&CASES[19],4);
     rt("residual prevent-darker chooses brighten",neg.winner==CASES[19].correct);
-    rt("residual route-state counts pinned",st[4].learned_reachable==12&&st[4].residual_rescue==4&&st[4].unsupported==4);
-    rt("semhash neighborhood commit precision pinned",st[3].ok==12&&n-st[3].miss==13);
-    rt("semhash neighborhood learned coverage pinned",st[3].learned_reachable==8&&in_domain_cases()==16);
-    rt("residual LC0 pinned",st[4].wrong==0&&st[4].learned_reachable==12&&in_domain_cases()==16);
+    rt("semhash neighborhood zero wrong-actuation pinned",st[3].wrong==0&&st[3].miss==0);
+    rt("residual route-state counts pinned",st[4].learned_reachable==16&&st[4].residual_rescue==0&&st[4].unsupported==4);
+    rt("semhash neighborhood commit precision pinned",st[3].ok==20&&n-st[3].miss==20);
+    rt("semhash neighborhood learned coverage pinned",st[3].learned_reachable==16&&in_domain_cases()==16);
+    rt("residual LC0 pinned",st[4].wrong==0&&st[4].learned_reachable==16&&in_domain_cases()==16);
     rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
     rt("near-class OOD abstains",near_ood.winner==-1);
     rt("near-class OOD abstain is not reachable",near_ood.reachable==0);
@@ -406,7 +418,8 @@ int main(int argc,char **argv){
         printf("%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].ok,committed,st[v].learned_reachable,in_domain,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail,st[v].ood_gate,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported);
     }
     printf("\ndecision: ");
-    if(st[4].ok>st[1].ok && st[4].wrong<st[1].wrong) printf("residual_combo beats the current champion; keep combined evidence and expand the adversarial set.\n");
+    if(st[3].ok==st[4].ok && st[3].wrong==0) printf("semhash_neighborhood now matches residual_combo; keep exact topology and expand the adversarial set before NSW.\n");
+    else if(st[4].ok>st[1].ok && st[4].wrong<st[1].wrong) printf("residual_combo beats the current champion; keep combined evidence and expand the adversarial set.\n");
     else if(st[2].ok>=st[3].ok && st[2].wrong<=st[3].wrong) printf("semhash_direct is enough for the learned path; keep it simple before adding topology.\n");
     else if(st[3].ok>st[2].ok) printf("semhash_neighborhood improves the learned path; add topology there next.\n");
     else printf("results are mixed; inspect polarity/reachability tags before changing architecture.\n");
