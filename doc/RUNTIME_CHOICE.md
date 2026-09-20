@@ -211,6 +211,96 @@ BIT_FLOOR_FAIL bits=20 set=holdout_c case=10 correct=0 winner=1 query="clean the
 So the transition from 20 to 21 bits is currently the semantic-code separation
 between cleaning and coffee, not a lighting or referent-binding failure.
 
+The score-bias check is:
+
+    c/bin/runtime_choice_eval --fit-sweep
+
+It fixes the code width at the failing 20-bit prefix and sweeps the candidate
+fit coefficient in:
+
+```text
+S(q,c) = code_score(q,c) + alpha * c.score
+```
+
+Current result:
+
+```text
+RUNTIME_CHOICE_FIT_SWEEP bits=20 passing=1/7
+```
+
+Only `alpha=0` passes. Every nonzero candidate-fit weight tested, including the
+current `1/8`, keeps the cleaning/coffee failure. So `21` remains the observed
+prefix-code floor for the current runtime score, but it is not yet an intrinsic
+semantic information floor: removing candidate-fit bias lets the 20-bit prefix
+pass this pinned universe.
+
+The 21-bit leave-one-out check is:
+
+    c/bin/runtime_choice_eval --bit-loo
+
+It removes one bit at a time from the passing 21-bit prefix. Current result:
+
+```text
+RUNTIME_CHOICE_BIT_LOO bits=21 passing=20/21
+```
+
+Omitting any of bits `0..19` still passes; omitting bit `20` recreates the
+20-bit failure. That makes the current cliff a single late-bit ordering effect,
+not evidence of distributed 21-bit semantic load.
+
+The complete information-floor outcome table is:
+
+| Probe | Setting | Result | Interpretation |
+|---|---:|---:|---|
+| `--bit-floor` | prefix bits `1..64` | `min_bits=21`, `passing=44/64` | The current runtime score needs 21 leading bits to pass all pinned cases. |
+| `--bit-forensic` | failing width `20` | `clean the flat` picks `make coffee` | The final cliff is cleaning-vs-coffee semantic separation. |
+| `--fit-sweep` | `bits=20`, `alpha=0` | pass | Removing candidate-fit bias lets the 20-bit prefix pass. |
+| `--fit-sweep` | `bits=20`, `alpha=1/32` | fail | Any tested nonzero fit weight reintroduces the failure. |
+| `--fit-sweep` | `bits=20`, `alpha=1/24` | fail | Same failure pattern. |
+| `--fit-sweep` | `bits=20`, `alpha=1/16` | fail | Same failure pattern. |
+| `--fit-sweep` | `bits=20`, `alpha=1/12` | fail | Same failure pattern. |
+| `--fit-sweep` | `bits=20`, `alpha=1/8` | fail | Current runtime score still fails at 20 bits. |
+| `--fit-sweep` | `bits=20`, `alpha=1/4` | fail | Larger fit bias still fails. |
+| `--bit-loo` | `bits=21`, omit bits `0..19` | pass | Earlier prefix bits are individually non-critical under the 21-bit scorer. |
+| `--bit-loo` | `bits=21`, omit bit `20` | fail | The 21-bit cliff is isolated to one late bit. |
+
+This decomposes the old `21`-bit claim into two artifacts:
+
+| Artifact | Evidence | Meaning |
+|---|---|---|
+| Scoring policy | 20 bits passes only when `alpha=0` | Candidate self-fit is not always useful evidence at the compression boundary. |
+| Bit ordering | only omitting bit `20` fails at 21 bits | Prefix length reflects serialized bit order, not semantic importance. |
+
+The current semantic score is:
+
+```text
+S(q,c) = code_score(q,c) + alpha * c.score
+```
+
+The hidden assumption is that candidate self-fit is always helpful ranking
+evidence. The 20-bit fit sweep falsifies that at the compression boundary: the
+semantic code alone is sufficient for the pinned universe at 20 bits, while any
+tested nonzero candidate-fit term tips `clean the flat` toward `make coffee`.
+
+So the precise current claim is:
+
+```text
+21 bits is the serialized-prefix floor under the current ranking rule.
+It is not the intrinsic semantic information floor.
+```
+
+The engineering recommendation is to keep production/runtime behavior unchanged
+for now and measure a selected-bit floor next. The next diagnostic should rank
+bits by correct-vs-runner-up margin contribution, greedily construct the smallest
+passing subset of code bits, then repeat the fit sweep on that selected subset.
+That separates representation capacity from ranking-policy dependence more
+cleanly than prefix truncation.
+
+Do not yet lower shipped `CODE_BITS`, remove candidate fit globally, add a
+cleaning/coffee-specific factor, or optimize storage layout. Those are runtime
+policy choices; the current result is a diagnostic finding about the serialized
+prefix code and scorer.
+
 The evaluator has a built-in red team:
 
     c/bin/runtime_choice_eval --redteam

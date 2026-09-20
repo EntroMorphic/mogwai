@@ -1,4 +1,4 @@
-# LMM journal — 9 cycles, 36 artifacts
+# LMM journal — 10 cycles, 40 artifacts
 
 Applications of the **Lincoln Manifold Method** ([github.com/anjaustin/lmm](https://github.com/anjaustin/lmm)),
 run at decision points where the next step was genuinely unclear. Four phases
@@ -23,6 +23,7 @@ because the reasoning is the point.
 | `footprint` | Can conventional hardware be used unconventionally to shrink 656 KB? | No — peripherals compute but cannot store. Found instead that the index is 89%% negatives and they are irreplaceable: rejection needs stored negatives in the same representation |
 | `selector` | Three attempts to use the word channel failed, yet an oracle shows 8.4 points of complementary information. What is missing? | A **gate**, not a blend: consult the prior only when its margin says it has an opinion. First intervention to dominate the operating curve |
 | `gap60` | The 25% gap on 60-class MASSIVE: is it representation or data? | **Data.** 15% is label noise (general_quirky catch-all + conflicts), IoT-only is 82.7% vs 72.0% all-60. The representation is at its ceiling on what it ships on |
+| `info_floor` | Is the 21-bit semhash floor intrinsic information or a measurement artifact? | Not yet intrinsic: it is a prefix/scoring artifact. At 20 bits, removing candidate-fit weight passes; at 21 bits, only omitting bit `20` fails |
 
 ## Two of these produced things still in the shipping system
 
