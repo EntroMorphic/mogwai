@@ -181,6 +181,21 @@ pol+color+comp+loc+support
 So topology is not required at runtime, but every explicit direct factor is
 currently load-bearing somewhere in the frozen probe plus Holdouts A/B/C.
 
+The first implementation floor is the semhash code width:
+
+    c/bin/runtime_choice_eval --bit-floor
+
+It keeps all five factors enabled and sweeps the learned-code comparison from 1
+to 64 bits. Current result:
+
+```text
+RUNTIME_CHOICE_BIT_FLOOR min_bits=11 passing=54/64
+```
+
+So the current pinned universe needs only 11 semhash code bits for the direct
+runtime path; 1 through 10 bits lose two cases, and 11 through 64 bits preserve
+all frozen/holdout behavior.
+
 The evaluator has a built-in red team:
 
     c/bin/runtime_choice_eval --redteam

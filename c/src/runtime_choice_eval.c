@@ -41,6 +41,7 @@ static char *T_t[4000]; static int T_n;
 static router_t R; static tvec *TI; static uint16_t *ACT; static int32_t CW[RMAXCLS][RD];
 static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0,0};
 static int FACTORS = FF_ALL;
+static int CODE_BITS = HD;
 
 static testcase_t CASES[] = {
     {"make the bedroom darker", "paraphrase,polarity,collision,bridged", 1, 3,
@@ -431,7 +432,11 @@ static void train_seeded_projection(void){
 static int code_bit(int cls,int j){ char b[80]; snprintf(b,sizeof b,"%s#%d",R.names[cls],j); uint32_t h=r_fnv(b,(int)strlen(b)); return (((h>>16)^h)&1)?1:-1; }
 static uint64_t class_code(int cls){ uint64_t c=0; for(int j=0;j<HD;j++)if(code_bit(cls,j)>0)c|=1ull<<j; return c; }
 static int pop64(uint64_t x){ return __builtin_popcountll(x); }
-static int code_score(uint64_t a,uint64_t b){ return (HD-2*pop64(a^b))*256/HD; }
+static int code_score(uint64_t a,uint64_t b){
+    uint64_t m = CODE_BITS>=64 ? ~0ull : ((1ull<<CODE_BITS)-1ull);
+    int d=pop64((a^b)&m);
+    return (CODE_BITS-2*d)*256/CODE_BITS;
+}
 static sh_t sem_encode(const char *text){ int16_t acc[RD]; int32_t tot; (void)tot; r_counts(text,acc,&tot); int best=-(1<<28),bi=0; for(uint32_t c=0;c<R.n_class;c++){int s=dot_cls((int)c,acc); if(s>best){best=s;bi=(int)c;}} sh_t out={class_code(bi),bi,best}; return out; }
 static int sem_sim(sh_t q,sh_t c){ return code_score(q.code,c.code)+c.score/8; }
 
@@ -796,20 +801,46 @@ static int floor_sweep(void){
     return 0;
 }
 
-static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam|--floor]\n"); }
+static int bit_floor_sweep(void){
+    int save_bits=CODE_BITS, save_factors=FACTORS, pass=0, first=0;
+    FACTORS=FF_ALL;
+    printf("runtime_choice_bit_floor topology_free_direct max_bits=%d\n",HD);
+    printf("bits\tfrozen\tholdout_a\tholdout_b\tholdout_c\twrong\tmiss\tlearned\tin_domain\tpass\n");
+    for(int bits=1;bits<=HD;bits++){
+        stats_t base[5], a[5], b[5], c[5]; attr_t aa,bb,cc;
+        CODE_BITS=bits;
+        int nb=eval_all(base,0), na=eval_holdout(a,&aa,0), nbb=eval_holdout_b(b,&bb,0), nc=eval_holdout_c(c,&cc,0);
+        int ok=base[2].ok+a[2].ok+b[2].ok+c[2].ok;
+        int total=nb+na+nbb+nc;
+        int wrong=base[2].wrong+a[2].wrong+b[2].wrong+c[2].wrong;
+        int miss=base[2].miss+a[2].miss+b[2].miss+c[2].miss;
+        int learned=base[2].learned_reachable+a[2].learned_reachable+b[2].learned_reachable+c[2].learned_reachable;
+        int ind=in_domain_cases()+in_domain_set(HOLDOUT,na)+in_domain_set(HOLDOUT_B,nbb)+in_domain_set(HOLDOUT_C,nc);
+        int good=(ok==total&&wrong==0&&miss==0&&learned==ind);
+        if(good){ pass++; if(!first) first=bits; }
+        printf("%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d\t%d\t%d\t%d\t%s\n",
+               bits,base[2].ok,nb,a[2].ok,na,b[2].ok,nbb,c[2].ok,nc,wrong,miss,learned,ind,good?"yes":"no");
+    }
+    CODE_BITS=save_bits; FACTORS=save_factors;
+    printf("RUNTIME_CHOICE_BIT_FLOOR min_bits=%d passing=%d/%d\n",first,pass,HD);
+    return 0;
+}
+
+static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam|--floor|--bit-floor]\n"); }
 
 int main(int argc,char **argv){
     const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
-    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,floor=0,arg=1;
+    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,floor=0,bit_floor=0,arg=1;
     if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
-    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else if(!strcmp(argv[i],"--floor"))floor=1; else {usage();return 1;} }
-    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red+floor>1){usage();return 1;}
+    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else if(!strcmp(argv[i],"--floor"))floor=1; else if(!strcmp(argv[i],"--bit-floor"))bit_floor=1; else {usage();return 1;} }
+    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red+floor+bit_floor>1){usage();return 1;}
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash(); train_seeded_projection();
     if(red)return redteam();
     if(holdout_red)return holdout_redteam();
     if(holdout_b_red)return holdout_b_redteam();
     if(holdout_c_red)return holdout_c_redteam();
     if(floor)return floor_sweep();
+    if(bit_floor)return bit_floor_sweep();
     if(details){dump_details();return 0;}
     if(holdout_c){
         stats_t st[5]; attr_t attr; int n=eval_holdout_c(st,&attr,1); int in_domain=in_domain_set(HOLDOUT_C,n);
