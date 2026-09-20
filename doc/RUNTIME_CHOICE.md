@@ -64,3 +64,21 @@ baseline:
 
 Only after exact neighborhoods show value should NSW replace exact top-k as an
 acceleration structure.
+
+## Learned semantic hash proof
+
+`c/bin/semhash_probe` is the first learned-weight version of the runtime-choice
+probe. It trains a tiny integer multiclass perceptron from the shipped exemplar
+labels and uses the winning learned class as a compact semantic code. Query and
+candidate descriptions pass through the same learned encoder.
+
+Run it:
+
+    c/bin/semhash_probe --demo
+    c/bin/semhash_probe --redteam
+
+The first result is intentionally modest but useful: on the darker/brightness
+demo, the learned hash separates `increase brightness` from `decrease
+brightness`, where raw direct score could not. It still reports low-margin and
+collision cases, and it is still host-only research code, not a production
+policy.
