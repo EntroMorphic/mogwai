@@ -91,8 +91,8 @@ int r_runtime_choose_code(uint64_t query_code,
     }
     out->winner = winner;
     out->score = best;
-    out->second = second;
-    out->margin = best - second;
+    out->second = n_cands == 1 ? best : second;
+    out->margin = n_cands == 1 ? 0 : best - second;
     out->reason = RTC_REASON_OK;
     return 0;
 }

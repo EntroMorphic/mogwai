@@ -144,6 +144,7 @@ int main(void) {
     chk("code chooser picks nearest code", r_runtime_choose_code(0, 2, code_cands, 3, &out) == 0 && out.reason == RTC_REASON_OK && out.winner == 0 && out.score == 256 && out.second == 0 && out.margin == 256);
     chk("code chooser ignores sem_score", r_runtime_choose_code(1, 2, code_cands, 3, &out) == 0 && out.winner == 1 && out.score == 256);
     chk("code chooser resolves ties by lowest index", r_runtime_choose_code(2, 2, code_cands, 3, &out) == 0 && out.winner == 0 && out.score == 0 && out.margin == 0);
+    chk("code chooser one candidate has no margin", r_runtime_choose_code(0, 2, code_cands, 1, &out) == 0 && out.winner == 0 && out.score == 256 && out.second == 256 && out.margin == 0);
     chk("code chooser rejects malformed candidate", r_runtime_choose_code(0, 4, hidden_pol, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
     runtime_candidate_t fq = {"q", 0, 0, RTC_FACTOR_POLARITY|RTC_FACTOR_COLOR|RTC_FACTOR_COMPOSITION|RTC_FACTOR_LOCATION|RTC_FACTOR_SUPPORT, RTC_POLARITY_POSITIVE, RTC_COLOR_RED, RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION, 7, RTC_SUPPORT_SUPPORTED};
     runtime_candidate_t fc = {"c", 0, 0, RTC_FACTOR_POLARITY|RTC_FACTOR_COLOR|RTC_FACTOR_COMPOSITION|RTC_FACTOR_LOCATION|RTC_FACTOR_SUPPORT, RTC_POLARITY_POSITIVE, RTC_COLOR_RED, RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION, 7, RTC_SUPPORT_SUPPORTED};
@@ -158,6 +159,12 @@ int main(void) {
     chk("factor score rejects location conflict", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_LOCATION && score == 0);
     fc.location_id = 7; fc.support = RTC_SUPPORT_UNSUPPORTED;
     chk("factor score rejects unsupported", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_SUPPORT && score == 0);
+    runtime_candidate_t fnone_q = {"q", 0, 0, 0, 0, 0, 0, 0, 0};
+    runtime_candidate_t fnone_c = {"c", 0, 0, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED};
+    chk("factor score no required factors accepts", r_runtime_factor_score(&fnone_q, &fnone_c, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_OK && score == 0);
+    fq.support = RTC_SUPPORT_OOD;
+    fc.support = RTC_SUPPORT_SUPPORTED;
+    chk("factor score rejects query OOD support", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_SUPPORT && score == 0);
     chk("factor score rejects malformed inputs", r_runtime_factor_score(&fq, hidden_pol, &score, &freason) == -1 && freason == RTC_FACTOR_REASON_BAD_ARGUMENT && score == 0);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);

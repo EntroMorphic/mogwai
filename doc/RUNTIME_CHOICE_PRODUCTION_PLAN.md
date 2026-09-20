@@ -148,6 +148,10 @@ it validates candidates, ranks by code score only, ignores `sem_score`, and
 resolves exact ties to the lowest original candidate index. Query-code production
 and host/device parity are not done.
 
+Red-team iteration 2026-09-20: one-candidate code selection no longer exposes a
+sentinel runner-up; `second == score` and `margin == 0` when there is no
+runner-up.
+
 Deliverable: integer-only semhash scoring that can run in the firmware build or
 be proven equivalent to a precomputed candidate-code path.
 
@@ -167,6 +171,10 @@ Status: **started**. `r_runtime_factor_score()` validates explicit query and
 candidate factor records, returns an independent refusal reason for support,
 polarity, color, composition, or location, and scores only matched factors. It is
 not yet wired into `r_choose_runtime` or combined with code scoring.
+
+Red-team iteration 2026-09-20: factor scoring now pins two boundary semantics:
+a query with no required factors accepts with score `0`, and a query whose own
+support state is OOD/unsupported refuses with `RTC_FACTOR_REASON_SUPPORT`.
 
 Deliverable: production implementations of the five load-bearing factors.
 
