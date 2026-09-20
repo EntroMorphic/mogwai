@@ -73,6 +73,9 @@ typedef struct {
     uint8_t support;
 } runtime_candidate_t;
 
+#define RTC_RUNTIME_MAX_REQUEST_RECORDS (1 + RUNTIME_CHOICE_MAX_CANDIDATES)
+#define RTC_RUNTIME_PERSISTED_STATE_BYTES 0u
+
 typedef struct {
     int winner;
     int32_t score;

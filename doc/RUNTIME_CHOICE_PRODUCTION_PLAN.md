@@ -312,9 +312,12 @@ survives outside the caller-owned request/blob.
 
 Current worst-case serialized candidate storage is `RTC_CAND_MAX_BYTES` (`9000`
 bytes). Worst-case score work is `RTC_SCORE_MAX_BIT_COMPARISONS` (`2048`) bit
-comparisons for `32` candidates at `64` bits. The C struct is not the persisted
-format and must not be used as a flash ABI because it contains a host/device
-pointer-sized text reference.
+comparisons for `32` candidates at `64` bits. `RTC_RUNTIME_MAX_REQUEST_RECORDS`
+pins the per-request shape as one query plus 32 candidates, and
+`RTC_RUNTIME_PERSISTED_STATE_BYTES == 0` pins that runtime choice adds no
+persisted mutable state. The C struct is not the persisted format and must not be
+used as a flash ABI because it contains a host/device pointer-sized text
+reference.
 
 Deliverable: a production decision on where runtime meanings live.
 

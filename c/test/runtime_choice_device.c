@@ -41,6 +41,9 @@ int main(void) {
     c[17].sem_code = q.sem_code;
 
     chk("worst-case candidate cap pinned", RUNTIME_CHOICE_MAX_CANDIDATES == 32);
+    chk("per-request record cap pinned", RTC_RUNTIME_MAX_REQUEST_RECORDS == 33);
+    chk("runtime state is not persisted", RTC_RUNTIME_PERSISTED_STATE_BYTES == 0u);
+    chk("runtime blob magic is separate", RTC_CAND_MAGIC != RMAGIC2);
     chk("worst-case serialized bytes pinned", RTC_CAND_MAX_BYTES == 9000u);
     chk("worst-case operation budget pinned", RTC_SCORE_MAX_BIT_COMPARISONS == 2048);
     chk("worst-case flat scorer selects exact code", r_choose_runtime_precomputed(&q, 64, c, RUNTIME_CHOICE_MAX_CANDIDATES, &a, &fa) == 0 && a.reason == RTC_REASON_OK && a.winner == 17 && a.score == 656 && a.second == 192 && a.margin == 464 && fa == RTC_FACTOR_REASON_OK);
