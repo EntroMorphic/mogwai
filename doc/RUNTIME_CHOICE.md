@@ -192,20 +192,29 @@ Fresh generalization pressure goes into Holdout B:
     c/bin/runtime_choice_eval --holdout-b
     c/bin/runtime_choice_eval --holdout-b-redteam
 
-Holdout B is a first-shot combinatorial transfer set, deliberately pinned before
-any remediation. Its baseline is intentionally not perfect:
+Holdout B started as a first-shot combinatorial transfer set, deliberately run
+before remediation. Its first-shot baseline was intentionally not perfect:
 
 ```text
 semhash_neighborhood accuracy=10/12 learned_coverage=5/5 wrong_act=2/12 residual_rescue=0
 attribution learned_accept=2 learned_reject=1 topology_rescue=0 operator_factor=3 domain_reject=4 hard_ood_veto=0 residual_rescue=0 wrong=2
 ```
 
-The two visible failures are unsupported-location transfer probes (`don't let the
-garage lights dim`, `activate the foyer lighting`). They remain recorded as
-`wrong`, not hidden as learned rejects or residual repairs. This preserves the
-first-shot evidence: in-domain combinatorial coverage transferred, learned
-abstention transferred once, and the next real boundary is unsupported-location
-domain support beyond the explicit Holdout A locations.
+The two visible first-shot failures were unsupported-location transfer probes
+(`don't let the garage lights dim`, `activate the foyer lighting`). They were
+recorded as `wrong`, not hidden as learned rejects or residual repairs. This
+preserved the first-shot evidence: in-domain combinatorial coverage transferred,
+learned abstention transferred once, and the next real boundary was
+unsupported-location domain support beyond the explicit Holdout A locations.
+
+The remediation added `garage`, `foyer`, and `basement` to the explicit
+unsupported-location/domain boundary, plus two new red-team probes so the fix did
+not only patch the failing strings. Current Holdout B is now:
+
+```text
+semhash_neighborhood accuracy=14/14 learned_coverage=5/5 wrong_act=0/14 residual_rescue=0
+attribution learned_accept=2 learned_reject=1 topology_rescue=0 operator_factor=3 domain_reject=8 hard_ood_veto=0 residual_rescue=0 wrong=0
+```
 
 For atomic failure analysis:
 
