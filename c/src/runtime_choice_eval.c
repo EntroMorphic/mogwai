@@ -83,6 +83,33 @@ static testcase_t CASES[] = {
      {"make the hallway brighter", "dim the hallway lights", "issue a rail refund"}}
 };
 
+static testcase_t HOLDOUT[] = {
+    {"don't let the hallway get brighter", "blind,polarity,negation,operator", 1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"make sure the hallway doesn't get brighter", "blind,polarity,negation,operator", 1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"prevent the hallway from becoming brighter", "blind,polarity,negation,operator", 1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"avoid increasing the hallway brightness", "blind,polarity,negation,operator", 1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"keep the hallway from becoming darker", "blind,polarity,negation,inverse-operator", 0, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}},
+    {"make sure the hallway doesn't get darker", "blind,polarity,negation,inverse-operator", 0, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}},
+    {"do not let the hallway get darker", "blind,polarity,negation,inverse-operator", 0, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}},
+    {"brightness of the light rail display", "blind,out-of-domain,near-class-negative", -1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "issue a rail refund"}},
+    {"dim the mood in the hallway", "blind,out-of-domain,near-class-negative", -1, 3,
+     {"dim the hallway lights", "make the hallway brighter", "turn the hallway lights off"}},
+    {"turn off the mortgage light", "blind,out-of-domain,near-class-negative", -1, 3,
+     {"turn the hallway lights off", "make the hallway brighter", "dim the hallway lights"}},
+    {"make the phone screen brighter", "blind,out-of-domain,near-class-negative", -1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"stop the train lights getting darker", "blind,out-of-domain,polarity,near-class-negative", -1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}}
+};
+
 static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k); const char*p=strstr(l,pat); if(!p)return 0; p+=strlen(pat);
@@ -168,8 +195,8 @@ static int has_phrase(const char *text,const char *phrase){
 
 static int polarity(const char *text){
     int up=0,down=0;
-    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"don't")||has_phrase(text,"do not")||has_word(text,"never")||has_word(text,"from")||has_word(text,"avoid")||has_word(text,"prevent")||has_word(text,"stop");
-    const char *ups[]={"increase","raise","brighter","brighten","bright","on",NULL};
+    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"doesn")||has_word(text,"don't")||has_phrase(text,"do not")||has_word(text,"never")||has_word(text,"from")||has_word(text,"avoid")||has_word(text,"prevent")||has_word(text,"stop");
+    const char *ups[]={"increase","increasing","raise","raising","brighter","brighten","bright","on",NULL};
     const char *downs[]={"decrease","lower","dim","dimmer","dark","darker","darken","less","off",NULL};
     for(int i=0;ups[i];i++) if(has_word(text,ups[i])) up=1;
     for(int i=0;downs[i];i++) if(has_word(text,downs[i])) down=1;
@@ -181,7 +208,7 @@ static int polarity(const char *text){
 }
 
 static int hard_ood(const char *text){
-    return has_phrase(text,"light rail")||has_word(text,"rail")||has_word(text,"train")||has_word(text,"refund")||has_word(text,"ticket")||has_word(text,"customer")||has_word(text,"transit");
+    return has_phrase(text,"light rail")||has_word(text,"rail")||has_word(text,"train")||has_word(text,"refund")||has_word(text,"ticket")||has_word(text,"customer")||has_word(text,"transit")||has_word(text,"mood")||has_word(text,"mortgage")||has_word(text,"phone")||has_word(text,"screen")||has_word(text,"display");
 }
 
 static int polarity_score(int qp,int cp){
@@ -297,6 +324,10 @@ static int in_domain_cases(void){
     return n;
 }
 
+static int in_domain_set(const testcase_t *cases,int total){
+    int n=0; for(int i=0;i<total;i++) if(cases[i].correct>=0) n++; return n;
+}
+
 static void dump_details(void){
     int n=(int)(sizeof CASES/sizeof CASES[0]);
     printf("runtime_choice_eval_details cases=%d k=%d residual_known_gate=%d\n",n,K,RESIDUAL_KNOWN_GATE);
@@ -351,6 +382,40 @@ static int eval_all(stats_t *st,int print_cases){
                d[0].winner,d[0].score,d[0].margin,d[0].reachable?'R':'-', d[1].winner,d[1].score,d[1].margin,d[1].reachable?'R':'-',
                d[2].winner,d[2].score,d[2].margin,d[2].reachable?'R':'-', d[3].winner,d[3].score,d[3].margin,d[3].reachable?'R':'-',
                d[4].winner,d[4].score,d[4].margin,d[4].reachable?'R':'-');
+    }
+    return n;
+}
+
+typedef struct { int learned_accept, learned_reject, topology_rescue, operator_factor, hard_ood_veto, residual_rescue, wrong; } attr_t;
+
+static void holdout_attr(const testcase_t *tc,decision_t sem_direct,decision_t sem_nb,decision_t residual,attr_t *a){
+    int ok = (tc->correct<0) ? sem_nb.winner<0 : sem_nb.winner==tc->correct;
+    if(!ok){ a->wrong++; return; }
+    if(tc->correct<0){ if(hard_ood(tc->query)) a->hard_ood_veto++; else a->learned_reject++; return; }
+    if(sem_direct.winner!=tc->correct && sem_nb.winner==tc->correct) a->topology_rescue++;
+    else if(strstr(tc->tag,"polarity")) a->operator_factor++;
+    else a->learned_accept++;
+    if(residual.winner==tc->correct && sem_nb.winner!=tc->correct) a->residual_rescue++;
+}
+
+static int eval_holdout(stats_t *st,attr_t *attr,int print_cases){
+    int n=(int)(sizeof HOLDOUT/sizeof HOLDOUT[0]);
+    init_stats(st); memset(attr,0,sizeof *attr);
+    if(print_cases){
+        printf("runtime_choice_holdout cases=%d k=%d classes=%u index=%d\n",n,K,R.n_class,U_n);
+        printf("case\ttags\tcorrect\tknownness\tsem_direct\tsem_nb\tresidual\tattribution\n");
+    }
+    for(int i=0;i<n;i++){
+        decision_t sd=decide(&HOLDOUT[i],2), sn=decide(&HOLDOUT[i],3), rs=decide(&HOLDOUT[i],4);
+        tally(&st[2],&HOLDOUT[i],sd); tally(&st[3],&HOLDOUT[i],sn); tally(&st[4],&HOLDOUT[i],rs);
+        holdout_attr(&HOLDOUT[i],sd,sn,rs,attr);
+        const char *why = "learned_accept";
+        if(HOLDOUT[i].correct<0) why=hard_ood(HOLDOUT[i].query)?"hard_ood_veto":"learned_reject";
+        else if(sd.winner!=HOLDOUT[i].correct && sn.winner==HOLDOUT[i].correct) why="topology_rescue";
+        else if(strstr(HOLDOUT[i].tag,"polarity")) why="operator_factor";
+        if(print_cases) printf("%d\t%s\t%d\t%d\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%s\n",i,HOLDOUT[i].tag,HOLDOUT[i].correct,sd.knownness,
+                sd.winner,sd.score,sd.margin,sd.reachable?'R':'-', sn.winner,sn.score,sn.margin,sn.reachable?'R':'-',
+                rs.winner,rs.score,rs.margin,rs.reachable?'R':'-', why);
     }
     return n;
 }
@@ -416,17 +481,50 @@ static int redteam(void){
     return rt_pass==rt_total?0:1;
 }
 
-static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details]\n"); }
+static int holdout_redteam(void){
+    int n=(int)(sizeof HOLDOUT/sizeof HOLDOUT[0]);
+    rt_total=rt_pass=0;
+    rt("holdout case count pinned",n==12);
+    for(int i=0;i<n;i++){
+        rt("holdout case has enough choices",HOLDOUT[i].nc>=2&&HOLDOUT[i].nc<=MAXC);
+        rt("holdout correct index valid or NONE",HOLDOUT[i].correct==-1||(HOLDOUT[i].correct>=0&&HOLDOUT[i].correct<HOLDOUT[i].nc));
+        rt("holdout case is tagged blind",strstr(HOLDOUT[i].tag,"blind")!=NULL);
+    }
+    stats_t st[5]; attr_t attr; n=eval_holdout(st,&attr,0);
+    int in_domain=in_domain_set(HOLDOUT,n);
+    rt("holdout semhash neighborhood perfect",st[3].ok==n&&st[3].wrong==0&&st[3].miss==0);
+    rt("holdout semhash direct perfect",st[2].ok==n&&st[2].wrong==0&&st[2].miss==0);
+    rt("holdout residual perfect",st[4].ok==n&&st[4].wrong==0&&st[4].miss==0);
+    rt("holdout learned coverage pinned",st[3].learned_reachable==in_domain&&in_domain==7);
+    rt("holdout hard OOD veto pinned",attr.hard_ood_veto==5);
+    rt("holdout no residual rescue",attr.residual_rescue==0);
+    rt("holdout no topology rescue",attr.topology_rescue==0);
+    rt("holdout operator factor pinned",attr.operator_factor==7);
+    rt("holdout attribution sums",attr.learned_accept+attr.learned_reject+attr.topology_rescue+attr.operator_factor+attr.hard_ood_veto+attr.wrong==n);
+    printf("RUNTIME_CHOICE_HOLDOUT_REDTEAM checks=%d/%d score=%d/100\n",rt_pass,rt_total,rt_total?(100*rt_pass)/rt_total:0);
+    return rt_pass==rt_total?0:1;
+}
+
+static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam]\n"); }
 
 int main(int argc,char **argv){
     const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
-    int red=0,details=0,arg=1;
+    int red=0,details=0,holdout=0,holdout_red=0,arg=1;
     if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
-    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else {usage();return 1;} }
-    if(red&&details){usage();return 1;}
+    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else {usage();return 1;} }
+    if(red+details+holdout+holdout_red>1){usage();return 1;}
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash(); train_seeded_projection();
     if(red)return redteam();
+    if(holdout_red)return holdout_redteam();
     if(details){dump_details();return 0;}
+    if(holdout){
+        stats_t st[5]; attr_t attr; int n=eval_holdout(st,&attr,1); int in_domain=in_domain_set(HOLDOUT,n);
+        printf("\nvariant\taccuracy\tcommit_precision\tlearned_coverage\twrong_act\tmissed_none\tlearned_reachable\tresidual_rescue\tunsupported\n");
+        for(int v=2;v<5;v++){ int committed=n-st[v].miss; printf("%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].ok,committed,st[v].learned_reachable,in_domain,st[v].wrong,n,st[v].miss,n,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported); }
+        printf("\nattribution\tlearned_accept=%d\tlearned_reject=%d\ttopology_rescue=%d\toperator_factor=%d\thard_ood_veto=%d\tresidual_rescue=%d\twrong=%d\n",attr.learned_accept,attr.learned_reject,attr.topology_rescue,attr.operator_factor,attr.hard_ood_veto,attr.residual_rescue,attr.wrong);
+        printf("decision: blind holdout separates learned coverage from hard OOD vetoes; keep this set frozen.\n");
+        return 0;
+    }
     stats_t st[5]; int n=eval_all(st,1);
     int in_domain=in_domain_cases();
     printf("\nvariant\taccuracy\tcommit_precision\tlearned_coverage\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\tood_gates\tlearned_reachable\tresidual_rescue\tunsupported\n");

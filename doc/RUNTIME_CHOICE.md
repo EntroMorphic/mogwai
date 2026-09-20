@@ -157,6 +157,25 @@ The evaluator has a built-in red team:
 
     c/bin/runtime_choice_eval --redteam
 
+The current 23-case probe is frozen as regression. New generalization pressure
+goes through a separate blind holdout mode:
+
+    c/bin/runtime_choice_eval --holdout
+    c/bin/runtime_choice_eval --holdout-redteam
+
+The holdout reports attribution so perfect accuracy cannot hide rule dependence:
+
+```text
+attribution learned_accept=0 learned_reject=0 topology_rescue=0 operator_factor=7 hard_ood_veto=5 residual_rescue=0 wrong=0
+```
+
+On the first 12-case blind holdout, polarity-aware semhash direct, semhash
+neighborhood, and residual all reach `12/12`, with `7/7` learned in-domain
+coverage and `5/5` OOD rejection. The holdout did expose one real gap before
+pinning: `avoid increasing ...` was not recognized as an upward brightness axis
+because `increasing` was missing from the factorized polarity vocabulary. That
+was remediated at the axis level rather than by adding a phrase seed.
+
 For atomic failure analysis:
 
     c/bin/runtime_choice_eval --details
