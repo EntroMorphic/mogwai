@@ -227,6 +227,7 @@ chk "runtime_choice_eval red-team passes 100/100" "$(c/bin/runtime_choice_eval -
 chk "runtime_choice_holdout red-team passes 100/100" "$(c/bin/runtime_choice_eval --holdout-redteam 2>/dev/null | grep -c '^RUNTIME_CHOICE_HOLDOUT_REDTEAM checks=74/74 score=100/100$')" "1"
 chk "runtime_choice_holdout_b red-team passes 100/100" "$(c/bin/runtime_choice_eval --holdout-b-redteam 2>/dev/null | grep -c '^RUNTIME_CHOICE_HOLDOUT_B_REDTEAM checks=57/57 score=100/100$')" "1"
 chk "runtime_choice_holdout_c red-team passes 100/100" "$(c/bin/runtime_choice_eval --holdout-c-redteam 2>/dev/null | grep -c '^RUNTIME_CHOICE_HOLDOUT_C_REDTEAM checks=42/42 score=100/100$')" "1"
+chk "runtime_choice_floor pins the factor floor" "$(c/bin/runtime_choice_eval --floor 2>/dev/null | grep -c '^RUNTIME_CHOICE_FLOOR passing_masks=1/32$')" "1"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that
 # claim was first checked.

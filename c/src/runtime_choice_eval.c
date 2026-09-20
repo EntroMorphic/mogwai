@@ -21,6 +21,12 @@
 #define RESIDUAL_KNOWN_GATE 120
 #define LEARNED_SUPPORT_GATE 120
 #define K 8
+#define FF_POLARITY 1
+#define FF_COLOR 2
+#define FF_COMP 4
+#define FF_LOCATION 8
+#define FF_SUPPORT 16
+#define FF_ALL (FF_POLARITY|FF_COLOR|FF_COMP|FF_LOCATION|FF_SUPPORT)
 
 typedef struct { int idx, score; } near_t;
 typedef struct { uint64_t code; int pred, score; } sh_t;
@@ -34,6 +40,7 @@ static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static int T_n;
 static router_t R; static tvec *TI; static uint16_t *ACT; static int32_t CW[RMAXCLS][RD];
 static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0,0};
+static int FACTORS = FF_ALL;
 
 static testcase_t CASES[] = {
     {"make the bedroom darker", "paraphrase,polarity,collision,bridged", 1, 3,
@@ -372,6 +379,7 @@ static int compositional_support(const char *query,const char *choice){
 
 static int learned_none_support(int q_known,int q_none_pred,int q_ood){
     if(q_ood) return 1;
+    if(!(FACTORS&FF_SUPPORT)) return q_none_pred;
     return q_none_pred && q_known<LEARNED_SUPPORT_GATE;
 }
 
@@ -443,13 +451,15 @@ static decision_t decide(const testcase_t *tc,int variant){
         int direct=t_score_pre(&qv,&cv[i],qa,ca[i]); int ov=overlap(qn,cn[i],K); int hd=hist_dot(qh,ch[i]); int code=code_score(q.code,cs[i].code);
         int raw_topo = direct + 4*ov + hd/10;
         int sem = sem_sim(q,cs[i]);
-        int comp = compositional_support(tc->query,tc->choice[i]);
-        int loc = location_compatibility(tc->query,tc->choice[i]);
+        int comp = (FACTORS&FF_COMP) ? compositional_support(tc->query,tc->choice[i]) : 0;
+        int loc = (FACTORS&FF_LOCATION) ? location_compatibility(tc->query,tc->choice[i]) : 0;
         int score = direct;
         if(variant==1) score = raw_topo;
-        else if(variant==2) score = sem + comp + color_score(tc->query,tc->choice[i]) + polarity_score(qp,polarity(tc->choice[i]));
-        else if(variant==3) score = sem + comp + color_score(tc->query,tc->choice[i]) + 4*ov + hd/10 + polarity_score(qp,polarity(tc->choice[i]));
-        else if(variant==4) score = raw_topo + sem/4 + code/8 + color_score(tc->query,tc->choice[i]) + polarity_score(qp,polarity(tc->choice[i]));
+        int color = (FACTORS&FF_COLOR) ? color_score(tc->query,tc->choice[i]) : 0;
+        int pol = (FACTORS&FF_POLARITY) ? polarity_score(qp,polarity(tc->choice[i])) : 0;
+        if(variant==2) score = sem + comp + color + pol;
+        else if(variant==3) score = sem + comp + color + 4*ov + hd/10 + pol;
+        else if(variant==4) score = raw_topo + sem/4 + code/8 + color + pol;
         int reach = (variant<2) ? (ov>0 || hd>=500) : (comp>0 || code>0 || ov>0 || hd>=500);
         if(i==tc->correct) correct_reachable=reach;
         if(loc<0) d.location_reject=1;
@@ -752,19 +762,54 @@ static int holdout_c_redteam(void){
     return rt_pass==rt_total?0:1;
 }
 
-static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam]\n"); }
+static void factor_label(int mask,char *out,int cap){
+    snprintf(out,(size_t)cap,"%s%s%s%s%s",
+             (mask&FF_POLARITY)?"pol":"-",
+             (mask&FF_COLOR)?"+color":"",
+             (mask&FF_COMP)?"+comp":"",
+             (mask&FF_LOCATION)?"+loc":"",
+             (mask&FF_SUPPORT)?"+support":"");
+}
+
+static int floor_sweep(void){
+    int save=FACTORS, pass=0;
+    printf("runtime_choice_floor topology_free_direct masks=%d\n",32);
+    printf("mask\tfactors\tfrozen\tholdout_a\tholdout_b\tholdout_c\twrong\tmiss\tlearned\tin_domain\tpass\n");
+    for(int mask=0;mask<32;mask++){
+        stats_t base[5], a[5], b[5], c[5]; attr_t aa,bb,cc; char label[80];
+        FACTORS=mask;
+        int nb=eval_all(base,0), na=eval_holdout(a,&aa,0), nbb=eval_holdout_b(b,&bb,0), nc=eval_holdout_c(c,&cc,0);
+        int ok=base[2].ok+a[2].ok+b[2].ok+c[2].ok;
+        int total=nb+na+nbb+nc;
+        int wrong=base[2].wrong+a[2].wrong+b[2].wrong+c[2].wrong;
+        int miss=base[2].miss+a[2].miss+b[2].miss+c[2].miss;
+        int learned=base[2].learned_reachable+a[2].learned_reachable+b[2].learned_reachable+c[2].learned_reachable;
+        int ind=in_domain_cases()+in_domain_set(HOLDOUT,na)+in_domain_set(HOLDOUT_B,nbb)+in_domain_set(HOLDOUT_C,nc);
+        int good=(ok==total&&wrong==0&&miss==0&&learned==ind);
+        if(good) pass++;
+        factor_label(mask,label,sizeof label);
+        printf("%02d\t%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d\t%d\t%d\t%d\t%s\n",
+               mask,label,base[2].ok,nb,a[2].ok,na,b[2].ok,nbb,c[2].ok,nc,wrong,miss,learned,ind,good?"yes":"no");
+    }
+    FACTORS=save;
+    printf("RUNTIME_CHOICE_FLOOR passing_masks=%d/32\n",pass);
+    return 0;
+}
+
+static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam|--floor]\n"); }
 
 int main(int argc,char **argv){
     const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
-    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,arg=1;
+    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,floor=0,arg=1;
     if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
-    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else {usage();return 1;} }
-    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red>1){usage();return 1;}
+    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else if(!strcmp(argv[i],"--floor"))floor=1; else {usage();return 1;} }
+    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red+floor>1){usage();return 1;}
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash(); train_seeded_projection();
     if(red)return redteam();
     if(holdout_red)return holdout_redteam();
     if(holdout_b_red)return holdout_b_redteam();
     if(holdout_c_red)return holdout_c_redteam();
+    if(floor)return floor_sweep();
     if(details){dump_details();return 0;}
     if(holdout_c){
         stats_t st[5]; attr_t attr; int n=eval_holdout_c(st,&attr,1); int in_domain=in_domain_set(HOLDOUT_C,n);

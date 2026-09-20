@@ -151,6 +151,36 @@ rejected. The last topology-only rescue was the color paraphrase case
 direct learned/factor path. Topology is now measured as scaffold-only on this
 probe, though it remains instrumented as a regression comparator.
 
+The topology-free factor floor is measured by:
+
+    c/bin/runtime_choice_eval --floor
+
+It exhaustively ablates the five direct runtime factors across the frozen probe
+plus Holdouts A/B/C:
+
+| Factor | Purpose |
+|---|---|
+| `pol` | polarity/operator inversion compatibility |
+| `color` | crisp color compatibility (`crimson` -> `red`, `blue` conflict) |
+| `comp` | compositional activation/lighting support |
+| `loc` | relational runtime referent binding |
+| `support` | learned support/knownness abstention gate |
+
+Current floor result:
+
+```text
+RUNTIME_CHOICE_FLOOR passing_masks=1/32
+```
+
+The single passing mask is the full direct path:
+
+```text
+pol+color+comp+loc+support
+```
+
+So topology is not required at runtime, but every explicit direct factor is
+currently load-bearing somewhere in the frozen probe plus Holdouts A/B/C.
+
 The evaluator has a built-in red team:
 
     c/bin/runtime_choice_eval --redteam
