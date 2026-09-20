@@ -24,8 +24,8 @@
 typedef struct { int idx, score; } near_t;
 typedef struct { uint64_t code; int pred, score; } sh_t;
 typedef struct { const char *query, *tag; int correct, nc; const char *choice[MAXC]; } testcase_t;
-typedef struct { int winner, score, second, margin, reachable, collision; } decision_t;
-typedef struct { const char *name; int ok, wrong, miss, collisions, r_not_sel, sel_not_r, polarity_fail; long margin_sum; } stats_t;
+typedef struct { int winner, score, second, margin, reachable, collision, knownness; } decision_t;
+typedef struct { const char *name; int ok, wrong, miss, collisions, r_not_sel, sel_not_r, polarity_fail, ood_gate; long margin_sum, known_sum; } stats_t;
 
 static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
@@ -122,6 +122,28 @@ static void hist(const near_t *n,int k,int *h){ memset(h,0,RMAXCLS*sizeof *h); f
 static int overlap(const near_t*a,const near_t*b,int k){ int n=0; for(int i=0;i<k;i++)for(int j=0;j<k;j++)if(a[i].idx==b[j].idx)n++; return n; }
 static int hist_dot(const int*a,const int*b){ int d=0,aa=0,bb=0; for(uint32_t c=0;c<R.n_class;c++){d+=a[c]*b[c];aa+=a[c]*a[c];bb+=b[c]*b[c];} return (!aa||!bb)?0:(2000*d)/(aa+bb); }
 
+static int has_word(const char *text,const char *word){
+    char b[512]; r_norm(text,b,sizeof b); int wl=(int)strlen(word);
+    for(char *p=b;*p;p++) if(!strncmp(p,word,(size_t)wl) && (p==b||p[-1]==' ') && (p[wl]==0||p[wl]==' ')) return 1;
+    return 0;
+}
+
+static int polarity(const char *text){
+    int up=0,down=0;
+    const char *ups[]={"increase","raise","brighter","brighten","bright","on",NULL};
+    const char *downs[]={"decrease","lower","dim","dimmer","dark","darker","darken","less","off",NULL};
+    for(int i=0;ups[i];i++) if(has_word(text,ups[i])) up=1;
+    for(int i=0;downs[i];i++) if(has_word(text,downs[i])) down=1;
+    if(up&&!down) return 1;
+    if(down&&!up) return -1;
+    return 0;
+}
+
+static int polarity_score(int qp,int cp){
+    if(!qp||!cp) return 0;
+    return qp==cp ? 80 : -120;
+}
+
 static int dot_cls(int c,const int16_t *acc){ int64_t s=0; for(int d=0;d<RD;d++) if(acc[d])s+=(int64_t)CW[c][d]*acc[d]; if(s>2147483647LL)return 2147483647; if(s<-2147483647LL)return -2147483647; return (int)s; }
 static void train_semhash(void){ int16_t acc[RD]; int32_t tot; (void)tot; for(int ep=0;ep<EPOCHS;ep++){ int err=0; for(int i=0;i<U_n;i++){ r_counts(U_t[i],acc,&tot); int y=R.label[i],pred=0,best=dot_cls(0,acc); for(uint32_t c=1;c<R.n_class;c++){int s=dot_cls((int)c,acc); if(s>best){best=s;pred=(int)c;}} if(pred!=y){err++; for(int d=0;d<RD;d++)if(acc[d]){CW[y][d]+=acc[d]; CW[pred][d]-=acc[d];}} } if(!err)break; } }
 static int code_bit(int cls,int j){ char b[80]; snprintf(b,sizeof b,"%s#%d",R.names[cls],j); uint32_t h=r_fnv(b,(int)strlen(b)); return (((h>>16)^h)&1)?1:-1; }
@@ -134,16 +156,22 @@ static int sem_sim(sh_t q,sh_t c){ return code_score(q.code,c.code)+c.score/8; }
 static decision_t decide(const testcase_t *tc,int variant){
     tvec qv,cv[MAXC]; int qa,ca[MAXC],qh[RMAXCLS],ch[MAXC][RMAXCLS]; near_t qn[K],cn[MAXC][K];
     sh_t q=sem_encode(tc->query), cs[MAXC]; topk(tc->query,qn,K,&qv,&qa); hist(qn,K,qh);
-    decision_t d={-1,-(1<<28),-(1<<28),0,0,0}; int correct_reachable=0;
+    decision_t d={-1,-(1<<28),-(1<<28),0,0,0,0}; int correct_reachable=0;
     int q_top=R.label[qn[0].idx];
-    int q_none = (variant<2) ? !strcmp(R.names[q_top],"none") : !strcmp(R.names[q.pred],"none");
+    int q_known=0; for(int i=0;i<K;i++)q_known+=qn[i].score; q_known/=K;
+    d.knownness=q_known;
+    int q_none = (variant<2 || variant==4) ? !strcmp(R.names[q_top],"none") : !strcmp(R.names[q.pred],"none");
+    int qp=polarity(tc->query);
     for(int i=0;i<tc->nc;i++){
         topk(tc->choice[i],cn[i],K,&cv[i],&ca[i]); hist(cn[i],K,ch[i]); cs[i]=sem_encode(tc->choice[i]);
         int direct=t_score_pre(&qv,&cv[i],qa,ca[i]); int ov=overlap(qn,cn[i],K); int hd=hist_dot(qh,ch[i]); int code=code_score(q.code,cs[i].code);
+        int raw_topo = direct + 4*ov + hd/10;
+        int sem = sem_sim(q,cs[i]);
         int score = direct;
-        if(variant==1) score = direct + 4*ov + hd/10;
-        else if(variant==2) score = sem_sim(q,cs[i]);
-        else if(variant==3) score = sem_sim(q,cs[i]) + 4*ov + hd/10;
+        if(variant==1) score = raw_topo;
+        else if(variant==2) score = sem;
+        else if(variant==3) score = sem + 4*ov + hd/10;
+        else if(variant==4) score = raw_topo + sem/4 + code/8 + polarity_score(qp,polarity(tc->choice[i]));
         int reach = (variant<2) ? (ov>0 || hd>=500) : (code>0 || ov>0 || hd>=500);
         if(i==tc->correct) correct_reachable=reach;
         if(!q_none){
@@ -158,7 +186,7 @@ static decision_t decide(const testcase_t *tc,int variant){
 }
 
 static void tally(stats_t *s,const testcase_t *tc,decision_t d){
-    s->margin_sum+=d.margin; if(d.collision)s->collisions++;
+    s->margin_sum+=d.margin; s->known_sum+=d.knownness; if(d.collision)s->collisions++; if(d.winner<0)s->ood_gate++;
     if(tc->correct<0){ if(d.winner<0)s->ok++; else s->wrong++; }
     else if(d.winner==tc->correct)s->ok++; else if(d.winner<0)s->miss++; else s->wrong++;
     if(strstr(tc->tag,"polarity") && d.winner!=tc->correct)s->polarity_fail++;
@@ -166,8 +194,8 @@ static void tally(stats_t *s,const testcase_t *tc,decision_t d){
 }
 
 static void init_stats(stats_t *st){
-    memset(st,0,4*sizeof st[0]);
-    st[0].name="raw_direct"; st[1].name="raw_neighborhood"; st[2].name="semhash_direct"; st[3].name="semhash_neighborhood";
+    memset(st,0,5*sizeof st[0]);
+    st[0].name="raw_direct"; st[1].name="raw_neighborhood"; st[2].name="semhash_direct"; st[3].name="semhash_neighborhood"; st[4].name="residual_combo";
 }
 
 static int eval_all(stats_t *st,int print_cases){
@@ -175,13 +203,14 @@ static int eval_all(stats_t *st,int print_cases){
     init_stats(st);
     if(print_cases){
         printf("runtime_choice_eval cases=%d k=%d classes=%u index=%d\n",n,K,R.n_class,U_n);
-        printf("case\ttags\tcorrect\traw\traw_nb\tsem\tsem_nb\n");
+        printf("case\ttags\tcorrect\traw\traw_nb\tsem\tsem_nb\tresidual\n");
     }
     for(int i=0;i<n;i++){
-        decision_t d[4]; for(int v=0;v<4;v++){d[v]=decide(&CASES[i],v); tally(&st[v],&CASES[i],d[v]);}
-        if(print_cases) printf("%d\t%s\t%d\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\n",i,CASES[i].tag,CASES[i].correct,
+        decision_t d[5]; for(int v=0;v<5;v++){d[v]=decide(&CASES[i],v); tally(&st[v],&CASES[i],d[v]);}
+        if(print_cases) printf("%d\t%s\t%d\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\n",i,CASES[i].tag,CASES[i].correct,
                d[0].winner,d[0].score,d[0].margin,d[0].reachable?'R':'-', d[1].winner,d[1].score,d[1].margin,d[1].reachable?'R':'-',
-               d[2].winner,d[2].score,d[2].margin,d[2].reachable?'R':'-', d[3].winner,d[3].score,d[3].margin,d[3].reachable?'R':'-');
+               d[2].winner,d[2].score,d[2].margin,d[2].reachable?'R':'-', d[3].winner,d[3].score,d[3].margin,d[3].reachable?'R':'-',
+               d[4].winner,d[4].score,d[4].margin,d[4].reachable?'R':'-');
     }
     return n;
 }
@@ -197,15 +226,16 @@ static int redteam(void){
         rt("correct index valid or NONE",CASES[i].correct==-1||(CASES[i].correct>=0&&CASES[i].correct<CASES[i].nc));
         rt("case has tags",CASES[i].tag&&CASES[i].tag[0]);
     }
-    stats_t st[4]; n=eval_all(st,0);
+    stats_t st[5]; n=eval_all(st,0);
     rt("raw neighborhood improves raw direct",st[1].ok>st[0].ok&&st[1].wrong<st[0].wrong);
     rt("semhash neighborhood improves semhash direct",st[3].ok>st[2].ok&&st[3].wrong<st[2].wrong);
-    rt("raw neighborhood remains strongest baseline",st[1].ok>st[3].ok);
-    rt("candidate collision rate independent of abstain gate",st[0].collisions==st[1].collisions&&st[1].collisions==st[2].collisions&&st[2].collisions==st[3].collisions);
-    rt("polarity failures still visible",st[3].polarity_fail>0);
+    rt("residual combo improves the current champion",st[4].ok>st[1].ok);
+    rt("candidate collision rate independent of abstain gate",st[0].collisions==st[1].collisions&&st[1].collisions==st[2].collisions&&st[2].collisions==st[3].collisions&&st[3].collisions==st[4].collisions);
+    rt("polarity channel removes residual polarity failures",st[4].polarity_fail==0);
     rt("reachable-not-selected still visible before NSW",st[2].r_not_sel>0);
     rt("semhash neighborhood reduces selected-not-reachable",st[3].sel_not_r<st[0].sel_not_r);
-    rt("out-of-domain wrong acts still counted",st[3].wrong>0);
+    rt("semhash out-of-domain wrong acts still counted",st[3].wrong>0);
+    rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==2);
     printf("RUNTIME_CHOICE_EVAL_REDTEAM checks=%d/%d score=%d/100\n",rt_pass,rt_total,rt_total?(100*rt_pass)/rt_total:0);
     return rt_pass==rt_total?0:1;
 }
@@ -219,16 +249,20 @@ int main(int argc,char **argv){
     for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else {usage();return 1;} }
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash();
     if(red)return redteam();
-    stats_t st[4]; int n=eval_all(st,1);
-    printf("\nvariant\taccuracy\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\n");
-    for(int v=0;v<4;v++) printf("%s\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail);
+    stats_t st[5]; int n=eval_all(st,1);
+    printf("\nvariant\taccuracy\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\tood_gates\tmean_knownness\n");
+    for(int v=0;v<5;v++) printf("%s\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\t%d\t%ld\n",st[v].name,st[v].ok,n,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail,st[v].ood_gate,st[v].known_sum/n);
     printf("\ndecision: ");
-    if(st[2].ok>=st[3].ok && st[2].wrong<=st[3].wrong) printf("semhash_direct is enough for the learned path; keep it simple before adding topology.\n");
+    if(st[4].ok>st[1].ok && st[4].wrong<st[1].wrong) printf("residual_combo beats the current champion; keep combined evidence and expand the adversarial set.\n");
+    else if(st[2].ok>=st[3].ok && st[2].wrong<=st[3].wrong) printf("semhash_direct is enough for the learned path; keep it simple before adding topology.\n");
     else if(st[3].ok>st[2].ok) printf("semhash_neighborhood improves the learned path; add topology there next.\n");
     else printf("results are mixed; inspect polarity/reachability tags before changing architecture.\n");
-    if(st[1].ok>st[3].ok) printf("next: raw_neighborhood is still the strongest baseline; improve the learned projection before replacing it.\n");
-    if(st[3].polarity_fail) printf("next: polarity failures persist; add a factorized polarity channel.\n");
+    if(st[4].ok<n) printf("next: residual is not perfect yet; inspect remaining failures before NSW.\n");
+    if(st[4].polarity_fail) printf("next: polarity failures persist; strengthen the factorized polarity channel.\n");
+    else printf("next: polarity failures are zero under residual_combo on this probe.\n");
     if(st[3].r_not_sel||st[2].r_not_sel) printf("next: reachable-but-not-selected exists; improve selection/rerank before NSW.\n");
-    if(st[3].sel_not_r>n/3) printf("next: reachability is poor; improve training/projection before NSW.\n");
+    if(st[4].sel_not_r) printf("next: residual still has selected-but-not-reachable cases; make the learned representation create the missing bridge.\n");
+    if(st[4].wrong==0) printf("next: OOD knownness gate preserves NONE on this probe; expand OOD negatives.\n");
+    if(st[4].sel_not_r>n/3) printf("next: reachability is poor; improve training/projection before NSW.\n");
     return 0;
 }

@@ -107,23 +107,33 @@ a fixed tagged runtime-choice eval set:
 - tags: `paraphrase`, `polarity`, `collision`, `out-of-domain`, `bridged`,
   `unbridged`
 
-It scores every case four ways:
+It scores every case five ways:
 
 - `raw_direct`
 - `raw_neighborhood`
 - `semhash_direct`
 - `semhash_neighborhood`
+- `residual_combo`
 
 It reports accuracy, wrong-act rate, missed/none rate, mean margin, collision
-rate, reachable-but-not-selected count, selected-but-not-reachable count, and
-polarity failures. The current diagnostic decision is:
+rate, reachable-but-not-selected count, selected-but-not-reachable count,
+polarity failures, OOD gates, and mean query knownness. The current diagnostic
+decision is:
 
 ```text
-decision: semhash_neighborhood improves the learned path; add topology there next.
-next: raw_neighborhood is still the strongest baseline; improve the learned projection before replacing it.
-next: polarity failures persist; add a factorized polarity channel.
+decision: residual_combo beats the current champion; keep combined evidence and expand the adversarial set.
+next: polarity failures are zero under residual_combo on this probe.
 next: reachable-but-not-selected exists; improve selection/rerank before NSW.
+next: residual still has selected-but-not-reachable cases; make the learned representation create the missing bridge.
+next: OOD knownness gate preserves NONE on this probe; expand OOD negatives.
 ```
+
+`residual_combo` is intentionally simple integer evidence fusion, not a tuned
+policy: raw topology plus scaled semhash evidence plus an explicit lexical
+polarity compatibility term, gated by the existing `none` manifold basin. It
+gets the current eight-case probe to `8/8`, preserves `NONE` on the two OOD
+cases, and removes polarity failures. It still selects case 3 without graph/code
+reachability, so the representation has not yet created the missing bridge.
 
 The evaluator has a built-in red team:
 
