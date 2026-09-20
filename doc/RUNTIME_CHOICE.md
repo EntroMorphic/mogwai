@@ -189,12 +189,14 @@ It keeps all five factors enabled and sweeps the learned-code comparison from 1
 to 64 bits. Current result:
 
 ```text
-RUNTIME_CHOICE_BIT_FLOOR min_bits=11 passing=54/64
+RUNTIME_CHOICE_BIT_FLOOR min_bits=21 passing=44/64
 ```
 
-So the current pinned universe needs only 11 semhash code bits for the direct
-runtime path; 1 through 10 bits lose two cases, and 11 through 64 bits preserve
-all frozen/holdout behavior.
+So the current pinned universe needs 21 semhash code bits for the direct runtime
+path. The first code-width red-team added non-lighting semantic-code probes
+(`coffee`, `cleaning`, `smart plug`), raising the floor from 11 bits to 21 bits;
+1 through 20 bits now lose at least one case, and 21 through 64 bits preserve all
+frozen/holdout behavior.
 
 The evaluator has a built-in red team:
 
@@ -274,8 +276,8 @@ multiword referents such as `living room` are treated as one runtime referent.
 Current Holdout C is:
 
 ```text
-semhash_neighborhood accuracy=9/9 learned_coverage=5/5 wrong_act=0/9 residual_rescue=0
-attribution learned_accept=5 learned_reject=0 topology_rescue=0 operator_factor=0 domain_reject=0 location_reject=4 hard_ood_veto=0 residual_rescue=0 wrong=0
+semhash_neighborhood accuracy=12/12 learned_coverage=8/8 wrong_act=0/12 residual_rescue=0
+attribution learned_accept=8 learned_reject=0 topology_rescue=0 operator_factor=0 domain_reject=0 location_reject=4 hard_ood_veto=0 residual_rescue=0 wrong=0
 ```
 
 For atomic failure analysis:
