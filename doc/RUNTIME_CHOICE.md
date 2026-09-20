@@ -126,9 +126,8 @@ not miss an in-domain action. `learned_coverage` is
 fixed zero wrong-actuation rate. The current diagnostic decision is:
 
 ```text
-decision: semhash_neighborhood now matches residual_combo; keep exact topology and expand the adversarial set before NSW.
+decision: semhash_direct now matches topology and residual; topology is scaffold-only on this probe.
 next: polarity failures are zero under residual_combo on this probe.
-next: reachable-but-not-selected exists; improve selection/rerank before NSW.
 next: OOD knownness gate preserves NONE on this probe; expand OOD negatives.
 ```
 
@@ -144,14 +143,13 @@ negation, inverse negation, `keep ... from getting ...`, `avoid ...`,
 `prevent ... from getting ...`, unseen `stop ... getting ...` negation, and
 polarity-bearing transit OOD. The residual path gets the current twenty-three
 case probe to `23/23`, preserves `NONE` on all five OOD cases, and removes
-polarity failures. `semhash_direct` reaches `22/23`, with
-`commit_precision=22/23` and `learned_coverage=17/18`.
-`semhash_neighborhood` now matches `residual_combo` at `23/23`, with
-`commit_precision=23/23`, `learned_coverage=18/18`, zero wrong actuation, and
-all five OOD cases still rejected. This only held after semhash
-candidate scoring included the same explicit polarity compatibility term; the
-balanced route seeds alone made the representation more reachable but too
-permissive on literal non-negated candidates.
+polarity failures. `semhash_direct` now matches `semhash_neighborhood` and
+`residual_combo` at `23/23`, with `commit_precision=23/23`,
+`learned_coverage=18/18`, zero wrong actuation, and all five OOD cases still
+rejected. The last topology-only rescue was the color paraphrase case
+(`crimson` -> `red`); an explicit color compatibility factor moved it into the
+direct learned/factor path. Topology is now measured as scaffold-only on this
+probe, though it remains instrumented as a regression comparator.
 
 The evaluator has a built-in red team:
 
@@ -305,6 +303,6 @@ Current runtime-choice floor:
 |---|---:|---:|---:|
 | `raw_direct` | `7/22` | `2/18` | `15/23` |
 | `raw_neighborhood` | `7/22` | `4/18` | `15/23` |
-| `semhash_direct` | `22/23` | `17/18` | `1/23` |
+| `semhash_direct` | `23/23` | `18/18` | `0/23` |
 | `semhash_neighborhood` | `23/23` | `18/18` | `0/23` |
 | `residual_combo` | `23/23` | `18/18` | `0/23` |

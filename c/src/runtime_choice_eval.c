@@ -294,6 +294,18 @@ static int polarity_score(int qp,int cp){
     return qp==cp ? 80 : -260;
 }
 
+static int color_value(const char *text){
+    if(has_word(text,"red")||has_word(text,"crimson")) return 1;
+    if(has_word(text,"blue")) return 2;
+    return 0;
+}
+
+static int color_score(const char *query,const char *choice){
+    int q=color_value(query), c=color_value(choice);
+    if(!q||!c) return 0;
+    return q==c ? 180 : -180;
+}
+
 static int lighting_target(const char *text){
     return has_word(text,"light")||has_word(text,"lights")||has_word(text,"lamp")||has_word(text,"lamps")||has_word(text,"lighting");
 }
@@ -435,9 +447,9 @@ static decision_t decide(const testcase_t *tc,int variant){
         int loc = location_compatibility(tc->query,tc->choice[i]);
         int score = direct;
         if(variant==1) score = raw_topo;
-        else if(variant==2) score = sem + comp + polarity_score(qp,polarity(tc->choice[i]));
-        else if(variant==3) score = sem + comp + 4*ov + hd/10 + polarity_score(qp,polarity(tc->choice[i]));
-        else if(variant==4) score = raw_topo + sem/4 + code/8 + polarity_score(qp,polarity(tc->choice[i]));
+        else if(variant==2) score = sem + comp + color_score(tc->query,tc->choice[i]) + polarity_score(qp,polarity(tc->choice[i]));
+        else if(variant==3) score = sem + comp + color_score(tc->query,tc->choice[i]) + 4*ov + hd/10 + polarity_score(qp,polarity(tc->choice[i]));
+        else if(variant==4) score = raw_topo + sem/4 + code/8 + color_score(tc->query,tc->choice[i]) + polarity_score(qp,polarity(tc->choice[i]));
         int reach = (variant<2) ? (ov>0 || hd>=500) : (comp>0 || code>0 || ov>0 || hd>=500);
         if(i==tc->correct) correct_reachable=reach;
         if(loc<0) d.location_reject=1;
@@ -604,11 +616,11 @@ static int redteam(void){
     }
     stats_t st[5]; n=eval_all(st,0);
     rt("raw neighborhood improves learned reachability",st[1].learned_reachable>st[0].learned_reachable);
-    rt("semhash neighborhood improves semhash direct",st[3].ok>st[2].ok&&st[3].wrong<st[2].wrong);
+    rt("semhash direct now matches neighborhood",st[2].ok==st[3].ok&&st[2].wrong==st[3].wrong&&st[2].miss==st[3].miss);
     rt("residual combo improves the current champion",st[4].ok>st[1].ok);
     rt("candidate collision rate independent of abstain gate",st[0].collisions==st[1].collisions&&st[1].collisions==st[2].collisions&&st[2].collisions==st[3].collisions&&st[3].collisions==st[4].collisions);
     rt("polarity channel removes residual polarity failures",st[4].polarity_fail==0);
-    rt("reachable-not-selected still visible before NSW",st[2].r_not_sel>0);
+    rt("semhash direct has no reachable-not-selected debt",st[2].r_not_sel==0);
     rt("semhash neighborhood reduces selected-not-reachable",st[3].sel_not_r<st[0].sel_not_r);
     rt("semhash neighborhood no longer wrong-acts on OOD",decide(&CASES[5],3).winner==-1&&decide(&CASES[6],3).winner==-1&&decide(&CASES[9],3).winner==-1&&decide(&CASES[12],3).winner==-1&&decide(&CASES[22],3).winner==-1);
     rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==5);
@@ -641,9 +653,11 @@ static int redteam(void){
     neg=decide(&CASES[22],4);
     rt("residual transit polarity OOD abstains",neg.winner==-1);
     rt("semhash neighborhood zero wrong-actuation pinned",st[3].wrong==0&&st[3].miss==0);
+    rt("semhash direct zero wrong-actuation pinned",st[2].wrong==0&&st[2].miss==0);
     rt("residual route-state counts pinned",st[4].learned_reachable==18&&st[4].residual_rescue==0&&st[4].unsupported==5);
     rt("semhash neighborhood commit precision pinned",st[3].ok==23&&n-st[3].miss==23);
     rt("semhash neighborhood learned coverage pinned",st[3].learned_reachable==18&&in_domain_cases()==18);
+    rt("semhash direct learned coverage pinned",st[2].ok==23&&st[2].learned_reachable==18&&in_domain_cases()==18);
     rt("residual LC0 pinned",st[4].wrong==0&&st[4].learned_reachable==18&&in_domain_cases()==18);
     rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
     rt("near-class OOD abstains",near_ood.winner==-1);
@@ -784,7 +798,8 @@ int main(int argc,char **argv){
         printf("%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].ok,committed,st[v].learned_reachable,in_domain,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail,st[v].ood_gate,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported);
     }
     printf("\ndecision: ");
-    if(st[3].ok==st[4].ok && st[3].wrong==0) printf("semhash_neighborhood now matches residual_combo; keep exact topology and expand the adversarial set before NSW.\n");
+    if(st[2].ok==st[3].ok && st[2].ok==st[4].ok && st[2].wrong==0) printf("semhash_direct now matches topology and residual; topology is scaffold-only on this probe.\n");
+    else if(st[3].ok==st[4].ok && st[3].wrong==0) printf("semhash_neighborhood now matches residual_combo; keep exact topology and expand the adversarial set before NSW.\n");
     else if(st[4].ok>st[1].ok && st[4].wrong<st[1].wrong) printf("residual_combo beats the current champion; keep combined evidence and expand the adversarial set.\n");
     else if(st[2].ok>=st[3].ok && st[2].wrong<=st[3].wrong) printf("semhash_direct is enough for the learned path; keep it simple before adding topology.\n");
     else if(st[3].ok>st[2].ok) printf("semhash_neighborhood improves the learned path; add topology there next.\n");
