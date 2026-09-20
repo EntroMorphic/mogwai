@@ -94,12 +94,18 @@ malformed input and fail closed.
 
 Serialized runtime-choice candidate sets use a separate `RTC1` magic
 (`RTC_CAND_MAGIC`), so they cannot be mistaken for `router.bin` (`RTR2`). The
-parser is bounded and allocation-free: exact EOF is required, candidate count is
-capped by `RUNTIME_CHOICE_MAX_CANDIDATES`, every fixed-size record contains a
-NUL-terminated zero-padded text field, reserved bytes must be zero, and parsed
-records pass the same candidate validator as direct API calls.
+wire format is little-endian and the parser is bounded and allocation-free: exact
+EOF is required, candidate count is capped by `RUNTIME_CHOICE_MAX_CANDIDATES`,
+every fixed-size record contains a NUL-terminated zero-padded text field,
+reserved bytes must be zero, and parsed records pass the same candidate validator
+as direct API calls.
 `r_runtime_write_candidates()` is the deterministic C encoder for the same
 format, and round-trip tests pin writer/parser equivalence.
+
+Red-team iteration 2026-09-20: zero-count `RTC1` blobs are explicitly valid and
+round-trip without dummy candidate/output arrays, matching the direct API's
+empty-set abstention semantics. Nonzero blobs still require output storage, and
+parser capacity smaller than the encoded count rejects before any record walk.
 
 Red-team iteration 2026-09-20: factor flags and factor values must now agree
 exactly. A value without its flag, or a flag with the neutral value, is malformed

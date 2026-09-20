@@ -40,12 +40,22 @@ static int rtc_validate_candidate(const runtime_candidate_t *c) {
     return 1;
 }
 
-static uint32_t rtc_u32(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return v; }
-static uint64_t rtc_u64(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return v; }
-static int32_t rtc_i32(const uint8_t *p) { int32_t v; memcpy(&v, p, 4); return v; }
-static void rtc_put32(uint8_t *p, uint32_t v) { memcpy(p, &v, 4); }
-static void rtc_put64(uint8_t *p, uint64_t v) { memcpy(p, &v, 8); }
-static void rtc_puti32(uint8_t *p, int32_t v) { memcpy(p, &v, 4); }
+static uint32_t rtc_u32(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+static uint64_t rtc_u64(const uint8_t *p) {
+    uint64_t v = 0;
+    for (int i = 7; i >= 0; i--) v = (v << 8) | p[i];
+    return v;
+}
+static int32_t rtc_i32(const uint8_t *p) { return (int32_t)rtc_u32(p); }
+static void rtc_put32(uint8_t *p, uint32_t v) {
+    p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24);
+}
+static void rtc_put64(uint8_t *p, uint64_t v) {
+    for (int i = 0; i < 8; i++) { p[i] = (uint8_t)v; v >>= 8; }
+}
+static void rtc_puti32(uint8_t *p, int32_t v) { rtc_put32(p, (uint32_t)v); }
 
 size_t r_runtime_candidates_size(int n_cands) {
     if (n_cands < 0 || n_cands > RUNTIME_CHOICE_MAX_CANDIDATES) return 0;
@@ -58,9 +68,10 @@ int r_runtime_write_candidates(uint8_t *dst,
                                int n_cands,
                                size_t *written) {
     if (written) *written = 0;
-    if (!dst || !cands || !written) return -1;
+    if (!dst || !written) return -1;
     size_t need = r_runtime_candidates_size(n_cands);
     if (!need || need > cap) return -2;
+    if (n_cands > 0 && !cands) return -1;
     for (int i = 0; i < n_cands; i++) if (!rtc_validate_candidate(&cands[i])) return -3;
 
     memset(dst, 0, need);
@@ -88,11 +99,12 @@ int r_runtime_parse_candidates(const uint8_t *base,
                                int cap,
                                int *n_out) {
     if (n_out) *n_out = 0;
-    if (!base || !out || !n_out || cap < 0) return -1;
+    if (!base || !n_out || cap < 0) return -1;
     if (have < 8) return -2;
     if (rtc_u32(base) != RTC_CAND_MAGIC) return -2;
     uint32_t n = rtc_u32(base + 4);
     if (n > RUNTIME_CHOICE_MAX_CANDIDATES || n > (uint32_t)cap) return -2;
+    if (n > 0 && !out) return -1;
     size_t need = 8 + (size_t)n * RTC_CAND_RECORD_BYTES;
     if (need != have) return -2;
 

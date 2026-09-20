@@ -15,8 +15,8 @@ static int same_none(runtime_choice_t a, runtime_choice_t b) {
            a.margin == b.margin && a.reason == b.reason;
 }
 
-static void put32(uint8_t *p, uint32_t v) { memcpy(p, &v, 4); }
-static void put64(uint8_t *p, uint64_t v) { memcpy(p, &v, 8); }
+static void put32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
+static void put64(uint8_t *p, uint64_t v) { for (int i = 0; i < 8; i++) { p[i] = (uint8_t)v; v >>= 8; } }
 
 static void make_blob(uint8_t *blob, int n) {
     memset(blob, 0, 8 + (size_t)n * RTC_CAND_RECORD_BYTES);
@@ -120,10 +120,16 @@ int main(void) {
     chk("candidate blob factor mismatch rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
     chk("candidate blob size helper", r_runtime_candidates_size(2) == 8 + 2 * RTC_CAND_RECORD_BYTES && r_runtime_candidates_size(-1) == 0 && r_runtime_candidates_size(RUNTIME_CHOICE_MAX_CANDIDATES + 1) == 0);
     chk("candidate blob writer rejects small buffer", r_runtime_write_candidates(blob2, sizeof blob2 - 1, perm_a, 2, &written) == -2 && written == 0);
+    chk("candidate blob parser rejects small output cap", r_runtime_parse_candidates(blob2, sizeof blob2, parsed, 1, &parsed_n) == -2 && parsed_n == 0);
     chk("candidate blob writer rejects malformed", r_runtime_write_candidates(blob2, sizeof blob2, hidden_pol, 1, &written) == -3 && written == 0);
     chk("candidate blob writer round trips", r_runtime_write_candidates(blob2, sizeof blob2, perm_a, 2, &written) == 0 && written == 8 + 2 * RTC_CAND_RECORD_BYTES && r_runtime_parse_candidates(blob2, written, parsed, 2, &parsed_n) == 0 && parsed_n == 2 && parsed[0].sem_code == perm_a[0].sem_code && parsed[1].support == perm_a[1].support && !strcmp(parsed[1].text, perm_a[1].text));
+    chk("candidate blob writer is little endian", blob2[0] == 'R' && blob2[1] == 'C' && blob2[2] == 'T' && blob2[3] == '1' && blob2[8] == 1 && blob2[9] == 0 && blob2[16] == 2 && blob2[17] == 0);
     memset(blob, 0xff, sizeof blob);
     chk("candidate blob writer zero pads", r_runtime_write_candidates(blob, sizeof blob, one, 1, &written) == 0 && blob[8 + 24 + strlen(one[0].text) + 1] == 0 && blob[8 + 21] == 0 && blob[8 + 22] == 0 && blob[8 + 23] == 0);
+    chk("empty candidate blob size", r_runtime_candidates_size(0) == 8);
+    chk("empty candidate blob writes", r_runtime_write_candidates(blob, sizeof blob, NULL, 0, &written) == 0 && written == 8);
+    chk("empty candidate blob parses without output", r_runtime_parse_candidates(blob, written, NULL, 0, &parsed_n) == 0 && parsed_n == 0);
+    chk("nonempty candidate blob needs output", r_runtime_parse_candidates(blob2, sizeof blob2, NULL, 2, &parsed_n) == -1 && parsed_n == 0);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;
