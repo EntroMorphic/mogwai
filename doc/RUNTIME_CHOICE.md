@@ -166,15 +166,16 @@ goes through a separate blind holdout mode:
 The holdout reports attribution so perfect accuracy cannot hide rule dependence:
 
 ```text
-attribution learned_accept=2 learned_reject=1 topology_rescue=0 operator_factor=7 domain_reject=10 hard_ood_veto=0 residual_rescue=0 wrong=0
+attribution learned_accept=2 learned_reject=1 topology_rescue=0 operator_factor=7 domain_reject=9 location_reject=1 hard_ood_veto=0 residual_rescue=0 wrong=0
 ```
 
 On the current 20-case blind holdout, residual, polarity-aware semhash direct,
 and polarity-aware semhash neighborhood all reach `20/20`, with `9/9` learned
 in-domain coverage and zero wrong actuation. The OOD successes remain split by
 cause: near-class and metaphorical lighting collisions are attributed to
-`domain_reject`, not the legacy hard veto bucket, while `write a grocery list`
-is the first pinned `learned_reject`. The holdout exposed three real gaps before
+`domain_reject`, unsupported runtime referent conflicts are attributed to
+`location_reject`, and `write a grocery list` is the first pinned
+`learned_reject`. The holdout exposed three real gaps before
 pinning: `avoid increasing ...` was not recognized as an upward brightness axis
 because `increasing` was missing from the factorized polarity vocabulary,
 `activate the hallway lamps` needed compositional support for `activate -> ON`,
@@ -207,13 +208,29 @@ preserved the first-shot evidence: in-domain combinatorial coverage transferred,
 learned abstention transferred once, and the next real boundary was
 unsupported-location domain support beyond the explicit Holdout A locations.
 
-The remediation added `garage`, `foyer`, and `basement` to the explicit
+The first remediation added `garage`, `foyer`, and `basement` to the explicit
 unsupported-location/domain boundary, plus two new red-team probes so the fix did
-not only patch the failing strings. Current Holdout B is now:
+not only patch the failing strings. The later relational remediation removed
+those named locations from the domain list and derives rejection from query vs
+candidate referent conflicts. Current Holdout B is now:
 
 ```text
 semhash_neighborhood accuracy=14/14 learned_coverage=5/5 wrong_act=0/14 residual_rescue=0
-attribution learned_accept=2 learned_reject=1 topology_rescue=0 operator_factor=3 domain_reject=8 hard_ood_veto=0 residual_rescue=0 wrong=0
+attribution learned_accept=2 learned_reject=1 topology_rescue=0 operator_factor=3 domain_reject=3 location_reject=5 hard_ood_veto=0 residual_rescue=0 wrong=0
+```
+
+Holdout C freezes unseen runtime referent binding:
+
+    c/bin/runtime_choice_eval --holdout-c
+    c/bin/runtime_choice_eval --holdout-c-redteam
+
+It tests that unseen locations need not be in a room vocabulary: matching query
+and candidate referents are compatible, and conflicting explicit referents reject
+relationally. Current Holdout C is:
+
+```text
+semhash_neighborhood accuracy=6/6 learned_coverage=4/4 wrong_act=0/6 residual_rescue=0
+attribution learned_accept=4 learned_reject=0 topology_rescue=0 operator_factor=0 domain_reject=0 location_reject=2 hard_ood_veto=0 residual_rescue=0 wrong=0
 ```
 
 For atomic failure analysis:

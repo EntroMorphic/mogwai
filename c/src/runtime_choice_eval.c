@@ -25,9 +25,9 @@
 typedef struct { int idx, score; } near_t;
 typedef struct { uint64_t code; int pred, score; } sh_t;
 typedef struct { const char *query, *tag; int correct, nc; const char *choice[MAXC]; } testcase_t;
-typedef struct { int winner, score, second, margin, reachable, collision, knownness; } decision_t;
+typedef struct { int winner, score, second, margin, reachable, collision, knownness, location_reject; } decision_t;
 typedef struct { int direct, overlap, hist, raw_topo, sem, code, qpol, cpol, pcompat, reachable; } atom_t;
-typedef struct { const char *name; int ok, wrong, miss, collisions, r_not_sel, sel_not_r, polarity_fail, ood_gate, learned_reachable, residual_rescue, unsupported; long margin_sum; } stats_t;
+typedef struct { const char *name; int ok, wrong, miss, collisions, r_not_sel, sel_not_r, polarity_fail, ood_gate, learned_reachable, residual_rescue, unsupported, location_reject; long margin_sum; } stats_t;
 
 static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
@@ -158,6 +158,21 @@ static testcase_t HOLDOUT_B[] = {
      {"turn the hallway lights off", "make the hallway brighter", "dim the hallway lights"}}
 };
 
+static testcase_t HOLDOUT_C[] = {
+    {"activate the atrium lamps", "blind-c,unseen-location,match,operator", 0, 3,
+     {"turn the atrium lights on", "dim the atrium lights", "turn the hallway lights on"}},
+    {"activate the atrium lamps", "blind-c,unseen-location,conflict,operator", -1, 3,
+     {"turn the hallway lights on", "dim the hallway lights", "turn the hallway lights off"}},
+    {"activate the workshop lighting", "blind-c,unseen-location,match,operator", 1, 3,
+     {"turn the hallway lights on", "turn the workshop lights on", "dim the workshop lights"}},
+    {"don't let the nursery lights dim", "blind-c,unseen-location,negation", 0, 3,
+     {"make the nursery brighter", "dim the nursery lights", "turn the nursery lights off"}},
+    {"turn off the observatory lamps", "blind-c,unseen-location,off", 2, 3,
+     {"turn the hallway lights off", "make the observatory brighter", "turn the observatory lights off"}},
+    {"turn off the observatory lamps", "blind-c,unseen-location,conflict,off", -1, 3,
+     {"turn the hallway lights off", "make the hallway brighter", "dim the hallway lights"}}
+};
+
 static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k); const char*p=strstr(l,pat); if(!p)return 0; p+=strlen(pat);
@@ -263,7 +278,7 @@ static int polarity(const char *text){
 }
 
 static int unsupported_target(const char *text){
-    return has_phrase(text,"light rail")||has_word(text,"rail")||has_word(text,"train")||has_word(text,"refund")||has_word(text,"ticket")||has_word(text,"customer")||has_word(text,"transit")||has_word(text,"mood")||has_word(text,"mortgage")||has_word(text,"phone")||has_word(text,"screen")||has_word(text,"display")||has_word(text,"day")||has_word(text,"account")||has_word(text,"balance")||has_word(text,"appetite")||has_word(text,"porch")||has_word(text,"garage")||has_word(text,"foyer")||has_word(text,"basement")||has_word(text,"speaker");
+    return has_phrase(text,"light rail")||has_word(text,"rail")||has_word(text,"train")||has_word(text,"refund")||has_word(text,"ticket")||has_word(text,"customer")||has_word(text,"transit")||has_word(text,"mood")||has_word(text,"mortgage")||has_word(text,"phone")||has_word(text,"screen")||has_word(text,"display")||has_word(text,"day")||has_word(text,"account")||has_word(text,"balance")||has_word(text,"appetite")||has_word(text,"speaker");
 }
 
 static int hard_ood(const char *text){ return unsupported_target(text); }
@@ -274,26 +289,49 @@ static int polarity_score(int qp,int cp){
 }
 
 static int lighting_target(const char *text){
-    return has_word(text,"light")||has_word(text,"lights")||has_word(text,"lamp")||has_word(text,"lamps");
+    return has_word(text,"light")||has_word(text,"lights")||has_word(text,"lamp")||has_word(text,"lamps")||has_word(text,"lighting");
 }
 
 static int on_operator(const char *text){
     return has_word(text,"activate")||has_word(text,"on");
 }
 
-static int location_mask(const char *text){
-    int m=0;
-    if(has_word(text,"hallway")) m|=1;
-    if(has_word(text,"bedroom")) m|=2;
-    if(has_word(text,"kitchen")) m|=4;
-    if(has_word(text,"lounge")) m|=8;
-    if(has_word(text,"room")) m|=16;
-    return m;
+static int location_stopword(const char *word){
+    return !strcmp(word,"the")||!strcmp(word,"a")||!strcmp(word,"an")||!strcmp(word,"my")||!strcmp(word,"room");
 }
 
-static int target_compatible(const char *query,const char *choice){
-    int qm=location_mask(query), cm=location_mask(choice);
-    return !qm || (qm&cm);
+static int location_cue(const char *word){
+    return !strcmp(word,"brighter")||!strcmp(word,"brightness")||!strcmp(word,"darker")||!strcmp(word,"dim")||!strcmp(word,"from");
+}
+
+static int extract_light_location(const char *text,char *out,int cap){
+    char b[512],tok[48][32]; int nt=0;
+    r_norm(text,b,sizeof b);
+    for(char *p=b;*p&&nt<48;){
+        while(*p==' ')p++;
+        if(!*p)break;
+        int n=0;
+        while(*p&&*p!=' '&&n<(int)sizeof tok[0]-1) tok[nt][n++]=*p++;
+        while(*p&&*p!=' ')p++;
+        tok[nt][n]=0; nt++;
+    }
+    for(int i=1;i<nt;i++) if(!strcmp(tok[i],"light")||!strcmp(tok[i],"lights")||!strcmp(tok[i],"lamp")||!strcmp(tok[i],"lamps")||!strcmp(tok[i],"lighting")){
+        if(location_stopword(tok[i-1])) continue;
+        snprintf(out,(size_t)cap,"%s",tok[i-1]);
+        return 1;
+    }
+    for(int i=0;i+2<nt;i++) if(!strcmp(tok[i],"the")&&!location_stopword(tok[i+1])&&location_cue(tok[i+2])){
+        snprintf(out,(size_t)cap,"%s",tok[i+1]);
+        return 1;
+    }
+    return 0;
+}
+
+static int location_compatibility(const char *query,const char *choice){
+    char q[32],c[32];
+    int qh=extract_light_location(query,q,sizeof q), ch=extract_light_location(choice,c,sizeof c);
+    if(qh&&ch) return !strcmp(q,c) ? 1 : -1;
+    return 0;
 }
 
 static int compositional_support(const char *query,const char *choice){
@@ -301,7 +339,7 @@ static int compositional_support(const char *query,const char *choice){
     if(qp!=1||cp!=1) return 0;
     if(!lighting_target(query)||!lighting_target(choice)) return 0;
     if(!on_operator(query)||!on_operator(choice)) return 0;
-    if(!target_compatible(query,choice)) return 0;
+    if(location_compatibility(query,choice)<0) return 0;
     return 320;
 }
 
@@ -365,7 +403,7 @@ static int sem_sim(sh_t q,sh_t c){ return code_score(q.code,c.code)+c.score/8; }
 static decision_t decide(const testcase_t *tc,int variant){
     tvec qv,cv[MAXC]; int qa,ca[MAXC],qh[RMAXCLS],ch[MAXC][RMAXCLS]; near_t qn[K],cn[MAXC][K];
     sh_t q=sem_encode(tc->query), cs[MAXC]; topk(tc->query,qn,K,&qv,&qa); hist(qn,K,qh);
-    decision_t d={-1,-(1<<28),-(1<<28),0,0,0,0}; int correct_reachable=0;
+    decision_t d={-1,-(1<<28),-(1<<28),0,0,0,0,0}; int correct_reachable=0;
     int q_top=R.label[qn[0].idx];
     int q_known=0; for(int i=0;i<K;i++)q_known+=qn[i].score; q_known/=K;
     d.knownness=q_known;
@@ -379,6 +417,7 @@ static decision_t decide(const testcase_t *tc,int variant){
         int raw_topo = direct + 4*ov + hd/10;
         int sem = sem_sim(q,cs[i]);
         int comp = compositional_support(tc->query,tc->choice[i]);
+        int loc = location_compatibility(tc->query,tc->choice[i]);
         int score = direct;
         if(variant==1) score = raw_topo;
         else if(variant==2) score = sem + comp + polarity_score(qp,polarity(tc->choice[i]));
@@ -386,12 +425,13 @@ static decision_t decide(const testcase_t *tc,int variant){
         else if(variant==4) score = raw_topo + sem/4 + code/8 + polarity_score(qp,polarity(tc->choice[i]));
         int reach = (variant<2) ? (ov>0 || hd>=500) : (comp>0 || code>0 || ov>0 || hd>=500);
         if(i==tc->correct) correct_reachable=reach;
-        if(!q_none){
+        if(loc<0) d.location_reject=1;
+        if(!q_none && loc>=0){
             if(score>d.score){d.second=d.score; d.score=score; d.winner=i; d.reachable=reach;} else if(score>d.second)d.second=score;
         }
     }
     for(int i=0;i<tc->nc;i++)for(int j=i+1;j<tc->nc;j++){ int s=t_score_pre(&cv[i],&cv[j],ca[i],ca[j]); if(s>=COLLISION_WARN)d.collision=1; }
-    if(q_none){ d.score=0; d.second=0; return d; }
+    if(q_none || d.winner<0){ d.score=0; d.second=0; return d; }
     d.margin=d.score-d.second;
     if(variant==4 && !qp && q_known<RESIDUAL_KNOWN_GATE){ d.winner=-1; d.score=0; d.second=0; d.margin=0; d.reachable=0; return d; }
     if(tc->correct>=0 && correct_reachable && d.winner!=tc->correct)d.reachable=2;
@@ -399,7 +439,7 @@ static decision_t decide(const testcase_t *tc,int variant){
 }
 
 static void tally(stats_t *s,const testcase_t *tc,decision_t d){
-    s->margin_sum+=d.margin; if(d.collision)s->collisions++; if(d.winner<0)s->ood_gate++;
+    s->margin_sum+=d.margin; if(d.collision)s->collisions++; if(d.winner<0)s->ood_gate++; if(d.winner<0&&d.location_reject)s->location_reject++;
     if(tc->correct<0){ if(d.winner<0)s->ok++; else s->wrong++; }
     else if(d.winner==tc->correct)s->ok++; else if(d.winner<0)s->miss++; else s->wrong++;
     if(strstr(tc->tag,"polarity") && d.winner!=tc->correct)s->polarity_fail++;
@@ -483,13 +523,13 @@ static int eval_all(stats_t *st,int print_cases){
     return n;
 }
 
-typedef struct { int learned_accept, learned_reject, topology_rescue, operator_factor, domain_reject, hard_ood_veto, residual_rescue, wrong; } attr_t;
+typedef struct { int learned_accept, learned_reject, topology_rescue, operator_factor, domain_reject, location_reject, hard_ood_veto, residual_rescue, wrong; } attr_t;
 
 static void holdout_attr(const testcase_t *tc,decision_t sem_direct,decision_t sem_nb,decision_t residual,attr_t *a){
     int ok = (tc->correct<0) ? sem_nb.winner<0 : sem_nb.winner==tc->correct;
     int residual_ok = (tc->correct<0) ? residual.winner<0 : residual.winner==tc->correct;
     if(!ok){ if(residual_ok)a->residual_rescue++; else a->wrong++; return; }
-    if(tc->correct<0){ if(unsupported_target(tc->query)) a->domain_reject++; else if(hard_ood(tc->query)) a->hard_ood_veto++; else a->learned_reject++; return; }
+    if(tc->correct<0){ if(unsupported_target(tc->query)) a->domain_reject++; else if(sem_nb.location_reject) a->location_reject++; else if(hard_ood(tc->query)) a->hard_ood_veto++; else a->learned_reject++; return; }
     if(sem_direct.winner!=tc->correct && sem_nb.winner==tc->correct) a->topology_rescue++;
     else if(strstr(tc->tag,"polarity")) a->operator_factor++;
     else a->learned_accept++;
@@ -500,7 +540,7 @@ static const char *holdout_reason(const testcase_t *tc,decision_t sem_direct,dec
     int ok = (tc->correct<0) ? sem_nb.winner<0 : sem_nb.winner==tc->correct;
     int residual_ok = (tc->correct<0) ? residual.winner<0 : residual.winner==tc->correct;
     if(!ok) return residual_ok ? "residual_rescue" : "wrong";
-    if(tc->correct<0) return unsupported_target(tc->query)?"domain_reject":hard_ood(tc->query)?"hard_ood_veto":"learned_reject";
+    if(tc->correct<0) return unsupported_target(tc->query)?"domain_reject":sem_nb.location_reject?"location_reject":hard_ood(tc->query)?"hard_ood_veto":"learned_reject";
     if(sem_direct.winner!=tc->correct && sem_nb.winner==tc->correct) return "topology_rescue";
     if(strstr(tc->tag,"polarity")) return "operator_factor";
     return "learned_accept";
@@ -530,6 +570,10 @@ static int eval_holdout(stats_t *st,attr_t *attr,int print_cases){
 
 static int eval_holdout_b(stats_t *st,attr_t *attr,int print_cases){
     return eval_holdout_set(HOLDOUT_B,(int)(sizeof HOLDOUT_B/sizeof HOLDOUT_B[0]),"runtime_choice_holdout_b",st,attr,print_cases);
+}
+
+static int eval_holdout_c(stats_t *st,attr_t *attr,int print_cases){
+    return eval_holdout_set(HOLDOUT_C,(int)(sizeof HOLDOUT_C/sizeof HOLDOUT_C[0]),"runtime_choice_holdout_c",st,attr,print_cases);
 }
 
 static int rt_total,rt_pass;
@@ -610,12 +654,13 @@ static int holdout_redteam(void){
     rt("holdout learned coverage pinned",st[3].learned_reachable==9&&in_domain==9);
     rt("holdout learned accept visible",attr.learned_accept==2);
     rt("holdout learned reject visible",attr.learned_reject==1);
-    rt("holdout domain reject pinned",attr.domain_reject==10);
+    rt("holdout domain reject pinned",attr.domain_reject==9);
+    rt("holdout location reject pinned",attr.location_reject==1);
     rt("holdout hard OOD veto empty",attr.hard_ood_veto==0);
     rt("holdout residual rescue eliminated",attr.residual_rescue==0);
     rt("holdout no topology rescue",attr.topology_rescue==0);
     rt("holdout operator factor pinned",attr.operator_factor==7);
-    rt("holdout attribution sums",attr.learned_accept+attr.learned_reject+attr.topology_rescue+attr.operator_factor+attr.domain_reject+attr.hard_ood_veto+attr.residual_rescue+attr.wrong==n);
+    rt("holdout attribution sums",attr.learned_accept+attr.learned_reject+attr.topology_rescue+attr.operator_factor+attr.domain_reject+attr.location_reject+attr.hard_ood_veto+attr.residual_rescue+attr.wrong==n);
     printf("RUNTIME_CHOICE_HOLDOUT_REDTEAM checks=%d/%d score=%d/100\n",rt_pass,rt_total,rt_total?(100*rt_pass)/rt_total:0);
     return rt_pass==rt_total?0:1;
 }
@@ -637,35 +682,74 @@ static int holdout_b_redteam(void){
     rt("holdout B learned coverage pinned",st[3].learned_reachable==5&&in_domain==5);
     rt("holdout B learned accept pinned",attr.learned_accept==2);
     rt("holdout B learned reject pinned",attr.learned_reject==1);
-    rt("holdout B domain reject pinned",attr.domain_reject==8);
+    rt("holdout B domain reject pinned",attr.domain_reject==3);
+    rt("holdout B location reject pinned",attr.location_reject==5);
     rt("holdout B hard OOD veto empty",attr.hard_ood_veto==0);
     rt("holdout B residual rescue absent",attr.residual_rescue==0);
     rt("holdout B wrong acts eliminated",attr.wrong==0);
     rt("holdout B operator factor pinned",attr.operator_factor==3);
     rt("holdout B topology rescue absent",attr.topology_rescue==0);
-    rt("holdout B attribution sums",attr.learned_accept+attr.learned_reject+attr.topology_rescue+attr.operator_factor+attr.domain_reject+attr.hard_ood_veto+attr.residual_rescue+attr.wrong==n);
+    rt("holdout B attribution sums",attr.learned_accept+attr.learned_reject+attr.topology_rescue+attr.operator_factor+attr.domain_reject+attr.location_reject+attr.hard_ood_veto+attr.residual_rescue+attr.wrong==n);
     printf("RUNTIME_CHOICE_HOLDOUT_B_REDTEAM checks=%d/%d score=%d/100\n",rt_pass,rt_total,rt_total?(100*rt_pass)/rt_total:0);
     return rt_pass==rt_total?0:1;
 }
 
-static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam]\n"); }
+static int holdout_c_redteam(void){
+    int n=(int)(sizeof HOLDOUT_C/sizeof HOLDOUT_C[0]);
+    rt_total=rt_pass=0;
+    rt("holdout C case count pinned",n==6);
+    for(int i=0;i<n;i++){
+        rt("holdout C case has enough choices",HOLDOUT_C[i].nc>=2&&HOLDOUT_C[i].nc<=MAXC);
+        rt("holdout C correct index valid or NONE",HOLDOUT_C[i].correct==-1||(HOLDOUT_C[i].correct>=0&&HOLDOUT_C[i].correct<HOLDOUT_C[i].nc));
+        rt("holdout C case is tagged blind-c",strstr(HOLDOUT_C[i].tag,"blind-c")!=NULL);
+    }
+    stats_t st[5]; attr_t attr; n=eval_holdout_c(st,&attr,0);
+    int in_domain=in_domain_set(HOLDOUT_C,n);
+    rt("holdout C semhash neighborhood solved",st[3].ok==n&&st[3].wrong==0&&st[3].miss==0);
+    rt("holdout C semhash direct solved",st[2].ok==n&&st[2].wrong==0&&st[2].miss==0);
+    rt("holdout C residual solved",st[4].ok==n&&st[4].wrong==0&&st[4].miss==0);
+    rt("holdout C learned coverage pinned",st[3].learned_reachable==4&&in_domain==4);
+    rt("holdout C learned accept pinned",attr.learned_accept==4);
+    rt("holdout C learned reject absent",attr.learned_reject==0);
+    rt("holdout C domain reject absent",attr.domain_reject==0);
+    rt("holdout C location reject pinned",attr.location_reject==2);
+    rt("holdout C hard OOD veto empty",attr.hard_ood_veto==0);
+    rt("holdout C residual rescue absent",attr.residual_rescue==0);
+    rt("holdout C wrong acts eliminated",attr.wrong==0);
+    rt("holdout C operator factor pinned",attr.operator_factor==0);
+    rt("holdout C topology rescue absent",attr.topology_rescue==0);
+    rt("holdout C attribution sums",attr.learned_accept+attr.learned_reject+attr.topology_rescue+attr.operator_factor+attr.domain_reject+attr.location_reject+attr.hard_ood_veto+attr.residual_rescue+attr.wrong==n);
+    printf("RUNTIME_CHOICE_HOLDOUT_C_REDTEAM checks=%d/%d score=%d/100\n",rt_pass,rt_total,rt_total?(100*rt_pass)/rt_total:0);
+    return rt_pass==rt_total?0:1;
+}
+
+static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam]\n"); }
 
 int main(int argc,char **argv){
     const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
-    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,arg=1;
+    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,arg=1;
     if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
-    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else {usage();return 1;} }
-    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red>1){usage();return 1;}
+    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else {usage();return 1;} }
+    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red>1){usage();return 1;}
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash(); train_seeded_projection();
     if(red)return redteam();
     if(holdout_red)return holdout_redteam();
     if(holdout_b_red)return holdout_b_redteam();
+    if(holdout_c_red)return holdout_c_redteam();
     if(details){dump_details();return 0;}
+    if(holdout_c){
+        stats_t st[5]; attr_t attr; int n=eval_holdout_c(st,&attr,1); int in_domain=in_domain_set(HOLDOUT_C,n);
+        printf("\nvariant\taccuracy\tcommit_precision\tlearned_coverage\twrong_act\tmissed_none\tlearned_reachable\tresidual_rescue\tunsupported\n");
+        for(int v=2;v<5;v++){ int committed=n-st[v].miss; printf("%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].ok,committed,st[v].learned_reachable,in_domain,st[v].wrong,n,st[v].miss,n,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported); }
+        printf("\nattribution\tlearned_accept=%d\tlearned_reject=%d\ttopology_rescue=%d\toperator_factor=%d\tdomain_reject=%d\tlocation_reject=%d\thard_ood_veto=%d\tresidual_rescue=%d\twrong=%d\n",attr.learned_accept,attr.learned_reject,attr.topology_rescue,attr.operator_factor,attr.domain_reject,attr.location_reject,attr.hard_ood_veto,attr.residual_rescue,attr.wrong);
+        printf("decision: Holdout C tests unseen runtime referent binding relationally.\n");
+        return 0;
+    }
     if(holdout_b){
         stats_t st[5]; attr_t attr; int n=eval_holdout_b(st,&attr,1); int in_domain=in_domain_set(HOLDOUT_B,n);
         printf("\nvariant\taccuracy\tcommit_precision\tlearned_coverage\twrong_act\tmissed_none\tlearned_reachable\tresidual_rescue\tunsupported\n");
         for(int v=2;v<5;v++){ int committed=n-st[v].miss; printf("%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].ok,committed,st[v].learned_reachable,in_domain,st[v].wrong,n,st[v].miss,n,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported); }
-        printf("\nattribution\tlearned_accept=%d\tlearned_reject=%d\ttopology_rescue=%d\toperator_factor=%d\tdomain_reject=%d\thard_ood_veto=%d\tresidual_rescue=%d\twrong=%d\n",attr.learned_accept,attr.learned_reject,attr.topology_rescue,attr.operator_factor,attr.domain_reject,attr.hard_ood_veto,attr.residual_rescue,attr.wrong);
+        printf("\nattribution\tlearned_accept=%d\tlearned_reject=%d\ttopology_rescue=%d\toperator_factor=%d\tdomain_reject=%d\tlocation_reject=%d\thard_ood_veto=%d\tresidual_rescue=%d\twrong=%d\n",attr.learned_accept,attr.learned_reject,attr.topology_rescue,attr.operator_factor,attr.domain_reject,attr.location_reject,attr.hard_ood_veto,attr.residual_rescue,attr.wrong);
         printf("decision: Holdout B is remediated combinatorial transfer; first-shot failures remain documented.\n");
         return 0;
     }
@@ -673,7 +757,7 @@ int main(int argc,char **argv){
         stats_t st[5]; attr_t attr; int n=eval_holdout(st,&attr,1); int in_domain=in_domain_set(HOLDOUT,n);
         printf("\nvariant\taccuracy\tcommit_precision\tlearned_coverage\twrong_act\tmissed_none\tlearned_reachable\tresidual_rescue\tunsupported\n");
         for(int v=2;v<5;v++){ int committed=n-st[v].miss; printf("%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].ok,committed,st[v].learned_reachable,in_domain,st[v].wrong,n,st[v].miss,n,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported); }
-        printf("\nattribution\tlearned_accept=%d\tlearned_reject=%d\ttopology_rescue=%d\toperator_factor=%d\tdomain_reject=%d\thard_ood_veto=%d\tresidual_rescue=%d\twrong=%d\n",attr.learned_accept,attr.learned_reject,attr.topology_rescue,attr.operator_factor,attr.domain_reject,attr.hard_ood_veto,attr.residual_rescue,attr.wrong);
+        printf("\nattribution\tlearned_accept=%d\tlearned_reject=%d\ttopology_rescue=%d\toperator_factor=%d\tdomain_reject=%d\tlocation_reject=%d\thard_ood_veto=%d\tresidual_rescue=%d\twrong=%d\n",attr.learned_accept,attr.learned_reject,attr.topology_rescue,attr.operator_factor,attr.domain_reject,attr.location_reject,attr.hard_ood_veto,attr.residual_rescue,attr.wrong);
         printf("decision: blind holdout separates learned coverage from hard OOD vetoes; keep this set frozen.\n");
         return 0;
     }
