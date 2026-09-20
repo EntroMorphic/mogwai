@@ -240,6 +240,7 @@ chk "runtime_choice production parity proves frozen cases" "$(c/bin/runtime_choi
 chk "runtime_choice production API fails closed" "$(c/bin/runtime_choice_api 2>/dev/null | grep -c '^RUNTIME_CHOICE_API checks=90/90$')" "1"
 chk "runtime_choice production promotion cases pass" "$(c/bin/runtime_choice_promotion 2>/dev/null | grep -c '^RUNTIME_CHOICE_PROMOTION checks=15/15$')" "1"
 chk "runtime_choice device parity and budget pins pass" "$(c/bin/runtime_choice_device 2>/dev/null | grep -c '^RUNTIME_CHOICE_DEVICE checks=12/12$')" "1"
+chk "runtime_choice hot path has no heap calls" "$(grep -cE '\b(malloc|calloc|realloc|free)\s*\(' c/src/runtime_choice.c)" "0"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that
 # claim was first checked.
