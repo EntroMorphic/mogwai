@@ -115,11 +115,15 @@ It scores every case five ways:
 - `semhash_neighborhood`
 - `residual_combo`
 
-It reports accuracy, wrong-act rate, missed/none rate, mean margin, collision
-rate, reachable-but-not-selected count, selected-but-not-reachable count,
-polarity failures, OOD gates, per-query knownness, and route-support state
-counts (`learned_reachable`, `residual_rescue`, `unsupported`). The current
-diagnostic decision is:
+It reports accuracy, commit precision, learned coverage, wrong-act rate,
+missed/none rate, mean margin, collision rate, reachable-but-not-selected count,
+selected-but-not-reachable count, polarity failures, OOD gates, per-query
+knownness, and route-support state counts (`learned_reachable`,
+`residual_rescue`, `unsupported`). `commit_precision` is `ok/(cases-misses)`:
+correct choices plus correct `NONE` decisions among cases where the variant did
+not miss an in-domain action. `learned_coverage` is
+`learned_reachable/in-domain-cases`, which is the metric to drive upward at a
+fixed zero wrong-actuation rate. The current diagnostic decision is:
 
 ```text
 decision: residual_combo beats the current champion; keep combined evidence and expand the adversarial set.
@@ -139,7 +143,8 @@ exact top-k index. Red-team expansion now includes holdout bridge, contraction
 negation, inverse negation, `keep ... from getting ...` negation, and near-class
 OOD cases. The residual path gets the current eighteen-case probe to `18/18`,
 preserves `NONE` on all four OOD cases, and removes polarity failures.
-`semhash_neighborhood` reaches `12/18`: its
+`semhash_neighborhood` reaches `12/18`, with `commit_precision=12/13` and
+`learned_coverage=8/14`: its
 remaining misses are negation/composition cases where learned semhash either
 gates to `NONE` or takes the non-negated brightening route, while residual
 polarity still selects correctly.
@@ -155,7 +160,8 @@ For atomic failure analysis:
 It pins case validity, neighborhood improvements, collision-rate invariance
 across abstain gates, negation handling including normalized `don't` -> `don t`,
 near-class OOD abstention, abstain reachability cleanup, reachability
-accounting, route-state accounting, and out-of-domain wrong-act accounting.
+accounting, route-state accounting, commit precision, learned coverage, and
+out-of-domain wrong-act accounting.
 
 ## Atomic floor
 
@@ -198,3 +204,19 @@ The current floor is therefore compositional negation reachability: make cases
 and knownness gates that protect cases 5, 6, 9, and 12. Residual rescues are
 tracked separately from learned-reachable successes so this does not disappear
 inside aggregate accuracy.
+
+The next primary metric is learned coverage at fixed zero wrong-actuation rate:
+
+```text
+LC0 = learned_reachable / in-domain cases, subject to wrong_act = 0
+```
+
+Current runtime-choice floor:
+
+| Variant | Commit precision | Learned coverage | Wrong act |
+|---|---:|---:|---:|
+| `raw_direct` | `6/17` | `2/14` | `11/18` |
+| `raw_neighborhood` | `7/17` | `4/14` | `10/18` |
+| `semhash_direct` | `11/13` | `7/14` | `2/18` |
+| `semhash_neighborhood` | `12/13` | `8/14` | `1/18` |
+| `residual_combo` | `18/18` | `11/14` | `0/18` |

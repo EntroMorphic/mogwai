@@ -265,6 +265,12 @@ static void init_stats(stats_t *st){
     for(int i=0;i<5;i++) st[i].name=variant_name(i);
 }
 
+static int in_domain_cases(void){
+    int n=0, total=(int)(sizeof CASES/sizeof CASES[0]);
+    for(int i=0;i<total;i++) if(CASES[i].correct>=0) n++;
+    return n;
+}
+
 static void dump_details(void){
     int n=(int)(sizeof CASES/sizeof CASES[0]);
     printf("runtime_choice_eval_details cases=%d k=%d residual_known_gate=%d\n",n,K,RESIDUAL_KNOWN_GATE);
@@ -363,6 +369,9 @@ static int redteam(void){
     neg=decide(&CASES[17],4);
     rt("residual keep-from-darker chooses brighten",neg.winner==CASES[17].correct);
     rt("residual route-state counts pinned",st[4].learned_reachable==11&&st[4].residual_rescue==3&&st[4].unsupported==4);
+    rt("semhash neighborhood commit precision pinned",st[3].ok==12&&n-st[3].miss==13);
+    rt("semhash neighborhood learned coverage pinned",st[3].learned_reachable==8&&in_domain_cases()==14);
+    rt("residual LC0 pinned",st[4].wrong==0&&st[4].learned_reachable==11&&in_domain_cases()==14);
     rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
     rt("near-class OOD abstains",near_ood.winner==-1);
     rt("near-class OOD abstain is not reachable",near_ood.reachable==0);
@@ -382,8 +391,12 @@ int main(int argc,char **argv){
     if(red)return redteam();
     if(details){dump_details();return 0;}
     stats_t st[5]; int n=eval_all(st,1);
-    printf("\nvariant\taccuracy\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\tood_gates\tlearned_reachable\tresidual_rescue\tunsupported\n");
-    for(int v=0;v<5;v++) printf("%s\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail,st[v].ood_gate,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported);
+    int in_domain=in_domain_cases();
+    printf("\nvariant\taccuracy\tcommit_precision\tlearned_coverage\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\tood_gates\tlearned_reachable\tresidual_rescue\tunsupported\n");
+    for(int v=0;v<5;v++){
+        int committed=n-st[v].miss;
+        printf("%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].ok,committed,st[v].learned_reachable,in_domain,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail,st[v].ood_gate,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported);
+    }
     printf("\ndecision: ");
     if(st[4].ok>st[1].ok && st[4].wrong<st[1].wrong) printf("residual_combo beats the current champion; keep combined evidence and expand the adversarial set.\n");
     else if(st[2].ok>=st[3].ok && st[2].wrong<=st[3].wrong) printf("semhash_direct is enough for the learned path; keep it simple before adding topology.\n");
