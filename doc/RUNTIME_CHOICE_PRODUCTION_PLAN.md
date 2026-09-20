@@ -226,6 +226,11 @@ Acceptance gates:
 
 ### P0.6 Expand the Production-Promotion Eval Set
 
+Status: **started**. `c/test/runtime_choice_promotion.c` is the first
+production-promotion suite over explicit query/candidate records. It pins
+expected winners and expected refusal attribution for semantic aliases, polarity,
+color, location, support/OOD, composition, tie handling, and empty candidate sets.
+
 Deliverable: a larger held-out runtime-choice promotion suite, separate from the
 already-frozen research holdouts.
 
