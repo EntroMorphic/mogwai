@@ -61,6 +61,7 @@ int main(void) {
     int parsed_n = -1;
     size_t written = 999;
     int32_t score = 12345;
+    runtime_factor_reason_t freason = RTC_FACTOR_REASON_BAD_ARGUMENT;
 
     memset(&r, 0, sizeof r);
     memset(many, 0, sizeof many);
@@ -144,6 +145,20 @@ int main(void) {
     chk("code chooser ignores sem_score", r_runtime_choose_code(1, 2, code_cands, 3, &out) == 0 && out.winner == 1 && out.score == 256);
     chk("code chooser resolves ties by lowest index", r_runtime_choose_code(2, 2, code_cands, 3, &out) == 0 && out.winner == 0 && out.score == 0 && out.margin == 0);
     chk("code chooser rejects malformed candidate", r_runtime_choose_code(0, 4, hidden_pol, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    runtime_candidate_t fq = {"q", 0, 0, RTC_FACTOR_POLARITY|RTC_FACTOR_COLOR|RTC_FACTOR_COMPOSITION|RTC_FACTOR_LOCATION|RTC_FACTOR_SUPPORT, RTC_POLARITY_POSITIVE, RTC_COLOR_RED, RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION, 7, RTC_SUPPORT_SUPPORTED};
+    runtime_candidate_t fc = {"c", 0, 0, RTC_FACTOR_POLARITY|RTC_FACTOR_COLOR|RTC_FACTOR_COMPOSITION|RTC_FACTOR_LOCATION|RTC_FACTOR_SUPPORT, RTC_POLARITY_POSITIVE, RTC_COLOR_RED, RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION, 7, RTC_SUPPORT_SUPPORTED};
+    chk("factor score accepts full match", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_OK && score == 580);
+    fc.polarity = RTC_POLARITY_NEGATIVE;
+    chk("factor score rejects polarity conflict", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_POLARITY && score == 0);
+    fc.polarity = RTC_POLARITY_POSITIVE; fc.color = RTC_COLOR_BLUE;
+    chk("factor score rejects color conflict", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_COLOR && score == 0);
+    fc.color = RTC_COLOR_RED; fc.composition = RTC_COMP_LIGHTING;
+    chk("factor score rejects composition miss", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_COMPOSITION && score == 0);
+    fc.composition = RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION; fc.location_id = 8;
+    chk("factor score rejects location conflict", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_LOCATION && score == 0);
+    fc.location_id = 7; fc.support = RTC_SUPPORT_UNSUPPORTED;
+    chk("factor score rejects unsupported", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_SUPPORT && score == 0);
+    chk("factor score rejects malformed inputs", r_runtime_factor_score(&fq, hidden_pol, &score, &freason) == -1 && freason == RTC_FACTOR_REASON_BAD_ARGUMENT && score == 0);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;

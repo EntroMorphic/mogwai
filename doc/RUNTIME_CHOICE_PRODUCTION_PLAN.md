@@ -163,6 +163,11 @@ Acceptance gates:
 
 ### P0.4 Implement the Factor Path as Auditable Runtime Code
 
+Status: **started**. `r_runtime_factor_score()` validates explicit query and
+candidate factor records, returns an independent refusal reason for support,
+polarity, color, composition, or location, and scores only matched factors. It is
+not yet wired into `r_choose_runtime` or combined with code scoring.
+
 Deliverable: production implementations of the five load-bearing factors.
 
 Factors:

@@ -47,6 +47,16 @@ typedef enum {
     RTC_REASON_UNSUPPORTED_SCORER
 } runtime_choice_reason_t;
 
+typedef enum {
+    RTC_FACTOR_REASON_OK = 0,
+    RTC_FACTOR_REASON_BAD_ARGUMENT,
+    RTC_FACTOR_REASON_POLARITY,
+    RTC_FACTOR_REASON_COLOR,
+    RTC_FACTOR_REASON_COMPOSITION,
+    RTC_FACTOR_REASON_LOCATION,
+    RTC_FACTOR_REASON_SUPPORT
+} runtime_factor_reason_t;
+
 typedef struct {
     const char *text;
     uint64_t sem_code;
@@ -95,5 +105,9 @@ int r_runtime_choose_code(uint64_t query_code,
                           const runtime_candidate_t *cands,
                           int n_cands,
                           runtime_choice_t *out);
+int r_runtime_factor_score(const runtime_candidate_t *query,
+                           const runtime_candidate_t *candidate,
+                           int32_t *score_out,
+                           runtime_factor_reason_t *reason_out);
 
 #endif

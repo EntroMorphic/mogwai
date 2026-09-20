@@ -97,6 +97,57 @@ int r_runtime_choose_code(uint64_t query_code,
     return 0;
 }
 
+int r_runtime_factor_score(const runtime_candidate_t *query,
+                           const runtime_candidate_t *candidate,
+                           int32_t *score_out,
+                           runtime_factor_reason_t *reason_out) {
+    if (score_out) *score_out = 0;
+    if (reason_out) *reason_out = RTC_FACTOR_REASON_BAD_ARGUMENT;
+    if (!query || !candidate || !score_out || !reason_out) return -1;
+    if (!rtc_validate_candidate(query) || !rtc_validate_candidate(candidate)) return -1;
+
+    int32_t score = 0;
+    if (query->factor_flags & RTC_FACTOR_SUPPORT) {
+        if (!(candidate->factor_flags & RTC_FACTOR_SUPPORT) ||
+            query->support != RTC_SUPPORT_SUPPORTED ||
+            candidate->support != RTC_SUPPORT_SUPPORTED) {
+            *reason_out = RTC_FACTOR_REASON_SUPPORT;
+            return 0;
+        }
+    }
+    if (query->factor_flags & RTC_FACTOR_POLARITY) {
+        if (!(candidate->factor_flags & RTC_FACTOR_POLARITY) || query->polarity != candidate->polarity) {
+            *reason_out = RTC_FACTOR_REASON_POLARITY;
+            return 0;
+        }
+        score += 80;
+    }
+    if (query->factor_flags & RTC_FACTOR_COLOR) {
+        if (!(candidate->factor_flags & RTC_FACTOR_COLOR) || query->color != candidate->color) {
+            *reason_out = RTC_FACTOR_REASON_COLOR;
+            return 0;
+        }
+        score += 180;
+    }
+    if (query->factor_flags & RTC_FACTOR_COMPOSITION) {
+        if ((candidate->composition & query->composition) != query->composition) {
+            *reason_out = RTC_FACTOR_REASON_COMPOSITION;
+            return 0;
+        }
+        score += 320;
+    }
+    if (query->factor_flags & RTC_FACTOR_LOCATION) {
+        if (!(candidate->factor_flags & RTC_FACTOR_LOCATION) || query->location_id != candidate->location_id) {
+            *reason_out = RTC_FACTOR_REASON_LOCATION;
+            return 0;
+        }
+    }
+
+    *score_out = score;
+    *reason_out = RTC_FACTOR_REASON_OK;
+    return 0;
+}
+
 size_t r_runtime_candidates_size(int n_cands) {
     if (n_cands < 0 || n_cands > RUNTIME_CHOICE_MAX_CANDIDATES) return 0;
     return 8 + (size_t)n_cands * RTC_CAND_RECORD_BYTES;
