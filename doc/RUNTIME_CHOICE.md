@@ -117,8 +117,9 @@ It scores every case five ways:
 
 It reports accuracy, wrong-act rate, missed/none rate, mean margin, collision
 rate, reachable-but-not-selected count, selected-but-not-reachable count,
-polarity failures, OOD gates, and per-query knownness. The current diagnostic
-decision is:
+polarity failures, OOD gates, per-query knownness, and route-support state
+counts (`learned_reachable`, `residual_rescue`, `unsupported`). The current
+diagnostic decision is:
 
 ```text
 decision: residual_combo beats the current champion; keep combined evidence and expand the adversarial set.
@@ -135,11 +136,12 @@ query-knownness floor for low-energy OOD queries. The learned projection also
 receives a tiny audited seed set of bridge positives and hard OOD negatives;
 these seeds update only the host learned weights and are not inserted into the
 exact top-k index. Red-team expansion now includes holdout bridge, contraction
-negation, and near-class OOD cases. The residual path gets the current
-thirteen-case probe to `13/13`, preserves `NONE` on all four OOD cases, and
-removes polarity failures. After seeded projection, `semhash_neighborhood`
-reaches `12/13`; its miss is the contraction-negation holdout, where learned
-semhash gates to `NONE` but residual polarity still selects correctly.
+negation, inverse negation, and near-class OOD cases. The residual path gets the
+current sixteen-case probe to `16/16`, preserves `NONE` on all four OOD cases,
+and removes polarity failures. `semhash_neighborhood` reaches `12/16`: its
+remaining misses are negation/composition cases where learned semhash either
+gates to `NONE` or takes the non-negated brightening route, while residual
+polarity still selects correctly.
 
 The evaluator has a built-in red team:
 
@@ -152,7 +154,7 @@ For atomic failure analysis:
 It pins case validity, neighborhood improvements, collision-rate invariance
 across abstain gates, negation handling including normalized `don't` -> `don t`,
 near-class OOD abstention, abstain reachability cleanup, reachability
-accounting, and out-of-domain wrong-act accounting.
+accounting, route-state accounting, and out-of-domain wrong-act accounting.
 
 ## Atomic floor
 
@@ -178,13 +180,18 @@ Seeded projection lifted that floor on the ten-case probe:
 | 5 | Query semhash prediction becomes `none`; all learned variants gate to `NONE` | The original OOD collapse is fixed on this probe. |
 | 9 | Query semhash prediction becomes `none`; learned variants gate to `NONE`, and residual also gates by `knownness=98 < 120` | Near-class OOD is protected both by learned `none` and by the residual knownness guard. |
 
-The current thirteen-case red team found the next floor:
+The current sixteen-case red team found the next floor:
 
 | Case | Exact measurement | Meaning |
 |---:|---|---|
 | 11 | Query `please don't brighten the hallway` normalizes contraction negation to `don t`; residual now parses `qpol=-1` and chooses `dim`, but `semhash_direct` and `semhash_neighborhood` gate to `NONE`; residual winner has `reachable=no` | Correctness is restored by explicit polarity, but the learned representation has not yet bridged contraction-negation phrasing. |
 | 12 | Query `refund the light rail pass` has `knownness=117 < 120`; semhash predicts `none`, and residual gates to `NONE` | Near-class OOD remains protected after the holdout expansion. |
+| 13 | Query `don't increase the hallway brightness`; residual chooses `dim`, but learned semhash still chooses the non-negated brightening route | Semhash has not learned negated-increase composition. |
+| 14 | Query `do not make the hallway brighter`; residual chooses `dim` only after polarity mismatch becomes a structural penalty (`-260`) | Strong raw topology for the literal brightening phrase can overpower weak polarity penalties. |
+| 15 | Query `don't dim the hallway`; valid inverse-negation route has `knownness=107`, below the generic OOD floor, so residual must not apply the low-knownness gate when an explicit polarity route exists | Knownness is an OOD guard, not a veto over explicit polarity routes. |
 
-The current floor is therefore contraction-negation reachability: make case 11
-reachable in learned-code space without weakening the `NONE` and knownness gates
-that protect cases 5, 6, 9, and 12.
+The current floor is therefore compositional negation reachability: make cases
+11, 13, 14, and 15 reachable in learned-code space without weakening the `NONE`
+and knownness gates that protect cases 5, 6, 9, and 12. Residual rescues are
+tracked separately from learned-reachable successes so this does not disappear
+inside aggregate accuracy.
