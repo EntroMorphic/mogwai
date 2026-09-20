@@ -15,6 +15,23 @@ static int same_none(runtime_choice_t a, runtime_choice_t b) {
            a.margin == b.margin && a.reason == b.reason;
 }
 
+static void put32(uint8_t *p, uint32_t v) { memcpy(p, &v, 4); }
+static void put64(uint8_t *p, uint64_t v) { memcpy(p, &v, 8); }
+
+static void make_blob(uint8_t *blob, int n) {
+    memset(blob, 0, 8 + (size_t)n * RTC_CAND_RECORD_BYTES);
+    put32(blob, RTC_CAND_MAGIC);
+    put32(blob + 4, (uint32_t)n);
+    for (int i = 0; i < n; i++) {
+        uint8_t *p = blob + 8 + (size_t)i * RTC_CAND_RECORD_BYTES;
+        put64(p, (uint64_t)(100 + i));
+        put32(p + 8, (uint32_t)(10 + i));
+        put32(p + 12, RTC_FACTOR_SUPPORT);
+        p[20] = RTC_SUPPORT_SUPPORTED;
+        snprintf((char *)(void *)(p + 24), RTC_CAND_TEXT_BYTES, "candidate %d", i);
+    }
+}
+
 int main(void) {
     router_t r;
     runtime_choice_t out;
@@ -37,6 +54,9 @@ int main(void) {
     runtime_candidate_t hidden_support[1] = {{"make coffee", 0, 0, 0, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED}};
     runtime_candidate_t many[RUNTIME_CHOICE_MAX_CANDIDATES + 1];
     char too_long[RUNTIME_CHOICE_MAX_TEXT + 2];
+    uint8_t blob[8 + 2 * RTC_CAND_RECORD_BYTES + 1];
+    runtime_candidate_t parsed[2];
+    int parsed_n = -1;
 
     memset(&r, 0, sizeof r);
     memset(many, 0, sizeof many);
@@ -72,6 +92,30 @@ int main(void) {
     chk("non-scoring outcome order invariant", r_choose_runtime(&r, "brew espresso", perm_a, 2, &out) == 0 && r_choose_runtime(&r, "brew espresso", perm_b, 2, &out2) == 0 && same_none(out, out2));
     chk("reason names are stable", !strcmp(r_runtime_reason_name(RTC_REASON_UNSUPPORTED_SCORER), "unsupported_scorer") && !strcmp(r_runtime_reason_name((runtime_choice_reason_t)999), "unknown"));
     chk("valid scaffold fails closed", r_choose_runtime(&r, "brew espresso", one, 1, &out) == 0 && out.reason == RTC_REASON_UNSUPPORTED_SCORER && out.winner == -1 && out.score == 0 && out.margin == 0);
+
+    make_blob(blob, 2);
+    chk("candidate blob parses", r_runtime_parse_candidates(blob, 8 + 2 * RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == 0 && parsed_n == 2 && !strcmp(parsed[1].text, "candidate 1") && parsed[1].support == RTC_SUPPORT_SUPPORTED);
+    chk("candidate blob exact EOF", r_runtime_parse_candidates(blob, 8 + 2 * RTC_CAND_RECORD_BYTES + 1, parsed, 2, &parsed_n) == -2 && parsed_n == 0);
+    blob[0] ^= 1;
+    chk("candidate blob magic rejects", r_runtime_parse_candidates(blob, 8 + 2 * RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -2 && parsed_n == 0);
+    make_blob(blob, 2);
+    put32(blob + 4, RUNTIME_CHOICE_MAX_CANDIDATES + 1);
+    chk("candidate blob count rejects", r_runtime_parse_candidates(blob, sizeof blob, parsed, 2, &parsed_n) == -2 && parsed_n == 0);
+    make_blob(blob, 1);
+    blob[8 + 21] = 1;
+    chk("candidate blob reserved bytes reject", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    blob[8 + 24] = 0;
+    chk("candidate blob empty text rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    memset(blob + 8 + 24, 'x', RTC_CAND_TEXT_BYTES);
+    chk("candidate blob unterminated text rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    blob[8 + 24 + strlen("candidate 0") + 2] = 'x';
+    chk("candidate blob hidden trailing text rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    put32(blob + 8 + 12, 0);
+    chk("candidate blob factor mismatch rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;

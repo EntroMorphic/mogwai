@@ -3,9 +3,13 @@
 
 #include "router.h"
 #include <stdint.h>
+#include <stddef.h>
 
 #define RUNTIME_CHOICE_MAX_CANDIDATES 32
 #define RUNTIME_CHOICE_MAX_TEXT 256
+#define RTC_CAND_MAGIC 0x31544352u  /* 'RTC1': runtime-choice candidate blob */
+#define RTC_CAND_TEXT_BYTES (RUNTIME_CHOICE_MAX_TEXT + 1)
+#define RTC_CAND_RECORD_BYTES (8u + 4u + 4u + 1u + 1u + 1u + 1u + 1u + 3u + RTC_CAND_TEXT_BYTES)
 
 #define RTC_FACTOR_POLARITY    0x01u
 #define RTC_FACTOR_COLOR       0x02u
@@ -71,5 +75,10 @@ int r_choose_runtime(const router_t *r,
                      runtime_choice_t *out);
 
 const char *r_runtime_reason_name(runtime_choice_reason_t reason);
+int r_runtime_parse_candidates(const uint8_t *base,
+                               size_t have,
+                               runtime_candidate_t *out,
+                               int cap,
+                               int *n_out);
 
 #endif

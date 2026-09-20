@@ -92,6 +92,13 @@ score, named factor bits, explicit polarity, color, composition, location id,
 and support state. Unknown factor bits or out-of-range factor values are
 malformed input and fail closed.
 
+Serialized runtime-choice candidate sets use a separate `RTC1` magic
+(`RTC_CAND_MAGIC`), so they cannot be mistaken for `router.bin` (`RTR2`). The
+parser is bounded and allocation-free: exact EOF is required, candidate count is
+capped by `RUNTIME_CHOICE_MAX_CANDIDATES`, every fixed-size record contains a
+NUL-terminated zero-padded text field, reserved bytes must be zero, and parsed
+records pass the same candidate validator as direct API calls.
+
 Red-team iteration 2026-09-20: factor flags and factor values must now agree
 exactly. A value without its flag, or a flag with the neutral value, is malformed
 input. This prevents production callers from hiding policy state in fields the
