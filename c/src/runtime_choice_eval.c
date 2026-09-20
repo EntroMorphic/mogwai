@@ -1,9 +1,8 @@
 /* runtime_choice_eval.c -- dataset-level runtime-choice research evaluator.
  *
- * Host-only diagnostic. It compares four arbitrary-choice scoring variants:
- * raw direct, raw+exact-neighborhood, learned semhash direct, and
- * semhash+neighborhood. The point is to measure the gap before picking a
- * production architecture.
+ * Host-only diagnostic. It compares raw, learned, topology, and residual
+ * arbitrary-choice scoring variants. The point is to measure the gap before
+ * picking a production architecture.
  */
 #include "ternary.h"
 #include "prune.h"
@@ -19,13 +18,14 @@
 #define HD 64
 #define EPOCHS 24
 #define COLLISION_WARN 180
+#define RESIDUAL_KNOWN_GATE 120
 #define K 8
 
 typedef struct { int idx, score; } near_t;
 typedef struct { uint64_t code; int pred, score; } sh_t;
 typedef struct { const char *query, *tag; int correct, nc; const char *choice[MAXC]; } testcase_t;
 typedef struct { int winner, score, second, margin, reachable, collision, knownness; } decision_t;
-typedef struct { const char *name; int ok, wrong, miss, collisions, r_not_sel, sel_not_r, polarity_fail, ood_gate; long margin_sum, known_sum; } stats_t;
+typedef struct { const char *name; int ok, wrong, miss, collisions, r_not_sel, sel_not_r, polarity_fail, ood_gate; long margin_sum; } stats_t;
 
 static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
@@ -49,7 +49,11 @@ static testcase_t CASES[] = {
     {"book a train ticket", "out-of-domain", -1, 3,
      {"buy a rail ticket", "turn the kitchen light on", "dim the lights"}},
     {"make it brighter", "paraphrase,polarity,collision,bridged", 0, 3,
-     {"increase light brightness", "decrease light brightness", "turn lights off"}}
+     {"increase light brightness", "decrease light brightness", "turn lights off"}},
+    {"do not turn on the bedroom lights", "polarity,negation,unbridged", 1, 3,
+     {"turn the bedroom lights on", "turn the bedroom lights off", "make the bedroom brighter"}},
+    {"light rail refund", "out-of-domain,near-class-negative", -1, 3,
+     {"turn the lights off", "change the lights to red", "issue a rail refund"}}
 };
 
 static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
@@ -130,10 +134,12 @@ static int has_word(const char *text,const char *word){
 
 static int polarity(const char *text){
     int up=0,down=0;
+    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don't")||has_word(text,"do not")||has_word(text,"never");
     const char *ups[]={"increase","raise","brighter","brighten","bright","on",NULL};
     const char *downs[]={"decrease","lower","dim","dimmer","dark","darker","darken","less","off",NULL};
     for(int i=0;ups[i];i++) if(has_word(text,ups[i])) up=1;
     for(int i=0;downs[i];i++) if(has_word(text,downs[i])) down=1;
+    if(neg){ int t=up; up=down; down=t; }
     if(up&&!down) return 1;
     if(down&&!up) return -1;
     return 0;
@@ -181,12 +187,13 @@ static decision_t decide(const testcase_t *tc,int variant){
     for(int i=0;i<tc->nc;i++)for(int j=i+1;j<tc->nc;j++){ int s=t_score_pre(&cv[i],&cv[j],ca[i],ca[j]); if(s>=COLLISION_WARN)d.collision=1; }
     if(q_none){ d.score=0; d.second=0; return d; }
     d.margin=d.score-d.second;
+    if(variant==4 && q_known<RESIDUAL_KNOWN_GATE){ d.winner=-1; d.score=0; d.second=0; d.margin=0; d.reachable=0; return d; }
     if(tc->correct>=0 && correct_reachable && d.winner!=tc->correct)d.reachable=2;
     return d;
 }
 
 static void tally(stats_t *s,const testcase_t *tc,decision_t d){
-    s->margin_sum+=d.margin; s->known_sum+=d.knownness; if(d.collision)s->collisions++; if(d.winner<0)s->ood_gate++;
+    s->margin_sum+=d.margin; if(d.collision)s->collisions++; if(d.winner<0)s->ood_gate++;
     if(tc->correct<0){ if(d.winner<0)s->ok++; else s->wrong++; }
     else if(d.winner==tc->correct)s->ok++; else if(d.winner<0)s->miss++; else s->wrong++;
     if(strstr(tc->tag,"polarity") && d.winner!=tc->correct)s->polarity_fail++;
@@ -203,11 +210,11 @@ static int eval_all(stats_t *st,int print_cases){
     init_stats(st);
     if(print_cases){
         printf("runtime_choice_eval cases=%d k=%d classes=%u index=%d\n",n,K,R.n_class,U_n);
-        printf("case\ttags\tcorrect\traw\traw_nb\tsem\tsem_nb\tresidual\n");
+        printf("case\ttags\tcorrect\tknownness\traw\traw_nb\tsem\tsem_nb\tresidual\n");
     }
     for(int i=0;i<n;i++){
         decision_t d[5]; for(int v=0;v<5;v++){d[v]=decide(&CASES[i],v); tally(&st[v],&CASES[i],d[v]);}
-        if(print_cases) printf("%d\t%s\t%d\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\n",i,CASES[i].tag,CASES[i].correct,
+        if(print_cases) printf("%d\t%s\t%d\t%d\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\n",i,CASES[i].tag,CASES[i].correct,d[0].knownness,
                d[0].winner,d[0].score,d[0].margin,d[0].reachable?'R':'-', d[1].winner,d[1].score,d[1].margin,d[1].reachable?'R':'-',
                d[2].winner,d[2].score,d[2].margin,d[2].reachable?'R':'-', d[3].winner,d[3].score,d[3].margin,d[3].reachable?'R':'-',
                d[4].winner,d[4].score,d[4].margin,d[4].reachable?'R':'-');
@@ -220,7 +227,7 @@ static void rt(const char *name,int ok){ rt_total++; if(ok)rt_pass++; else print
 
 static int redteam(void){
     int n=(int)(sizeof CASES/sizeof CASES[0]);
-    rt("case count pinned",n==8);
+    rt("case count pinned",n==10);
     for(int i=0;i<n;i++){
         rt("case has enough choices",CASES[i].nc>=2&&CASES[i].nc<=MAXC);
         rt("correct index valid or NONE",CASES[i].correct==-1||(CASES[i].correct>=0&&CASES[i].correct<CASES[i].nc));
@@ -235,7 +242,13 @@ static int redteam(void){
     rt("reachable-not-selected still visible before NSW",st[2].r_not_sel>0);
     rt("semhash neighborhood reduces selected-not-reachable",st[3].sel_not_r<st[0].sel_not_r);
     rt("semhash out-of-domain wrong acts still counted",st[3].wrong>0);
-    rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==2);
+    rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==3);
+    rt("residual handles added negation and near-class OOD",st[4].ok==n&&st[4].wrong==0&&st[4].miss==0);
+    decision_t neg=decide(&CASES[8],4), near_ood=decide(&CASES[9],4);
+    rt("residual negation chooses off",neg.winner==CASES[8].correct);
+    rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
+    rt("near-class OOD abstains",near_ood.winner==-1);
+    rt("near-class OOD abstain is not reachable",near_ood.reachable==0);
     printf("RUNTIME_CHOICE_EVAL_REDTEAM checks=%d/%d score=%d/100\n",rt_pass,rt_total,rt_total?(100*rt_pass)/rt_total:0);
     return rt_pass==rt_total?0:1;
 }
@@ -250,8 +263,8 @@ int main(int argc,char **argv){
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash();
     if(red)return redteam();
     stats_t st[5]; int n=eval_all(st,1);
-    printf("\nvariant\taccuracy\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\tood_gates\tmean_knownness\n");
-    for(int v=0;v<5;v++) printf("%s\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\t%d\t%ld\n",st[v].name,st[v].ok,n,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail,st[v].ood_gate,st[v].known_sum/n);
+    printf("\nvariant\taccuracy\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\tood_gates\n");
+    for(int v=0;v<5;v++) printf("%s\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail,st[v].ood_gate);
     printf("\ndecision: ");
     if(st[4].ok>st[1].ok && st[4].wrong<st[1].wrong) printf("residual_combo beats the current champion; keep combined evidence and expand the adversarial set.\n");
     else if(st[2].ok>=st[3].ok && st[2].wrong<=st[3].wrong) printf("semhash_direct is enough for the learned path; keep it simple before adding topology.\n");

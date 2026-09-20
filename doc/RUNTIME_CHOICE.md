@@ -117,7 +117,7 @@ It scores every case five ways:
 
 It reports accuracy, wrong-act rate, missed/none rate, mean margin, collision
 rate, reachable-but-not-selected count, selected-but-not-reachable count,
-polarity failures, OOD gates, and mean query knownness. The current diagnostic
+polarity failures, OOD gates, and per-query knownness. The current diagnostic
 decision is:
 
 ```text
@@ -129,16 +129,20 @@ next: OOD knownness gate preserves NONE on this probe; expand OOD negatives.
 ```
 
 `residual_combo` is intentionally simple integer evidence fusion, not a tuned
-policy: raw topology plus scaled semhash evidence plus an explicit lexical
-polarity compatibility term, gated by the existing `none` manifold basin. It
-gets the current eight-case probe to `8/8`, preserves `NONE` on the two OOD
-cases, and removes polarity failures. It still selects case 3 without graph/code
-reachability, so the representation has not yet created the missing bridge.
+policy: raw topology plus scaled semhash evidence plus explicit lexical polarity
+compatibility, gated by the existing `none` manifold basin and a conservative
+query-knownness floor for low-energy OOD queries. Red-team expansion added a
+negation polarity case and a near-class OOD case (`light rail refund`) that uses
+IoT vocabulary but should still be `NONE`. The residual path gets the current
+ten-case probe to `10/10`, preserves `NONE` on all three OOD cases, and removes
+polarity failures. It still selects case 3 without graph/code reachability, so
+the representation has not yet created the missing bridge.
 
 The evaluator has a built-in red team:
 
     c/bin/runtime_choice_eval --redteam
 
 It pins case validity, neighborhood improvements, collision-rate invariance
-across abstain gates, persistent polarity failures, reachability accounting, and
-out-of-domain wrong-act accounting.
+across abstain gates, negation handling, near-class OOD abstention, abstain
+reachability cleanup, reachability accounting, and out-of-domain wrong-act
+accounting.
