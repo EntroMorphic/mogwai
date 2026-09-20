@@ -35,6 +35,10 @@ int r_choose_runtime(const router_t *r,
             rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
             return -1;
         }
+        if (cands[i].factor_flags & ~RTC_FACTOR_KNOWN_MASK) {
+            rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE);
+            return -1;
+        }
     }
 
     /* P0 scaffold only: until the flat semhash+factor scorer is promoted behind

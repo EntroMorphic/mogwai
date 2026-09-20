@@ -83,6 +83,10 @@ Acceptance gates:
 
 ### P0.2 Freeze the Runtime Candidate Format
 
+Status: **started**. `runtime_candidate_t` now has bounded text, a 64-bit
+semantic code, a semantic score, and named factor bits. Unknown factor bits are
+malformed input and fail closed.
+
 Deliverable: a compact candidate representation that can be supplied per request
 or serialized into a runtime-choice blob.
 

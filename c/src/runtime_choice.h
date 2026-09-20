@@ -7,6 +7,13 @@
 #define RUNTIME_CHOICE_MAX_CANDIDATES 32
 #define RUNTIME_CHOICE_MAX_TEXT 256
 
+#define RTC_FACTOR_POLARITY    0x01u
+#define RTC_FACTOR_COLOR       0x02u
+#define RTC_FACTOR_COMPOSITION 0x04u
+#define RTC_FACTOR_LOCATION    0x08u
+#define RTC_FACTOR_SUPPORT     0x10u
+#define RTC_FACTOR_KNOWN_MASK  (RTC_FACTOR_POLARITY|RTC_FACTOR_COLOR|RTC_FACTOR_COMPOSITION|RTC_FACTOR_LOCATION|RTC_FACTOR_SUPPORT)
+
 typedef enum {
     RTC_REASON_OK = 0,
     RTC_REASON_NONE_NO_CANDIDATES,
@@ -20,6 +27,7 @@ typedef struct {
     const char *text;
     uint64_t sem_code;
     int32_t sem_score;
+    /* Bitset of RTC_FACTOR_* values. Unknown bits are malformed input. */
     uint32_t factor_flags;
 } runtime_candidate_t;
 
