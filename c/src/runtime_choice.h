@@ -44,6 +44,7 @@ typedef enum {
     RTC_REASON_MALFORMED_QUERY,
     RTC_REASON_TOO_MANY_CANDIDATES,
     RTC_REASON_MALFORMED_CANDIDATE,
+    RTC_REASON_FACTOR_REJECT,
     RTC_REASON_UNSUPPORTED_SCORER
 } runtime_choice_reason_t;
 
@@ -109,5 +110,11 @@ int r_runtime_factor_score(const runtime_candidate_t *query,
                            const runtime_candidate_t *candidate,
                            int32_t *score_out,
                            runtime_factor_reason_t *reason_out);
+int r_runtime_choose_flat(const runtime_candidate_t *query,
+                          int bits,
+                          const runtime_candidate_t *cands,
+                          int n_cands,
+                          runtime_choice_t *out,
+                          runtime_factor_reason_t *factor_reason_out);
 
 #endif

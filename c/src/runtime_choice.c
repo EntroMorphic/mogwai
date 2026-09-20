@@ -18,6 +18,7 @@ const char *r_runtime_reason_name(runtime_choice_reason_t reason) {
     case RTC_REASON_MALFORMED_QUERY: return "malformed_query";
     case RTC_REASON_TOO_MANY_CANDIDATES: return "too_many_candidates";
     case RTC_REASON_MALFORMED_CANDIDATE: return "malformed_candidate";
+    case RTC_REASON_FACTOR_REJECT: return "factor_reject";
     case RTC_REASON_UNSUPPORTED_SCORER: return "unsupported_scorer";
     }
     return "unknown";
@@ -145,6 +146,54 @@ int r_runtime_factor_score(const runtime_candidate_t *query,
 
     *score_out = score;
     *reason_out = RTC_FACTOR_REASON_OK;
+    return 0;
+}
+
+int r_runtime_choose_flat(const runtime_candidate_t *query,
+                          int bits,
+                          const runtime_candidate_t *cands,
+                          int n_cands,
+                          runtime_choice_t *out,
+                          runtime_factor_reason_t *factor_reason_out) {
+    if (factor_reason_out) *factor_reason_out = RTC_FACTOR_REASON_BAD_ARGUMENT;
+    if (!out) return -1;
+    rtc_none(out, RTC_REASON_BAD_ARGUMENT);
+    if (!query || bits < 1 || bits > 64 || n_cands < 0) return -1;
+    if (!rtc_validate_candidate(query)) return -1;
+    if (n_cands == 0) { rtc_none(out, RTC_REASON_NONE_NO_CANDIDATES); return 0; }
+    if (!cands) return -1;
+    if (n_cands > RUNTIME_CHOICE_MAX_CANDIDATES) { rtc_none(out, RTC_REASON_TOO_MANY_CANDIDATES); return -1; }
+
+    int winner = -1, accepted = 0;
+    int32_t best = -1000000, second = -1000000;
+    runtime_factor_reason_t first_reject = RTC_FACTOR_REASON_OK;
+    for (int i = 0; i < n_cands; i++) {
+        if (!rtc_validate_candidate(&cands[i])) { rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE); return -1; }
+        int32_t factor_score, code_score;
+        runtime_factor_reason_t freason;
+        if (r_runtime_factor_score(query, &cands[i], &factor_score, &freason) != 0) return -1;
+        if (freason != RTC_FACTOR_REASON_OK) {
+            if (first_reject == RTC_FACTOR_REASON_OK) first_reject = freason;
+            continue;
+        }
+        if (r_runtime_code_score(query->sem_code, cands[i].sem_code, bits, &code_score) != 0) return -1;
+        int32_t total = code_score + factor_score;
+        accepted++;
+        if (total > best) { second = best; best = total; winner = i; }
+        else if (total > second) second = total;
+    }
+
+    if (winner < 0) {
+        rtc_none(out, RTC_REASON_FACTOR_REJECT);
+        if (factor_reason_out) *factor_reason_out = first_reject;
+        return 0;
+    }
+    out->winner = winner;
+    out->score = best;
+    out->second = accepted == 1 ? best : second;
+    out->margin = accepted == 1 ? 0 : best - second;
+    out->reason = RTC_REASON_OK;
+    if (factor_reason_out) *factor_reason_out = RTC_FACTOR_REASON_OK;
     return 0;
 }
 

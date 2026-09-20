@@ -196,6 +196,12 @@ Acceptance gates:
 
 ### P0.5 Promote the Flat Direct Scorer Before Topology
 
+Status: **started**. `r_runtime_choose_flat()` combines the production semantic
+code score with `r_runtime_factor_score()` over explicit query/candidate records.
+It skips factor-rejected candidates, surfaces the first factor refusal when all
+candidates reject, ignores `sem_score`, preserves lowest-index tie resolution,
+and is not yet wired into text-based `r_choose_runtime`.
+
 Deliverable: a flat candidate scan using the production semhash+factor scorer.
 
 Acceptance gates:

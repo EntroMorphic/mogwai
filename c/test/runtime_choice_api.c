@@ -166,6 +166,14 @@ int main(void) {
     fc.support = RTC_SUPPORT_SUPPORTED;
     chk("factor score rejects query OOD support", r_runtime_factor_score(&fq, &fc, &score, &freason) == 0 && freason == RTC_FACTOR_REASON_SUPPORT && score == 0);
     chk("factor score rejects malformed inputs", r_runtime_factor_score(&fq, hidden_pol, &score, &freason) == -1 && freason == RTC_FACTOR_REASON_BAD_ARGUMENT && score == 0);
+    runtime_candidate_t flat_q = {"q", 0, 0, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED};
+    runtime_candidate_t flat_c[3] = {{"bad", 0, 0, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_UNSUPPORTED}, {"tie0", 1, 9999, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED}, {"tie1", 1, -9999, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED}};
+    chk("flat chooser skips factor rejects", r_runtime_choose_flat(&flat_q, 2, flat_c, 3, &out, &freason) == 0 && out.reason == RTC_REASON_OK && out.winner == 1 && freason == RTC_FACTOR_REASON_OK);
+    chk("flat chooser ties by lowest index", r_runtime_choose_flat(&flat_q, 2, flat_c + 1, 2, &out, &freason) == 0 && out.reason == RTC_REASON_OK && out.winner == 0 && out.margin == 0);
+    chk("flat chooser ignores sem_score", r_runtime_choose_flat(&flat_q, 2, flat_c + 1, 2, &out, &freason) == 0 && out.winner == 0 && out.score == 0);
+    chk("flat chooser all factor rejects abstain", r_runtime_choose_flat(&flat_q, 2, flat_c, 1, &out, &freason) == 0 && out.reason == RTC_REASON_FACTOR_REJECT && out.winner == -1 && freason == RTC_FACTOR_REASON_SUPPORT);
+    chk("flat chooser empty abstains", r_runtime_choose_flat(&flat_q, 2, NULL, 0, &out, &freason) == 0 && out.reason == RTC_REASON_NONE_NO_CANDIDATES && out.winner == -1);
+    chk("flat chooser rejects malformed candidate", r_runtime_choose_flat(&flat_q, 2, hidden_pol, 1, &out, &freason) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;
