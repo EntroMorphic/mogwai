@@ -186,6 +186,27 @@ objects. Metaphorical OOD cases such as `brighten my day`, `increase the account
 balance`, and `dim the appetite` are still counted as explicit domain rejects,
 not learned rejects.
 
+This 20-case holdout is now frozen as Holdout A. Do not remediate it further.
+Fresh generalization pressure goes into Holdout B:
+
+    c/bin/runtime_choice_eval --holdout-b
+    c/bin/runtime_choice_eval --holdout-b-redteam
+
+Holdout B is a first-shot combinatorial transfer set, deliberately pinned before
+any remediation. Its baseline is intentionally not perfect:
+
+```text
+semhash_neighborhood accuracy=10/12 learned_coverage=5/5 wrong_act=2/12 residual_rescue=0
+attribution learned_accept=2 learned_reject=1 topology_rescue=0 operator_factor=3 domain_reject=4 hard_ood_veto=0 residual_rescue=0 wrong=2
+```
+
+The two visible failures are unsupported-location transfer probes (`don't let the
+garage lights dim`, `activate the foyer lighting`). They remain recorded as
+`wrong`, not hidden as learned rejects or residual repairs. This preserves the
+first-shot evidence: in-domain combinatorial coverage transferred, learned
+abstention transferred once, and the next real boundary is unsupported-location
+domain support beyond the explicit Holdout A locations.
+
 For atomic failure analysis:
 
     c/bin/runtime_choice_eval --details
