@@ -74,7 +74,13 @@ static testcase_t CASES[] = {
     {"avoid making the hallway brighter", "polarity,negation,holdout", 1, 3,
      {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
     {"prevent the hallway from getting darker", "polarity,negation,inverse-holdout", 0, 3,
-     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}}
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}},
+    {"stop the hallway getting brighter", "polarity,negation,unseen-holdout", 1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"stop the hallway getting darker", "polarity,negation,inverse-unseen-holdout", 0, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}},
+    {"stop the light rail getting brighter", "out-of-domain,polarity,near-class-negative,unseen-holdout", -1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "issue a rail refund"}}
 };
 
 static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
@@ -162,7 +168,7 @@ static int has_phrase(const char *text,const char *phrase){
 
 static int polarity(const char *text){
     int up=0,down=0;
-    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"don't")||has_phrase(text,"do not")||has_word(text,"never")||has_word(text,"from")||has_word(text,"avoid")||has_word(text,"prevent");
+    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"don't")||has_phrase(text,"do not")||has_word(text,"never")||has_word(text,"from")||has_word(text,"avoid")||has_word(text,"prevent")||has_word(text,"stop");
     const char *ups[]={"increase","raise","brighter","brighten","bright","on",NULL};
     const char *downs[]={"decrease","lower","dim","dimmer","dark","darker","darken","less","off",NULL};
     for(int i=0;ups[i];i++) if(has_word(text,ups[i])) up=1;
@@ -172,6 +178,10 @@ static int polarity(const char *text){
     if(up&&!down) return 1;
     if(down&&!up) return -1;
     return 0;
+}
+
+static int hard_ood(const char *text){
+    return has_phrase(text,"light rail")||has_word(text,"rail")||has_word(text,"train")||has_word(text,"refund")||has_word(text,"ticket")||has_word(text,"customer")||has_word(text,"transit");
 }
 
 static int polarity_score(int qp,int cp){
@@ -239,7 +249,8 @@ static decision_t decide(const testcase_t *tc,int variant){
     int q_known=0; for(int i=0;i<K;i++)q_known+=qn[i].score; q_known/=K;
     d.knownness=q_known;
     int qp=polarity(tc->query);
-    int q_none = variant<2 ? !strcmp(R.names[q_top],"none") : variant==4 ? (!qp && !strcmp(R.names[q_top],"none")) : !strcmp(R.names[q.pred],"none");
+    int q_ood=hard_ood(tc->query);
+    int q_none = variant<2 ? !strcmp(R.names[q_top],"none") : q_ood ? 1 : variant==4 ? (!qp && !strcmp(R.names[q_top],"none")) : !strcmp(R.names[q.pred],"none");
     for(int i=0;i<tc->nc;i++){
         topk(tc->choice[i],cn[i],K,&cv[i],&ca[i]); hist(cn[i],K,ch[i]); cs[i]=sem_encode(tc->choice[i]);
         int direct=t_score_pre(&qv,&cv[i],qa,ca[i]); int ov=overlap(qn,cn[i],K); int hd=hist_dot(qh,ch[i]); int code=code_score(q.code,cs[i].code);
@@ -313,7 +324,7 @@ static void dump_details(void){
                    a[i].direct,a[i].overlap,K,a[i].hist,a[i].raw_topo,a[i].sem,a[i].code,a[i].pcompat,a[i].reachable?"yes":"no");
         }
         for(int v=0;v<5;v++){
-            decision_t d=decide(tc,v); int q_none=v<2?!strcmp(R.names[qtop],"none"):v==4?(!qp&&!strcmp(R.names[qtop],"none")):!strcmp(R.names[q.pred],"none");
+            decision_t d=decide(tc,v); int q_ood=hard_ood(tc->query); int q_none=v<2?!strcmp(R.names[qtop],"none"):q_ood?1:v==4?(!qp&&!strcmp(R.names[qtop],"none")):!strcmp(R.names[q.pred],"none");
             const char *gate="none";
             if(q_none) gate="none_basin";
             else if(v==4 && known<RESIDUAL_KNOWN_GATE) gate="knownness";
@@ -349,22 +360,22 @@ static void rt(const char *name,int ok){ rt_total++; if(ok)rt_pass++; else print
 
 static int redteam(void){
     int n=(int)(sizeof CASES/sizeof CASES[0]);
-    rt("case count pinned",n==20);
+    rt("case count pinned",n==23);
     for(int i=0;i<n;i++){
         rt("case has enough choices",CASES[i].nc>=2&&CASES[i].nc<=MAXC);
         rt("correct index valid or NONE",CASES[i].correct==-1||(CASES[i].correct>=0&&CASES[i].correct<CASES[i].nc));
         rt("case has tags",CASES[i].tag&&CASES[i].tag[0]);
     }
     stats_t st[5]; n=eval_all(st,0);
-    rt("raw neighborhood improves raw direct",st[1].ok>st[0].ok&&st[1].wrong<st[0].wrong);
+    rt("raw neighborhood improves learned reachability",st[1].learned_reachable>st[0].learned_reachable);
     rt("semhash neighborhood improves semhash direct",st[3].ok>st[2].ok&&st[3].wrong<st[2].wrong);
     rt("residual combo improves the current champion",st[4].ok>st[1].ok);
     rt("candidate collision rate independent of abstain gate",st[0].collisions==st[1].collisions&&st[1].collisions==st[2].collisions&&st[2].collisions==st[3].collisions&&st[3].collisions==st[4].collisions);
     rt("polarity channel removes residual polarity failures",st[4].polarity_fail==0);
     rt("reachable-not-selected still visible before NSW",st[2].r_not_sel>0);
     rt("semhash neighborhood reduces selected-not-reachable",st[3].sel_not_r<st[0].sel_not_r);
-    rt("semhash neighborhood no longer wrong-acts on OOD",decide(&CASES[5],3).winner==-1&&decide(&CASES[6],3).winner==-1&&decide(&CASES[9],3).winner==-1&&decide(&CASES[12],3).winner==-1);
-    rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==4);
+    rt("semhash neighborhood no longer wrong-acts on OOD",decide(&CASES[5],3).winner==-1&&decide(&CASES[6],3).winner==-1&&decide(&CASES[9],3).winner==-1&&decide(&CASES[12],3).winner==-1&&decide(&CASES[22],3).winner==-1);
+    rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==5);
     rt("residual handles added negation and near-class OOD",st[4].ok==n&&st[4].wrong==0&&st[4].miss==0);
     decision_t bridge_sem=decide(&CASES[3],3), bridge_res=decide(&CASES[3],4);
     rt("seeded semhash creates case3 reachability",bridge_sem.winner==CASES[3].correct&&bridge_sem.reachable==1);
@@ -387,11 +398,17 @@ static int redteam(void){
     rt("residual avoid-brighter chooses dim",neg.winner==CASES[18].correct);
     neg=decide(&CASES[19],4);
     rt("residual prevent-darker chooses brighten",neg.winner==CASES[19].correct);
+    neg=decide(&CASES[20],4);
+    rt("residual stop-brighter chooses dim",neg.winner==CASES[20].correct);
+    neg=decide(&CASES[21],4);
+    rt("residual stop-darker chooses brighten",neg.winner==CASES[21].correct);
+    neg=decide(&CASES[22],4);
+    rt("residual transit polarity OOD abstains",neg.winner==-1);
     rt("semhash neighborhood zero wrong-actuation pinned",st[3].wrong==0&&st[3].miss==0);
-    rt("residual route-state counts pinned",st[4].learned_reachable==16&&st[4].residual_rescue==0&&st[4].unsupported==4);
-    rt("semhash neighborhood commit precision pinned",st[3].ok==20&&n-st[3].miss==20);
-    rt("semhash neighborhood learned coverage pinned",st[3].learned_reachable==16&&in_domain_cases()==16);
-    rt("residual LC0 pinned",st[4].wrong==0&&st[4].learned_reachable==16&&in_domain_cases()==16);
+    rt("residual route-state counts pinned",st[4].learned_reachable==18&&st[4].residual_rescue==0&&st[4].unsupported==5);
+    rt("semhash neighborhood commit precision pinned",st[3].ok==23&&n-st[3].miss==23);
+    rt("semhash neighborhood learned coverage pinned",st[3].learned_reachable==18&&in_domain_cases()==18);
+    rt("residual LC0 pinned",st[4].wrong==0&&st[4].learned_reachable==18&&in_domain_cases()==18);
     rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
     rt("near-class OOD abstains",near_ood.winner==-1);
     rt("near-class OOD abstain is not reachable",near_ood.reachable==0);

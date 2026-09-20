@@ -140,14 +140,15 @@ receives a tiny audited seed set of bridge positives, balanced compositional
 route positives, and hard OOD negatives; these seeds update only the host
 learned weights and are not inserted into the exact top-k index. Red-team
 expansion now includes holdout bridge, contraction
-negation, inverse negation, `keep ... from getting ...`, `avoid ...`, and
-`prevent ... from getting ...` negation, plus near-class OOD cases. The residual
-path gets the current twenty-case probe to `20/20`,
-preserves `NONE` on all four OOD cases, and removes polarity failures.
-`semhash_direct` reaches `19/20`, with `commit_precision=19/20` and
-`learned_coverage=15/16`. `semhash_neighborhood` now matches `residual_combo` at
-`20/20`, with `commit_precision=20/20`, `learned_coverage=16/16`, zero wrong
-actuation, and all four OOD cases still rejected. This only held after semhash
+negation, inverse negation, `keep ... from getting ...`, `avoid ...`,
+`prevent ... from getting ...`, unseen `stop ... getting ...` negation, and
+polarity-bearing transit OOD. The residual path gets the current twenty-three
+case probe to `23/23`, preserves `NONE` on all five OOD cases, and removes
+polarity failures. `semhash_direct` reaches `22/23`, with
+`commit_precision=22/23` and `learned_coverage=17/18`.
+`semhash_neighborhood` now matches `residual_combo` at `23/23`, with
+`commit_precision=23/23`, `learned_coverage=18/18`, zero wrong actuation, and
+all five OOD cases still rejected. This only held after semhash
 candidate scoring included the same explicit polarity compatibility term; the
 balanced route seeds alone made the representation more reachable but too
 permissive on literal non-negated candidates.
@@ -190,7 +191,7 @@ Seeded projection lifted that floor on the ten-case probe:
 | 5 | Query semhash prediction becomes `none`; all learned variants gate to `NONE` | The original OOD collapse is fixed on this probe. |
 | 9 | Query semhash prediction becomes `none`; learned variants gate to `NONE`, and residual also gates by `knownness=98 < 120` | Near-class OOD is protected both by learned `none` and by the residual knownness guard. |
 
-The current twenty-case red team found the next floor:
+The current twenty-three-case red team found the next floor:
 
 | Case | Exact measurement | Meaning |
 |---:|---|---|
@@ -203,13 +204,16 @@ The current twenty-case red team found the next floor:
 | 17 | Query `keep the hallway from getting darker`; semhash direct/neighborhood and residual now select reachable `brighten` | The route channel needs normalized phrase-level negation, not just token antonyms. |
 | 18 | Query `avoid making the hallway brighter`; semhash direct/neighborhood and residual now select reachable `dim` | Prevention verbs are polarity operators, not ordinary semantic content. |
 | 19 | Query `prevent the hallway from getting darker`; semhash direct/neighborhood and residual now select reachable `brighten` | Balanced inverse-prevention routes prevent one-sided dim overfitting. |
+| 20 | Query `stop the hallway getting brighter`; initially followed the literal brightening route until `stop` became a prevention cue | Unseen prevention verbs must map into the same route operator, not into lexical similarity. |
+| 21 | Query `stop the hallway getting darker`; semhash neighborhood and residual now select reachable `brighten` | The route needs balanced inverse-prevention coverage, not one-sided dimming. |
+| 22 | Query `stop the light rail getting brighter`; polarity is present, but transit terms force learned/residual variants to `NONE` | Explicit polarity must not bypass the OOD boundary. |
 
 The current floor is therefore no longer reachability on this probe; it is
-generalization pressure. Semhash neighborhood has `16/16` learned coverage and
-zero residual rescues, but this was achieved with audited host-only route seeds.
-The next adversarial set must test unseen inversion verbs and OOD near-misses
-without weakening the `NONE` and knownness gates that protect cases 5, 6, 9, and
-12.
+generalization pressure. Semhash neighborhood has `18/18` learned coverage and
+zero residual rescues, but this was achieved with audited host-only route seeds
+and an explicit transit OOD gate. The next adversarial set must test more unseen
+inversion verbs and polarity-bearing OOD near-misses without weakening the
+`NONE` and knownness gates that protect cases 5, 6, 9, 12, and 22.
 
 The next primary metric is learned coverage at fixed zero wrong-actuation rate:
 
@@ -221,8 +225,8 @@ Current runtime-choice floor:
 
 | Variant | Commit precision | Learned coverage | Wrong act |
 |---|---:|---:|---:|
-| `raw_direct` | `6/19` | `2/16` | `13/20` |
-| `raw_neighborhood` | `7/19` | `4/16` | `12/20` |
-| `semhash_direct` | `19/20` | `15/16` | `1/20` |
-| `semhash_neighborhood` | `20/20` | `16/16` | `0/20` |
-| `residual_combo` | `20/20` | `16/16` | `0/20` |
+| `raw_direct` | `7/22` | `2/18` | `15/23` |
+| `raw_neighborhood` | `7/22` | `4/18` | `15/23` |
+| `semhash_direct` | `22/23` | `17/18` | `1/23` |
+| `semhash_neighborhood` | `23/23` | `18/18` | `0/23` |
+| `residual_combo` | `23/23` | `18/18` | `0/23` |
