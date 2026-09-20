@@ -25,6 +25,7 @@ typedef struct { int idx, score; } near_t;
 typedef struct { uint64_t code; int pred, score; } sh_t;
 typedef struct { const char *query, *tag; int correct, nc; const char *choice[MAXC]; } testcase_t;
 typedef struct { int winner, score, second, margin, reachable, collision, knownness; } decision_t;
+typedef struct { int direct, overlap, hist, raw_topo, sem, code, qpol, cpol, pcompat, reachable; } atom_t;
 typedef struct { const char *name; int ok, wrong, miss, collisions, r_not_sel, sel_not_r, polarity_fail, ood_gate; long margin_sum; } stats_t;
 
 static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
@@ -150,6 +151,11 @@ static int polarity_score(int qp,int cp){
     return qp==cp ? 80 : -120;
 }
 
+static const char *variant_name(int variant){
+    static const char *n[]={"raw_direct","raw_neighborhood","semhash_direct","semhash_neighborhood","residual_combo"};
+    return n[variant];
+}
+
 static int dot_cls(int c,const int16_t *acc){ int64_t s=0; for(int d=0;d<RD;d++) if(acc[d])s+=(int64_t)CW[c][d]*acc[d]; if(s>2147483647LL)return 2147483647; if(s<-2147483647LL)return -2147483647; return (int)s; }
 static void train_semhash(void){ int16_t acc[RD]; int32_t tot; (void)tot; for(int ep=0;ep<EPOCHS;ep++){ int err=0; for(int i=0;i<U_n;i++){ r_counts(U_t[i],acc,&tot); int y=R.label[i],pred=0,best=dot_cls(0,acc); for(uint32_t c=1;c<R.n_class;c++){int s=dot_cls((int)c,acc); if(s>best){best=s;pred=(int)c;}} if(pred!=y){err++; for(int d=0;d<RD;d++)if(acc[d]){CW[y][d]+=acc[d]; CW[pred][d]-=acc[d];}} } if(!err)break; } }
 static int code_bit(int cls,int j){ char b[80]; snprintf(b,sizeof b,"%s#%d",R.names[cls],j); uint32_t h=r_fnv(b,(int)strlen(b)); return (((h>>16)^h)&1)?1:-1; }
@@ -202,7 +208,48 @@ static void tally(stats_t *s,const testcase_t *tc,decision_t d){
 
 static void init_stats(stats_t *st){
     memset(st,0,5*sizeof st[0]);
-    st[0].name="raw_direct"; st[1].name="raw_neighborhood"; st[2].name="semhash_direct"; st[3].name="semhash_neighborhood"; st[4].name="residual_combo";
+    for(int i=0;i<5;i++) st[i].name=variant_name(i);
+}
+
+static void dump_details(void){
+    int n=(int)(sizeof CASES/sizeof CASES[0]);
+    printf("runtime_choice_eval_details cases=%d k=%d residual_known_gate=%d\n",n,K,RESIDUAL_KNOWN_GATE);
+    for(int ci=0;ci<n;ci++){
+        const testcase_t *tc=&CASES[ci];
+        near_t qn[K],cn[MAXC][K]; tvec qv,cv[MAXC]; int qa,ca[MAXC],qh[RMAXCLS],ch[MAXC][RMAXCLS];
+        sh_t q=sem_encode(tc->query), cs[MAXC]; atom_t a[MAXC];
+        topk(tc->query,qn,K,&qv,&qa); hist(qn,K,qh);
+        int known=0; for(int i=0;i<K;i++)known+=qn[i].score; known/=K;
+        int qtop=R.label[qn[0].idx], qp=polarity(tc->query);
+        printf("\nCASE %d correct=%d tags=%s\n",ci,tc->correct,tc->tag);
+        printf("query=\"%s\" knownness=%d q_top=%s q_top_score=%d sem_pred=%s sem_fit=%d qpol=%d\n",
+               tc->query,known,R.names[qtop],qn[0].score,R.names[q.pred],q.score,qp);
+        for(int i=0;i<tc->nc;i++){
+            topk(tc->choice[i],cn[i],K,&cv[i],&ca[i]); hist(cn[i],K,ch[i]); cs[i]=sem_encode(tc->choice[i]);
+            a[i].direct=t_score_pre(&qv,&cv[i],qa,ca[i]);
+            a[i].overlap=overlap(qn,cn[i],K); a[i].hist=hist_dot(qh,ch[i]);
+            a[i].raw_topo=a[i].direct+4*a[i].overlap+a[i].hist/10;
+            a[i].sem=sem_sim(q,cs[i]); a[i].code=code_score(q.code,cs[i].code);
+            a[i].qpol=qp; a[i].cpol=polarity(tc->choice[i]); a[i].pcompat=polarity_score(a[i].qpol,a[i].cpol);
+            a[i].reachable=(a[i].code>0 || a[i].overlap>0 || a[i].hist>=500);
+            printf("  cand %d text=\"%s\" c_top=%s c_top_score=%d sem_pred=%s sem_fit=%d cpol=%d\n",
+                   i,tc->choice[i],R.names[R.label[cn[i][0].idx]],cn[i][0].score,R.names[cs[i].pred],cs[i].score,a[i].cpol);
+            printf("    direct=%d overlap=%d/%d hist=%d raw_topo=%d sem=%d code=%d pcompat=%d reachable=%s\n",
+                   a[i].direct,a[i].overlap,K,a[i].hist,a[i].raw_topo,a[i].sem,a[i].code,a[i].pcompat,a[i].reachable?"yes":"no");
+        }
+        for(int v=0;v<5;v++){
+            decision_t d=decide(tc,v); int q_none=(v<2||v==4)?!strcmp(R.names[qtop],"none"):!strcmp(R.names[q.pred],"none");
+            const char *gate="none";
+            if(q_none) gate="none_basin";
+            else if(v==4 && known<RESIDUAL_KNOWN_GATE) gate="knownness";
+            printf("  variant=%s winner=%d score=%d second=%d margin=%d reachable=%s gate=%s",
+                   variant_name(v),d.winner,d.score,d.second,d.margin,d.reachable?"yes":"no",gate);
+            if(d.winner>=0) printf(" winner_components=%d/%d/%d/%d/%d/%d/%d",
+                                   a[d.winner].direct,a[d.winner].overlap,a[d.winner].hist,a[d.winner].raw_topo,
+                                   a[d.winner].sem,a[d.winner].code,a[d.winner].pcompat);
+            printf("\n");
+        }
+    }
 }
 
 static int eval_all(stats_t *st,int print_cases){
@@ -253,15 +300,17 @@ static int redteam(void){
     return rt_pass==rt_total?0:1;
 }
 
-static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam]\n"); }
+static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details]\n"); }
 
 int main(int argc,char **argv){
     const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
-    int red=0,arg=1;
+    int red=0,details=0,arg=1;
     if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
-    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else {usage();return 1;} }
+    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else {usage();return 1;} }
+    if(red&&details){usage();return 1;}
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash();
     if(red)return redteam();
+    if(details){dump_details();return 0;}
     stats_t st[5]; int n=eval_all(st,1);
     printf("\nvariant\taccuracy\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\tood_gates\n");
     for(int v=0;v<5;v++) printf("%s\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail,st[v].ood_gate);

@@ -142,7 +142,31 @@ The evaluator has a built-in red team:
 
     c/bin/runtime_choice_eval --redteam
 
+For atomic failure analysis:
+
+    c/bin/runtime_choice_eval --details
+
 It pins case validity, neighborhood improvements, collision-rate invariance
 across abstain gates, negation handling, near-class OOD abstention, abstain
 reachability cleanup, reachability accounting, and out-of-domain wrong-act
 accounting.
+
+## Atomic floor
+
+`runtime_choice_eval --details` prints the primitive measurements used by every
+variant: direct score, top-k overlap, class-histogram agreement, raw-topology
+score, semhash score, learned-code agreement, polarity compatibility,
+knownness, gate reason, reachability, winner, runner-up, and margin.
+
+Measured floor on the current ten-case probe:
+
+| Case | Exact measurement | Meaning |
+|---:|---|---|
+| 3 | Correct candidate has `overlap=0/8`, `hist=324`, `code=-136`, `reachable=no`; wrong raise candidate has `direct=88` vs correct `86`, `raw_topo=122` vs `118`, and semhash `21` vs `-102` | The representation/topology still has not created the missing bridge. Residual wins only because polarity adds `+80` to lower and `-120` to raise. |
+| 5 | Query top basin is `none`, but semhash predicts `iot_cleaning`; semhash chooses candidate 0 with `score=265`, `margin=306` | Learned semhash still collapses some OOD text toward known classes unless the manifold `none` gate runs first. |
+| 8 | Negated query has `qpol=-1`; raw/topology/semhash all choose `on`; residual chooses `off` because polarity compatibility is `+80` for off and `-120` for on | Polarity is an independent action factor, not something general similarity handles safely. |
+| 9 | Query `light rail refund` has `knownness=98`, below `RESIDUAL_KNOWN_GATE=120`; all non-residual variants choose candidate 2, residual gates to `NONE` | Near-class OOD remains the hard OOD floor; query-knownness is currently the measured guardrail. |
+
+The floor is therefore not aggregate accuracy. It is: create reachability for
+case 3 without weakening the `none` basin and knownness gates that protect cases
+5, 6, and 9.
