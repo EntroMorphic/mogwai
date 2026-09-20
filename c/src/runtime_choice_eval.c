@@ -70,6 +70,10 @@ static testcase_t CASES[] = {
     {"keep the hallway from getting brighter", "polarity,negation,holdout", 1, 3,
      {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
     {"keep the hallway from getting darker", "polarity,negation,inverse-holdout", 0, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}},
+    {"avoid making the hallway brighter", "polarity,negation,holdout", 1, 3,
+     {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights on"}},
+    {"prevent the hallway from getting darker", "polarity,negation,inverse-holdout", 0, 3,
      {"make the hallway brighter", "dim the hallway lights", "turn the hallway lights off"}}
 };
 
@@ -158,7 +162,7 @@ static int has_phrase(const char *text,const char *phrase){
 
 static int polarity(const char *text){
     int up=0,down=0;
-    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"don't")||has_phrase(text,"do not")||has_word(text,"never")||has_word(text,"from");
+    int neg=has_word(text,"not")||has_word(text,"dont")||has_word(text,"don")||has_word(text,"don't")||has_phrase(text,"do not")||has_word(text,"never")||has_word(text,"from")||has_word(text,"avoid")||has_word(text,"prevent");
     const char *ups[]={"increase","raise","brighter","brighten","bright","on",NULL};
     const char *downs[]={"decrease","lower","dim","dimmer","dark","darker","darken","less","off",NULL};
     for(int i=0;ups[i];i++) if(has_word(text,ups[i])) up=1;
@@ -298,7 +302,7 @@ static void dump_details(void){
                    a[i].direct,a[i].overlap,K,a[i].hist,a[i].raw_topo,a[i].sem,a[i].code,a[i].pcompat,a[i].reachable?"yes":"no");
         }
         for(int v=0;v<5;v++){
-            decision_t d=decide(tc,v); int q_none=(v<2||v==4)?!strcmp(R.names[qtop],"none"):!strcmp(R.names[q.pred],"none");
+            decision_t d=decide(tc,v); int q_none=v<2?!strcmp(R.names[qtop],"none"):v==4?(!qp&&!strcmp(R.names[qtop],"none")):!strcmp(R.names[q.pred],"none");
             const char *gate="none";
             if(q_none) gate="none_basin";
             else if(v==4 && known<RESIDUAL_KNOWN_GATE) gate="knownness";
@@ -334,7 +338,7 @@ static void rt(const char *name,int ok){ rt_total++; if(ok)rt_pass++; else print
 
 static int redteam(void){
     int n=(int)(sizeof CASES/sizeof CASES[0]);
-    rt("case count pinned",n==18);
+    rt("case count pinned",n==20);
     for(int i=0;i<n;i++){
         rt("case has enough choices",CASES[i].nc>=2&&CASES[i].nc<=MAXC);
         rt("correct index valid or NONE",CASES[i].correct==-1||(CASES[i].correct>=0&&CASES[i].correct<CASES[i].nc));
@@ -368,10 +372,14 @@ static int redteam(void){
     rt("residual keep-from-brighter chooses dim",neg.winner==CASES[16].correct);
     neg=decide(&CASES[17],4);
     rt("residual keep-from-darker chooses brighten",neg.winner==CASES[17].correct);
-    rt("residual route-state counts pinned",st[4].learned_reachable==11&&st[4].residual_rescue==3&&st[4].unsupported==4);
+    neg=decide(&CASES[18],4);
+    rt("residual avoid-brighter chooses dim",neg.winner==CASES[18].correct);
+    neg=decide(&CASES[19],4);
+    rt("residual prevent-darker chooses brighten",neg.winner==CASES[19].correct);
+    rt("residual route-state counts pinned",st[4].learned_reachable==12&&st[4].residual_rescue==4&&st[4].unsupported==4);
     rt("semhash neighborhood commit precision pinned",st[3].ok==12&&n-st[3].miss==13);
-    rt("semhash neighborhood learned coverage pinned",st[3].learned_reachable==8&&in_domain_cases()==14);
-    rt("residual LC0 pinned",st[4].wrong==0&&st[4].learned_reachable==11&&in_domain_cases()==14);
+    rt("semhash neighborhood learned coverage pinned",st[3].learned_reachable==8&&in_domain_cases()==16);
+    rt("residual LC0 pinned",st[4].wrong==0&&st[4].learned_reachable==12&&in_domain_cases()==16);
     rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
     rt("near-class OOD abstains",near_ood.winner==-1);
     rt("near-class OOD abstain is not reachable",near_ood.reachable==0);
