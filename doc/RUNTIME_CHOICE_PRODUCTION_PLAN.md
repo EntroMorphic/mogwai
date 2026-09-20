@@ -53,9 +53,12 @@ This contract must be implemented before any runtime-choice result can actuate.
 
 ### P0.1 Define the Production API
 
-Status: **scaffolded** in `c/src/runtime_choice.h` and
-`c/src/runtime_choice.c`. The API validates inputs and fails closed with
-`RTC_REASON_UNSUPPORTED_SCORER` until the flat scorer is promoted behind it.
+Status: **complete as an API contract** in `c/src/runtime_choice.h` and
+`c/src/runtime_choice.c`. The API validates inputs, exposes stable refusal reason
+names, accepts duplicate candidates, pins candidate-order invariance for
+non-scoring outcomes, and fails closed with `RTC_REASON_UNSUPPORTED_SCORER` until
+the flat scorer is promoted behind it. Exact score ties, once scoring lands,
+resolve to the lowest candidate index in the caller's original order.
 `c/test/runtime_choice_api.c` pins this boundary.
 
 Deliverable: a C API that accepts a query plus runtime candidates and returns a

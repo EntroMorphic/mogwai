@@ -10,6 +10,19 @@ static void rtc_none(runtime_choice_t *out, runtime_choice_reason_t reason) {
     out->reason = reason;
 }
 
+const char *r_runtime_reason_name(runtime_choice_reason_t reason) {
+    switch (reason) {
+    case RTC_REASON_OK: return "ok";
+    case RTC_REASON_NONE_NO_CANDIDATES: return "none_no_candidates";
+    case RTC_REASON_BAD_ARGUMENT: return "bad_argument";
+    case RTC_REASON_MALFORMED_QUERY: return "malformed_query";
+    case RTC_REASON_TOO_MANY_CANDIDATES: return "too_many_candidates";
+    case RTC_REASON_MALFORMED_CANDIDATE: return "malformed_candidate";
+    case RTC_REASON_UNSUPPORTED_SCORER: return "unsupported_scorer";
+    }
+    return "unknown";
+}
+
 int r_choose_runtime(const router_t *r,
                      const char *query,
                      const runtime_candidate_t *cands,
@@ -48,7 +61,10 @@ int r_choose_runtime(const router_t *r,
     }
 
     /* P0 scaffold only: until the flat semhash+factor scorer is promoted behind
-     * this API, every otherwise-valid runtime-choice call fails closed. */
+     * this API, every otherwise-valid runtime-choice call fails closed. When the
+     * scorer lands, exact score ties must resolve to the lowest candidate index
+     * in the caller's original order; tests pin candidate-order invariance for
+     * every non-scoring outcome here. */
     rtc_none(out, RTC_REASON_UNSUPPORTED_SCORER);
     return 0;
 }

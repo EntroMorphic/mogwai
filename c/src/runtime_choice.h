@@ -46,4 +46,6 @@ int r_choose_runtime(const router_t *r,
                      int n_cands,
                      runtime_choice_t *out);
 
+const char *r_runtime_reason_name(runtime_choice_reason_t reason);
+
 #endif
