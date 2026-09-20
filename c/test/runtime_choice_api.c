@@ -62,6 +62,7 @@ int main(void) {
     size_t written = 999;
     int32_t score = 12345;
     runtime_factor_reason_t freason = RTC_FACTOR_REASON_BAD_ARGUMENT;
+    runtime_candidate_t qenc;
 
     memset(&r, 0, sizeof r);
     memset(many, 0, sizeof many);
@@ -177,6 +178,11 @@ int main(void) {
     chk("precomputed API uses flat scorer", r_choose_runtime_precomputed(&flat_q, 2, flat_c, 3, &out, &freason) == 0 && out.reason == RTC_REASON_OK && out.winner == 1 && freason == RTC_FACTOR_REASON_OK);
     chk("precomputed API preserves factor attribution", r_choose_runtime_precomputed(&flat_q, 2, flat_c, 1, &out, &freason) == 0 && out.reason == RTC_REASON_FACTOR_REJECT && out.winner == -1 && freason == RTC_FACTOR_REASON_SUPPORT);
     chk("text API remains fail closed", r_choose_runtime(&r, "brew espresso", flat_c, 3, &out) == 0 && out.reason == RTC_REASON_UNSUPPORTED_SCORER && out.winner == -1);
+    chk("query encoder rejects bad args", r_runtime_make_query(NULL, 0, 0, RTC_SUPPORT_SUPPORTED, &qenc) == -1 && r_runtime_make_query("", 0, 0, RTC_SUPPORT_SUPPORTED, &qenc) == -1 && r_runtime_make_query("x", 0, 0, 99, &qenc) == -1);
+    chk("query encoder derives factors", r_runtime_make_query("activate the hallway lamps red", 0x55, 17, RTC_SUPPORT_SUPPORTED, &qenc) == 0 && qenc.sem_code == 0x55 && qenc.sem_score == 17 && qenc.polarity == RTC_POLARITY_POSITIVE && qenc.color == RTC_COLOR_RED && qenc.composition == (RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION) && qenc.location_id == 1 && qenc.support == RTC_SUPPORT_SUPPORTED);
+    chk("query encoder keeps unknown support neutral", r_runtime_make_query("brew espresso", 0x77, 3, RTC_SUPPORT_UNKNOWN, &qenc) == 0 && qenc.factor_flags == 0 && qenc.support == RTC_SUPPORT_UNKNOWN);
+    runtime_candidate_t qmatch[1] = {{"turn on hallway lights", 1, 0, RTC_FACTOR_POLARITY|RTC_FACTOR_COMPOSITION|RTC_FACTOR_LOCATION|RTC_FACTOR_SUPPORT, RTC_POLARITY_POSITIVE, 0, RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION, 1, RTC_SUPPORT_SUPPORTED}};
+    chk("query encoder feeds precomputed API", r_runtime_make_query("activate the hallway lamps", 1, 0, RTC_SUPPORT_SUPPORTED, &qenc) == 0 && r_choose_runtime_precomputed(&qenc, 2, qmatch, 1, &out, &freason) == 0 && out.reason == RTC_REASON_OK && out.winner == 0);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;

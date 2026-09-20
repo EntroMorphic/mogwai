@@ -90,6 +90,11 @@ int r_choose_runtime_precomputed(const runtime_candidate_t *query,
                                  int n_cands,
                                  runtime_choice_t *out,
                                  runtime_factor_reason_t *factor_reason_out);
+int r_runtime_make_query(const char *text,
+                         uint64_t sem_code,
+                         int32_t sem_score,
+                         uint8_t support,
+                         runtime_candidate_t *out);
 
 const char *r_runtime_reason_name(runtime_choice_reason_t reason);
 int r_runtime_parse_candidates(const uint8_t *base,

@@ -119,9 +119,9 @@ $(BIN)/imgcheck: c/test/imgcheck.c
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/imgcheck.c
 
-$(BIN)/runtime_choice_api: c/test/runtime_choice_api.c $(SRC)/runtime_choice.c $(SRC)/runtime_choice.h $(SRC)/router.h
+$(BIN)/runtime_choice_api: c/test/runtime_choice_api.c $(SRC)/runtime_choice.c $(SRC)/runtime_choice.h $(SRC)/router.c $(SRC)/router.h
 	@mkdir -p $(BIN)
-	@$(CC) $(CFLAGS) -o $@ c/test/runtime_choice_api.c $(SRC)/runtime_choice.c $(LDLIBS)
+	@$(CC) $(CFLAGS) -o $@ c/test/runtime_choice_api.c $(SRC)/runtime_choice.c $(SRC)/router.c $(LDLIBS)
 
 .PHONY: tools
 tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard $(BIN)/imgcheck $(BIN)/runtime_choice_api

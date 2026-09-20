@@ -1,6 +1,28 @@
 #include "runtime_choice.h"
 #include <string.h>
 
+static int rtc_validate_candidate(const runtime_candidate_t *c);
+
+static int rtc_word_at(const char *h, const char *w) {
+    size_t n = strlen(w);
+    for (const char *p = strstr(h, w); p; p = strstr(p + 1, w))
+        if (p > h && p[-1] == ' ' && (p[n] == ' ' || p[n] == 0)) return (int)(p - h);
+    return -1;
+}
+
+static int rtc_has_word(const char *text, const char *word) {
+    char b[512];
+    r_norm(text, b, sizeof b);
+    return rtc_word_at(b, word) >= 0;
+}
+
+static int rtc_has_phrase(const char *text, const char *phrase) {
+    char b[512], p[128];
+    r_norm(text, b, sizeof b);
+    r_norm(phrase, p, sizeof p);
+    return strstr(b, p) != NULL;
+}
+
 static void rtc_none(runtime_choice_t *out, runtime_choice_reason_t reason) {
     if (!out) return;
     out->winner = -1;
@@ -8,6 +30,59 @@ static void rtc_none(runtime_choice_t *out, runtime_choice_reason_t reason) {
     out->second = 0;
     out->margin = 0;
     out->reason = reason;
+}
+
+static int rtc_text_polarity(const char *text) {
+    int pos = rtc_has_word(text, "on") || rtc_has_word(text, "activate") || rtc_has_word(text, "brighter") || rtc_has_word(text, "brighten") || rtc_has_word(text, "increase") || rtc_has_word(text, "raise");
+    int neg = rtc_has_word(text, "off") || rtc_has_word(text, "dim") || rtc_has_word(text, "darker") || rtc_has_word(text, "lower") || rtc_has_word(text, "decrease") || rtc_has_word(text, "reduce");
+    if (pos && !neg) return RTC_POLARITY_POSITIVE;
+    if (neg && !pos) return RTC_POLARITY_NEGATIVE;
+    return RTC_POLARITY_NONE;
+}
+
+static uint8_t rtc_text_color(const char *text) {
+    if (rtc_has_word(text, "red") || rtc_has_word(text, "crimson")) return RTC_COLOR_RED;
+    if (rtc_has_word(text, "blue")) return RTC_COLOR_BLUE;
+    return RTC_COLOR_NONE;
+}
+
+static uint8_t rtc_text_composition(const char *text) {
+    uint8_t c = 0;
+    if (rtc_has_word(text, "light") || rtc_has_word(text, "lights") || rtc_has_word(text, "lamp") || rtc_has_word(text, "lamps") || rtc_has_word(text, "lighting")) c |= RTC_COMP_LIGHTING;
+    if (rtc_has_word(text, "activate") || rtc_has_word(text, "on")) c |= RTC_COMP_ACTIVATION;
+    return c;
+}
+
+static uint8_t rtc_text_location(const char *text) {
+    static const char *names[] = {"hallway", "bedroom", "kitchen", "lounge", "atrium", "workshop", "nursery", "observatory", "living room", "dining room"};
+    for (uint8_t i = 0; i < (uint8_t)(sizeof names / sizeof names[0]); i++) if (rtc_has_phrase(text, names[i])) return (uint8_t)(i + 1);
+    return RTC_LOCATION_NONE;
+}
+
+int r_runtime_make_query(const char *text,
+                         uint64_t sem_code,
+                         int32_t sem_score,
+                         uint8_t support,
+                         runtime_candidate_t *out) {
+    if (!text || !out) return -1;
+    size_t len = strnlen(text, RUNTIME_CHOICE_MAX_TEXT + 1);
+    if (len == 0 || len > RUNTIME_CHOICE_MAX_TEXT) return -1;
+    if (support > RTC_SUPPORT_OOD) return -1;
+    memset(out, 0, sizeof *out);
+    out->text = text;
+    out->sem_code = sem_code;
+    out->sem_score = sem_score;
+    out->support = support;
+    if (support != RTC_SUPPORT_UNKNOWN) out->factor_flags |= RTC_FACTOR_SUPPORT;
+    out->polarity = (int8_t)rtc_text_polarity(text);
+    if (out->polarity != RTC_POLARITY_NONE) out->factor_flags |= RTC_FACTOR_POLARITY;
+    out->color = rtc_text_color(text);
+    if (out->color != RTC_COLOR_NONE) out->factor_flags |= RTC_FACTOR_COLOR;
+    out->composition = rtc_text_composition(text);
+    if (out->composition) out->factor_flags |= RTC_FACTOR_COMPOSITION;
+    out->location_id = rtc_text_location(text);
+    if (out->location_id != RTC_LOCATION_NONE) out->factor_flags |= RTC_FACTOR_LOCATION;
+    return rtc_validate_candidate(out) ? 0 : -1;
 }
 
 const char *r_runtime_reason_name(runtime_choice_reason_t reason) {

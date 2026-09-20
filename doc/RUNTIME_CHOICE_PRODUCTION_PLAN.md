@@ -153,6 +153,12 @@ it validates candidates, ranks by code score only, ignores `sem_score`, and
 resolves exact ties to the lowest original candidate index. Query-code production
 and host/device parity are not done.
 
+`r_runtime_make_query()` is the deterministic text-to-query-record bridge for
+explicit factors. It derives bounded polarity, color, composition, location, and
+support fields from text while requiring the caller to supply the semantic code;
+learned code generation remains outside production until host/device parity is
+designed.
+
 Red-team iteration 2026-09-20: one-candidate code selection no longer exposes a
 sentinel runner-up; `second == score` and `margin == 0` when there is no
 runner-up.
