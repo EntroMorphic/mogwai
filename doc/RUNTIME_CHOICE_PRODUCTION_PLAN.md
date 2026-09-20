@@ -92,6 +92,11 @@ score, named factor bits, explicit polarity, color, composition, location id,
 and support state. Unknown factor bits or out-of-range factor values are
 malformed input and fail closed.
 
+Red-team iteration 2026-09-20: factor flags and factor values must now agree
+exactly. A value without its flag, or a flag with the neutral value, is malformed
+input. This prevents production callers from hiding policy state in fields the
+scorer might not be configured to honor.
+
 Red-team iteration 2026-09-20: empty query/candidate text is malformed,
 overlong query text now reports `RTC_REASON_MALFORMED_QUERY` instead of a
 candidate failure, nonzero `n_cands` with `NULL` candidates rejects, and maximum

@@ -29,6 +29,12 @@ int main(void) {
     runtime_candidate_t bad_color[1] = {{"make coffee", 0, 0, RTC_FACTOR_COLOR, 0, 99, 0, 0, 0}};
     runtime_candidate_t bad_comp[1] = {{"make coffee", 0, 0, RTC_FACTOR_COMPOSITION, 0, 0, 0x80, 0, 0}};
     runtime_candidate_t bad_support[1] = {{"make coffee", 0, 0, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, 99}};
+    runtime_candidate_t hidden_pol[1] = {{"make coffee", 0, 0, 0, 1, 0, 0, 0, 0}};
+    runtime_candidate_t empty_pol[1] = {{"make coffee", 0, 0, RTC_FACTOR_POLARITY, 0, 0, 0, 0, 0}};
+    runtime_candidate_t hidden_color[1] = {{"make coffee", 0, 0, 0, 0, RTC_COLOR_RED, 0, 0, 0}};
+    runtime_candidate_t hidden_comp[1] = {{"make coffee", 0, 0, 0, 0, 0, RTC_COMP_LIGHTING, 0, 0}};
+    runtime_candidate_t hidden_loc[1] = {{"make coffee", 0, 0, 0, 0, 0, 0, 7, 0}};
+    runtime_candidate_t hidden_support[1] = {{"make coffee", 0, 0, 0, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED}};
     runtime_candidate_t many[RUNTIME_CHOICE_MAX_CANDIDATES + 1];
     char too_long[RUNTIME_CHOICE_MAX_TEXT + 2];
 
@@ -53,6 +59,12 @@ int main(void) {
     chk("bad color rejected", r_choose_runtime(&r, "x", bad_color, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
     chk("bad composition rejected", r_choose_runtime(&r, "x", bad_comp, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
     chk("bad support rejected", r_choose_runtime(&r, "x", bad_support, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("hidden polarity rejected", r_choose_runtime(&r, "x", hidden_pol, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("empty polarity flag rejected", r_choose_runtime(&r, "x", empty_pol, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("hidden color rejected", r_choose_runtime(&r, "x", hidden_color, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("hidden composition rejected", r_choose_runtime(&r, "x", hidden_comp, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("hidden location rejected", r_choose_runtime(&r, "x", hidden_loc, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("hidden support rejected", r_choose_runtime(&r, "x", hidden_support, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
     chk("empty query rejected", r_choose_runtime(&r, "", one, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_QUERY && out.winner == -1);
     chk("overlong query rejected", r_choose_runtime(&r, too_long, one, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_QUERY && out.winner == -1);
     chk("overlong candidate rejected", r_choose_runtime(&r, "x", &(runtime_candidate_t){too_long, 0, 0, 0, 0, 0, 0, 0, 0}, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
