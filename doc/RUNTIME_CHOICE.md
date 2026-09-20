@@ -166,19 +166,25 @@ goes through a separate blind holdout mode:
 The holdout reports attribution so perfect accuracy cannot hide rule dependence:
 
 ```text
-attribution learned_accept=1 learned_reject=0 topology_rescue=0 operator_factor=7 domain_reject=8 hard_ood_veto=0 residual_rescue=1 wrong=0
+attribution learned_accept=2 learned_reject=1 topology_rescue=0 operator_factor=7 domain_reject=10 hard_ood_veto=0 residual_rescue=0 wrong=0
 ```
 
-On the current 17-case blind holdout, residual reaches `17/17`, while
-polarity-aware semhash direct and semhash neighborhood reach `16/17`, with `8/9`
-learned in-domain coverage and `8/8` OOD rejection. The OOD successes are now
-attributed to `domain_reject`, not the legacy hard veto bucket. The holdout exposed two real
-gaps before pinning: `avoid increasing ...` was not recognized as an upward
-brightness axis because `increasing` was missing from the factorized polarity
-vocabulary, and `activate the hallway lamps` still needs residual rescue rather
-than learned support. Metaphorical OOD cases such as `brighten my day`,
-`increase the account balance`, and `dim the appetite` are counted as explicit
-domain rejects, not learned rejects.
+On the current 20-case blind holdout, residual, polarity-aware semhash direct,
+and polarity-aware semhash neighborhood all reach `20/20`, with `9/9` learned
+in-domain coverage and zero wrong actuation. The OOD successes remain split by
+cause: near-class and metaphorical lighting collisions are attributed to
+`domain_reject`, not the legacy hard veto bucket, while `write a grocery list`
+is the first pinned `learned_reject`. The holdout exposed three real gaps before
+pinning: `avoid increasing ...` was not recognized as an upward brightness axis
+because `increasing` was missing from the factorized polarity vocabulary,
+`activate the hallway lamps` needed compositional support for `activate -> ON`,
+`lamps -> lighting`, and target/location compatibility, and learned abstention
+needed a support/knownness gate separate from winner margin. The red-team probes
+`activate the porch lamps` and `activate the hallway speaker` pin that the
+activation factor cannot leak across unsupported locations or unsupported
+objects. Metaphorical OOD cases such as `brighten my day`, `increase the account
+balance`, and `dim the appetite` are still counted as explicit domain rejects,
+not learned rejects.
 
 For atomic failure analysis:
 
