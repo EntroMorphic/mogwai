@@ -90,5 +90,10 @@ int r_runtime_code_score(uint64_t query_code,
                          uint64_t candidate_code,
                          int bits,
                          int32_t *score_out);
+int r_runtime_choose_code(uint64_t query_code,
+                          int bits,
+                          const runtime_candidate_t *cands,
+                          int n_cands,
+                          runtime_choice_t *out);
 
 #endif

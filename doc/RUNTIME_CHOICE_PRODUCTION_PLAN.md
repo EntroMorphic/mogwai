@@ -143,7 +143,10 @@ Acceptance gates:
 Status: **started**. `r_runtime_code_score()` is the production-safe semantic-code
 comparison primitive: integer-only, bounded to `1..64` bits, no allocation, no
 candidate self-fit term, and tested at 1-bit, masked-prefix, half-mismatch, and
-64-bit boundaries. Query-code production and host/device parity are not done.
+64-bit boundaries. `r_runtime_choose_code()` is the precomputed-code selector:
+it validates candidates, ranks by code score only, ignores `sem_score`, and
+resolves exact ties to the lowest original candidate index. Query-code production
+and host/device parity are not done.
 
 Deliverable: integer-only semhash scoring that can run in the firmware build or
 be proven equivalent to a precomputed candidate-code path.

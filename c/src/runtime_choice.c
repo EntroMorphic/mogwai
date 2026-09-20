@@ -68,6 +68,35 @@ int r_runtime_code_score(uint64_t query_code,
     return 0;
 }
 
+int r_runtime_choose_code(uint64_t query_code,
+                          int bits,
+                          const runtime_candidate_t *cands,
+                          int n_cands,
+                          runtime_choice_t *out) {
+    if (!out) return -1;
+    rtc_none(out, RTC_REASON_BAD_ARGUMENT);
+    if (bits < 1 || bits > 64 || n_cands < 0) return -1;
+    if (n_cands == 0) { rtc_none(out, RTC_REASON_NONE_NO_CANDIDATES); return 0; }
+    if (!cands) return -1;
+    if (n_cands > RUNTIME_CHOICE_MAX_CANDIDATES) { rtc_none(out, RTC_REASON_TOO_MANY_CANDIDATES); return -1; }
+
+    int winner = -1;
+    int32_t best = -257, second = -257;
+    for (int i = 0; i < n_cands; i++) {
+        if (!rtc_validate_candidate(&cands[i])) { rtc_none(out, RTC_REASON_MALFORMED_CANDIDATE); return -1; }
+        int32_t s;
+        if (r_runtime_code_score(query_code, cands[i].sem_code, bits, &s) != 0) return -1;
+        if (s > best) { second = best; best = s; winner = i; }
+        else if (s > second) second = s;
+    }
+    out->winner = winner;
+    out->score = best;
+    out->second = second;
+    out->margin = best - second;
+    out->reason = RTC_REASON_OK;
+    return 0;
+}
+
 size_t r_runtime_candidates_size(int n_cands) {
     if (n_cands < 0 || n_cands > RUNTIME_CHOICE_MAX_CANDIDATES) return 0;
     return 8 + (size_t)n_cands * RTC_CAND_RECORD_BYTES;

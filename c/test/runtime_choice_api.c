@@ -40,6 +40,7 @@ int main(void) {
     runtime_candidate_t dup[2] = {{"make coffee", 1, 2, RTC_FACTOR_POLARITY, 1, 0, 0, 0, 0}, {"make coffee", 1, 2, RTC_FACTOR_POLARITY, 1, 0, 0, 0, 0}};
     runtime_candidate_t perm_a[2] = {{"make coffee", 1, 2, RTC_FACTOR_POLARITY, 1, 0, 0, 0, 0}, {"clean the flat", 3, 4, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED}};
     runtime_candidate_t perm_b[2] = {{"clean the flat", 3, 4, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_SUPPORTED}, {"make coffee", 1, 2, RTC_FACTOR_POLARITY, 1, 0, 0, 0, 0}};
+    runtime_candidate_t code_cands[3] = {{"a", 0x0, 1000, 0, 0, 0, 0, 0, 0}, {"b", 0x1, -1000, 0, 0, 0, 0, 0, 0}, {"c", 0x3, 1000, 0, 0, 0, 0, 0, 0}};
     runtime_candidate_t empty_text[1] = {{"", 0, 0, 0, 0, 0, 0, 0, 0}};
     runtime_candidate_t bad_flags[1] = {{"make coffee", 0, 0, 0x80000000u, 0, 0, 0, 0, 0}};
     runtime_candidate_t bad_pol[1] = {{"make coffee", 0, 0, RTC_FACTOR_POLARITY, 2, 0, 0, 0, 0}};
@@ -137,6 +138,12 @@ int main(void) {
     chk("code score half mismatch", r_runtime_code_score(0x0, 0x3, 4, &score) == 0 && score == 0);
     chk("code score masks high bits", r_runtime_code_score(0, 0xfffffffffffffff0ull, 4, &score) == 0 && score == 256);
     chk("code score supports 64 bits", r_runtime_code_score(0, ~0ull, 64, &score) == 0 && score == -256);
+    chk("code chooser rejects bad args", r_runtime_choose_code(0, 0, code_cands, 3, &out) == -1 && out.reason == RTC_REASON_BAD_ARGUMENT && r_runtime_choose_code(0, 4, NULL, 1, &out) == -1 && out.reason == RTC_REASON_BAD_ARGUMENT);
+    chk("code chooser empty abstains", r_runtime_choose_code(0, 4, NULL, 0, &out) == 0 && out.reason == RTC_REASON_NONE_NO_CANDIDATES && out.winner == -1);
+    chk("code chooser picks nearest code", r_runtime_choose_code(0, 2, code_cands, 3, &out) == 0 && out.reason == RTC_REASON_OK && out.winner == 0 && out.score == 256 && out.second == 0 && out.margin == 256);
+    chk("code chooser ignores sem_score", r_runtime_choose_code(1, 2, code_cands, 3, &out) == 0 && out.winner == 1 && out.score == 256);
+    chk("code chooser resolves ties by lowest index", r_runtime_choose_code(2, 2, code_cands, 3, &out) == 0 && out.winner == 0 && out.score == 0 && out.margin == 0);
+    chk("code chooser rejects malformed candidate", r_runtime_choose_code(0, 4, hidden_pol, 1, &out) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;
