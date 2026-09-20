@@ -12,6 +12,16 @@ cd "$(dirname "$0")/.."
 SNAP=$(mktemp -d)
 trap 'rm -rf "$SNAP"' EXIT
 
+# Mutations were written on macOS with BSD `sed -i ''`. Keep those calls working
+# on GNU sed too, so mutation coverage is not tied to one developer machine.
+sed(){
+  if [ "${1:-}" = "-i" ] && [ "${2+x}" ] && [ "$2" = "" ] && command sed --version >/dev/null 2>&1; then
+    shift 2; command sed -i "$@"
+  else
+    command sed "$@"
+  fi
+}
+
 save(){ mkdir -p "$SNAP/$(dirname "$1")"; cp -R "$1" "$SNAP/$1" 2>/dev/null; }
 restore(){ rm -rf "$1"; cp -R "$SNAP/$1" "$1" 2>/dev/null; }
 

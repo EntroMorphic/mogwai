@@ -29,14 +29,19 @@ static int js(const char*l,const char*k,char*o,int cap){
 static int isiot(const char*l){return !strncmp(l,"iot_",4);}
 #define HN 65536
 static char *HS[HN];
+static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
+static FILE *xfopen(const char *path,const char *mode){ FILE *f=fopen(path,mode); if(!f){perror(path);exit(1);} return f; }
+static void *xcalloc(size_t n,size_t sz){ void *p=calloc(n,sz); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
+static void *xmalloc(size_t sz){ void *p=malloc(sz); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
+static void xwrite(const void *p,size_t sz,size_t n,FILE *f,const char *what){ if(fwrite(p,sz,n,f)!=n){fprintf(stderr,"write failed: %s\n",what);exit(1);} }
 static void hs_add(const char*s){ char b[512]; r_norm(s,b,sizeof b);
     uint32_t h=r_fnv(b,(int)strlen(b))%HN;
-    while(HS[h]){ if(!strcmp(HS[h],b))return; h=(h+1)%HN; } HS[h]=strdup(b); }
+    while(HS[h]){ if(!strcmp(HS[h],b))return; h=(h+1)%HN; } HS[h]=xstrdup(b); }
 static int hs_has(const char*s){ char b[512]; r_norm(s,b,sizeof b);
     uint32_t h=r_fnv(b,(int)strlen(b))%HN;
     while(HS[h]){ if(!strcmp(HS[h],b))return 1; h=(h+1)%HN; } return 0; }
-static void push(char**ta,char la[][RNAMELEN],int*n,const char*t,const char*l){
-    ta[*n]=strdup(t); if(la) snprintf(la[*n],RNAMELEN,"%s",l); (*n)++; }
+static void push(char**ta,char la[][RNAMELEN],int*n,int cap,const char*t,const char*l){
+    if(*n>=cap){fprintf(stderr,"too many utterances (max %d)\n",cap);exit(1);} ta[*n]=xstrdup(t); if(la) snprintf(la[*n],RNAMELEN,"%s",l); (*n)++; }
 
 int main(int argc,char**argv){
     if(argc<6){fprintf(stderr,"usage: mkblob train val test nlu.csv out.bin [--prune-dup] [--prune-cnn] [--prune-neg=K] [--prune-negtop=N] [--prune-negbound=N]\n");return 1;}
@@ -44,24 +49,24 @@ int main(int argc,char**argv){
         else if(!prune_parse(argv[i],&PRUNE))
         { fprintf(stderr,"  unknown flag %s\n",argv[i]); return 1; }
     char line[8192],t[512],l[RNAMELEN]; FILE*f;
-    f=fopen(argv[3],"r");
+    f=xfopen(argv[3],"r");
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l))
-        { push(T_t,NULL,&T_n,t,NULL); hs_add(t); }
+        { push(T_t,NULL,&T_n,4000,t,NULL); hs_add(t); }
     fclose(f);
-    f=fopen(argv[1],"r"); int ti=0,tn=0;
+    f=xfopen(argv[1],"r"); int ti=0,tn=0;
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)){
         int io=isiot(l);
         if(hs_has(t)) continue;
-        if(io&&(ti++%4)==0){ push(V_t,V_l,&V_n,t,l); hs_add(t); continue; }
-        if(!io&&(tn++%8)==0){ push(V_t,V_l,&V_n,t,"none"); hs_add(t); continue; }
-        push(U_t,U_l,&U_n,t,io?l:"none"); hs_add(t);
+        if(io&&(ti++%4)==0){ push(V_t,V_l,&V_n,3000,t,l); hs_add(t); continue; }
+        if(!io&&(tn++%8)==0){ push(V_t,V_l,&V_n,3000,t,"none"); hs_add(t); continue; }
+        push(U_t,U_l,&U_n,MAXU,t,io?l:"none"); hs_add(t);
     }
     fclose(f);
-    f=fopen(argv[2],"r");
+    f=xfopen(argv[2],"r");
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l))
-        if(isiot(l)&&!hs_has(t)){ push(U_t,U_l,&U_n,t,l); hs_add(t); }
+        if(isiot(l)&&!hs_has(t)){ push(U_t,U_l,&U_n,MAXU,t,l); hs_add(t); }
     fclose(f);
-    f=fopen(argv[4],"r"); int added=0;
+    f=xfopen(argv[4],"r"); int added=0;
     while(fgets(line,sizeof line,f)){
         char*fl[12]={0}; int nf=0,inq=0; char*p=line; fl[nf++]=p;
         for(;*p&&nf<12;p++){ if(*p=='"')inq=!inq; else if(*p==';'&&!inq){*p=0;fl[nf++]=p+1;} }
@@ -71,7 +76,7 @@ int main(int argc,char**argv){
             if(L>=2&&s[0]=='"'&&s[L-1]=='"'){s[L-1]=0;fl[i]=s+1;} }
         if(strcmp(fl[2],"iot")||hs_has(fl[9]))continue;
         char lb[RNAMELEN]; snprintf(lb,sizeof lb,"iot_%s",fl[3]);
-        push(U_t,U_l,&U_n,fl[9],lb); hs_add(fl[9]); added++;
+        push(U_t,U_l,&U_n,MAXU,fl[9],lb); hs_add(fl[9]); added++;
     }
     fclose(f);
     inv_disjoint("index vs DEV",  U_t,U_n,V_t,V_n);
@@ -84,7 +89,7 @@ int main(int argc,char**argv){
     for(int i=0;i<U_n;i++){ r_counts(U_t[i],acc,&tot);
         for(int d=0;d<RD;d++) sum[d]+=((int64_t)acc[d]*RSCALE)/tot; }
     for(int d=0;d<RD;d++) R.centre[d]=(int32_t)(sum[d]/U_n);
-    R.label=calloc(U_n,1); TI=calloc(U_n,sizeof(tvec));
+    R.label=xcalloc((size_t)U_n,1); TI=xcalloc((size_t)U_n,sizeof(tvec));
     for(int i=0;i<U_n;i++){ t_encode(&R,U_t[i],&TI[i]);
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){R.label[i]=c;break;} }
     /* same prune the harness measured — one implementation, see prune.h */
@@ -111,11 +116,11 @@ int main(int argc,char**argv){
                            "  and pass the reported th=N as --threshold=N\n"); return 1; }
     }
     /* host reference: first NREF dev queries, with the answer this host gives */
-    FILE*o=fopen(argv[5],"wb");
+    FILE*o=xfopen(argv[5],"wb");
     uint32_t hdr[5]={RMAGIC2,RD,(uint32_t)U_n,R.n_class,(uint32_t)R.threshold};
-    fwrite(hdr,4,5,o);
-    fwrite(R.names,RNAMELEN,RMAXCLS,o);
-    fwrite(R.centre,sizeof(int32_t),RD,o);
+    xwrite(hdr,4,5,o,"header");
+    xwrite(R.names,RNAMELEN,RMAXCLS,o,"class names");
+    xwrite(R.centre,sizeof(int32_t),RD,o,"centre");
     /* v2 vector section.  Sections are ordered by DESCENDING alignment need so
        that every one lands aligned for ANY n:
          masks at 20+512+1024 = 1556 (4-aligned, constant)
@@ -126,7 +131,7 @@ int main(int argc,char**argv){
        offset 1556+3n — 4-aligned only when n is a multiple of 4.  It happened
        to be (n=3840).  On Xtensa an unaligned uint32 load faults, so that was
        a latent crash waiting for an index size we had not tried. */
-    { uint8_t *EP=malloc((size_t)U_n*RD); uint16_t *EO=malloc(((size_t)U_n+1)*2);
+    { uint8_t *EP=xmalloc((size_t)U_n*RD); uint16_t *EO=xmalloc(((size_t)U_n+1)*2);
       uint32_t ne=0;
       for(int i=0;i<U_n;i++){
           EO[i]=(uint16_t)ne;
@@ -139,13 +144,13 @@ int main(int argc,char**argv){
               fclose(o); remove(argv[5]); free(EP); free(EO); return 1; }
       }
       EO[U_n]=(uint16_t)ne;
-      for(int i=0;i<U_n;i++) fwrite(TI[i].m,4,RWORDS,o);       /* masks  */
-      fwrite(EO,2,(size_t)U_n+1,o);                            /* eoff   */
-      { uint16_t *act=malloc((size_t)U_n*2);
+      for(int i=0;i<U_n;i++) xwrite(TI[i].m,4,RWORDS,o,"masks"); /* masks */
+      xwrite(EO,2,(size_t)U_n+1,o,"exception offsets");          /* eoff  */
+      { uint16_t *act=xmalloc((size_t)U_n*2);
         for(int i=0;i<U_n;i++) act[i]=(uint16_t)t_active(&TI[i]);
-        fwrite(act,2,U_n,o); free(act); }                      /* act    */
-      fwrite(R.label,1,U_n,o);                                 /* label  */
-      fwrite(EP,1,ne,o);                                       /* epos   */
+        xwrite(act,2,U_n,o,"active counts"); free(act); }      /* act    */
+      xwrite(R.label,1,U_n,o,"labels");                       /* label  */
+      xwrite(EP,1,ne,o,"exception positions");                /* epos   */
       fprintf(stderr,"  v2 vectors: %d masks x %d B + %d offsets + %u exceptions"
               " = %zu B (v1 planes would be %zu, %.1f%% saved)\n",
               U_n,RMASKB,U_n+1,ne,
@@ -153,18 +158,20 @@ int main(int argc,char**argv){
               100.0*(1.0-((double)((size_t)U_n*RMASKB+((size_t)U_n+1)*2+ne))
                           /(double)((size_t)U_n*sizeof(tvec))));
       free(EP); free(EO); }
-    uint32_t nref=(V_n<NREF)?V_n:NREF; fwrite(&nref,4,1,o);
+    uint32_t nref=(V_n<NREF)?V_n:NREF; xwrite(&nref,4,1,o,"reference count");
     for(uint32_t i=0;i<nref;i++){
         tvec q; t_encode(&R,V_t[i],&q); int aa=t_active(&q);
         int best=-(1<<28); uint32_t bi=0;
         for(int k=0;k<U_n;k++){int s=t_score(&q,&TI[k],aa); if(s>best){best=s;bi=k;}}
         int cls = (best>R.threshold) ? r_apply_polarity(&R,R.label[bi],V_t[i]) : -1;
         uint8_t len=(uint8_t)strlen(V_t[i]);
-        fwrite(&len,1,1,o); fwrite(V_t[i],1,len,o);
+        xwrite(&len,1,1,o,"reference length"); xwrite(V_t[i],1,len,o,"reference text");
         int32_t sc=best; int8_t c8=(int8_t)cls;
-        fwrite(&sc,4,1,o); fwrite(&c8,1,1,o);
+        xwrite(&sc,4,1,o,"reference score"); xwrite(&c8,1,1,o,"reference class");
     }
-    long bytes=ftell(o); fclose(o);
+    long bytes=ftell(o);
+    if(bytes<0){perror("ftell"); fclose(o); remove(argv[5]); return 1;}
+    if(fclose(o)){perror(argv[5]); remove(argv[5]); return 1;}
     fprintf(stderr,"  index %d (+NLU %d)  classes %u  refs %u\n",U_n,added,R.n_class,nref);
     fprintf(stderr,"  wrote %s: %ld bytes (%.0f KB)\n",argv[5],bytes,bytes/1024.0);
     return 0;

@@ -111,7 +111,7 @@ flashing without installing anything.
     make repl                                    # interactively
 
 Build is about a second, a full evaluation about a second, and the whole
-91-check regression suite runs in 25 s - most of which is an exhaustive 2^32
+92-check regression suite runs in 25 s - most of which is an exhaustive 2^32
 popcount proof. Full path in [doc/QUICKSTART.md](doc/QUICKSTART.md).
 
 ```
@@ -406,7 +406,7 @@ assumptions, and what would falsify them, are in
     make compare        # dev/validation evaluation — safe to run as often as you like
     make testset        # HELD-OUT TEST. Burns one budget unit. Deliberately not `make test`.
     make tools          # build every tool and test — run after any signature change
-    make regress        # full host regression (91 checks) — run after any structural change
+    make regress        # full host regression (92 checks) — run after any structural change
 
 Then the device:
 
@@ -431,7 +431,7 @@ The layout, and what parity does *not* cover:
     README.md          you are here
     CHANGELOG.md       what shipped, and what it does not do
     Makefile           every entry point: fetch, demo, route, ship, regress, testset
-    c/src/             the entire shipping system — 12 tools + 8 shared units
+    c/src/             the shipping system and host diagnostics
     c/test/            an exhaustive 2^32 popcount proof, a blob-format validator,
                        a firmware-parser guard, and a release-image integrity check
     esp32_router/      five firmwares from one component: PRODUCT (UART in, GPIO
@@ -442,7 +442,7 @@ The layout, and what parity does *not* cover:
     journal/           Lincoln Manifold Method artifacts, 10 cycles
     flash/             the browser flasher, published to Pages by CI on every tag
     scripts/           fetch.sh (curl only, pinned revisions, verifies checksums),
-                       regress.sh (91 checks), mutate.sh
+                       regress.sh (92 checks), mutate.sh
     results/           every run appends a stamped row; TEST_BUDGET is the audit log,
                        RELEASE_VERIFIED.tsv records releases flashed to real hardware
     provenance/        the only off-disk copy of three never-pushed upstream commits
@@ -470,10 +470,10 @@ get something much worse — which is the whole reason for the name.
 The held-out split is a budgeted resource: every read is logged in
 `results/TEST_BUDGET`, and configurations are pre-registered with falsifiers
 before it is touched. Every run is stamped with the git SHA and the clean/dirty
-state of the tree. Run `make regress` after any structural change: 91 checks,
+state of the tree. Run `make regress` after any structural change: 92 checks,
 25 seconds.
 
-CI runs the same 91 checks on Linux/GCC and builds the VALIDATION, PRODUCT and
+CI runs the same 92 checks on Linux/GCC and builds the VALIDATION, PRODUCT and
 networked firmwares from `sdkconfig.defaults`, asserting the blob and the
 firmware agree on `RD`. That job exists because the code had never left
 macOS/clang, and three portability bugs were found the first time it did.

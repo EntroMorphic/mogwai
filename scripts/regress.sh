@@ -97,6 +97,10 @@ chk "blob verifier (parity + index integrity)" "$?" "0"
 c/bin/mkblob $D /tmp/_regress.bin >/dev/null 2>&1
 cmp -s /tmp/_regress.bin esp32_router/main/router.bin; BLOB_RC=$?
 rm -f /tmp/_regress.bin
+BAD_MKBLOB=0
+c/bin/mkblob /no/such/train data/validation.json data/test.json data/nlu_home.csv /tmp/_bad.bin >/tmp/_bad_mkblob.out 2>&1 || BAD_MKBLOB=$?
+rm -f /tmp/_bad.bin /tmp/_bad_mkblob.out
+chk "mkblob rejects missing inputs without crashing" "$BAD_MKBLOB" "1"
 # Dropping these from esp32_router/main/CMakeLists.txt fails ASYMMETRICALLY:
 # main.c stops compiling (TPOPCNT undeclared) but product.c builds clean and
 # silently runs `#if TPOPCNT == 1` as false - shipping the SWAR path instead of
