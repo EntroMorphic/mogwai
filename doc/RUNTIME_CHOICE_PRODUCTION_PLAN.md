@@ -145,13 +145,15 @@ Acceptance gates:
 
 ### P0.3 Port Semhash to the Production Constraints
 
-Status: **started**. `r_runtime_code_score()` is the production-safe semantic-code
+Status: **complete for frozen production parity**. `r_runtime_code_score()` is the production-safe semantic-code
 comparison primitive: integer-only, bounded to `1..64` bits, no allocation, no
 candidate self-fit term, and tested at 1-bit, masked-prefix, half-mismatch, and
 64-bit boundaries. `r_runtime_choose_code()` is the precomputed-code selector:
 it validates candidates, ranks by code score only, ignores `sem_score`, and
 resolves exact ties to the lowest original candidate index. Query-code production
-and host/device parity are not done.
+is proven in `runtime_choice_eval --production-parity` by feeding the production
+flat scorer the frozen evaluator's learned semcodes. Device parity is still a
+firmware gate under P0.7.
 
 `r_runtime_make_query()` is the deterministic text-to-query-record bridge for
 explicit factors. It derives bounded polarity, color, composition, location, and
@@ -178,10 +180,11 @@ Acceptance gates:
 
 ### P0.4 Implement the Factor Path as Auditable Runtime Code
 
-Status: **started**. `r_runtime_factor_score()` validates explicit query and
+Status: **complete for frozen production parity**. `r_runtime_factor_score()` validates explicit query and
 candidate factor records, returns an independent refusal reason for support,
 polarity, color, composition, or location, and scores only matched factors. It is
-not yet wired into `r_choose_runtime` or combined with code scoring.
+combined with code scoring in the flat scorer and proven against the frozen
+runtime-choice cases by `runtime_choice_eval --production-parity`.
 
 Red-team iteration 2026-09-20: factor scoring now pins two boundary semantics:
 a query with no required factors accepts with score `0`, and a query whose own
@@ -207,12 +210,19 @@ Acceptance gates:
 
 ### P0.5 Promote the Flat Direct Scorer Before Topology
 
-Status: **started**. `r_runtime_choose_flat()` combines the production semantic
+Status: **complete for host promotion**. `r_runtime_choose_flat()` combines the production semantic
 code score with `r_runtime_factor_score()` over explicit query/candidate records.
 It skips factor-rejected candidates, surfaces the first factor refusal when all
 candidates reject, ignores `sem_score`, preserves lowest-index tie resolution,
 and is wired through `r_choose_runtime_precomputed()`. Text-based
-`r_choose_runtime` remains fail-closed until query encoding exists.
+`r_choose_runtime` remains fail-closed until learned text-to-semcode generation
+is productionized behind the query encoder.
+
+Red-team iteration 2026-09-20: `runtime_choice_eval --production-parity` maps
+the frozen evaluator's 69 cases (base + Holdouts A/B/C) into explicit production
+query/candidate records and calls `r_choose_runtime_precomputed()`. Result:
+`RUNTIME_CHOICE_PRODUCTION_PARITY checks=4/4 score=100/100`, with zero wrong
+actuation and zero misses across all four frozen sets.
 
 Deliverable: a flat candidate scan using the production semhash+factor scorer.
 
@@ -226,12 +236,15 @@ Acceptance gates:
 
 ### P0.6 Expand the Production-Promotion Eval Set
 
-Status: **started**. `c/test/runtime_choice_promotion.c` is the first
+Status: **complete for current host promotion**. `c/test/runtime_choice_promotion.c` is the first
 production-promotion suite over explicit query/candidate records. It pins
 expected winners and expected refusal attribution for semantic aliases, polarity,
 color, location, support/OOD, composition, tie handling, empty and malformed
 candidate sets, candidate-order permutations, unsupported objects/locations,
 metaphorical OOD, and near-collision distractors.
+
+The broader frozen proof is pinned in `runtime_choice_eval --production-parity`,
+which covers all 69 evaluator/holdout cases through the production flat scorer.
 
 Deliverable: a larger held-out runtime-choice promotion suite, separate from the
 already-frozen research holdouts.

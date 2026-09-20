@@ -7,6 +7,7 @@
 #include "ternary.h"
 #include "prune.h"
 #include "invariants.h"
+#include "runtime_choice.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -450,6 +451,59 @@ static int code_score(uint64_t a,uint64_t b){
 }
 static sh_t sem_encode(const char *text){ int16_t acc[RD]; int32_t tot; (void)tot; r_counts(text,acc,&tot); int best=-(1<<28),bi=0; for(uint32_t c=0;c<R.n_class;c++){int s=dot_cls((int)c,acc); if(s>best){best=s;bi=(int)c;}} sh_t out={class_code(bi),bi,best}; return out; }
 static int sem_sim(sh_t q,sh_t c){ return code_score(q.code,c.code)+(c.score*SEM_FIT_NUM)/SEM_FIT_DEN; }
+
+static uint8_t prod_location_id(const char *text){
+    char loc[32];
+    static const char *names[]={"hallway","bedroom","kitchen","lounge","atrium","workshop","nursery","observatory","living room","dining room"};
+    if(!extract_light_location(text,loc,sizeof loc)) return RTC_LOCATION_NONE;
+    for(uint8_t i=0;i<(uint8_t)(sizeof names/sizeof names[0]);i++) if(!strcmp(loc,names[i])) return (uint8_t)(i+1);
+    return 255u;
+}
+
+static int prod_lighting_like(const char *text){
+    return lighting_target(text)||has_word(text,"brightness")||has_word(text,"brighter")||has_word(text,"brighten")||has_word(text,"bright")||has_word(text,"dim")||has_word(text,"dimmer")||has_word(text,"dark")||has_word(text,"darker")||has_word(text,"luminous")||has_word(text,"lighting");
+}
+
+static void prod_record(const char *text,int is_query,runtime_candidate_t *out){
+    sh_t s=sem_encode(text); memset(out,0,sizeof *out);
+    out->text=text; out->sem_code=s.code; out->sem_score=s.score;
+    int pol=polarity(text); if(pol){ out->factor_flags|=RTC_FACTOR_POLARITY; out->polarity=(int8_t)pol; }
+    int col=color_value(text); if(col){ out->factor_flags|=RTC_FACTOR_COLOR; out->color=(uint8_t)col; }
+    if(prod_lighting_like(text)){ out->factor_flags|=RTC_FACTOR_COMPOSITION; out->composition=RTC_COMP_LIGHTING; if(pol>0&&on_operator(text)) out->composition|=RTC_COMP_ACTIVATION; }
+    out->location_id=prod_location_id(text); if(out->location_id){ out->factor_flags|=RTC_FACTOR_LOCATION; }
+    int qnone=0;
+    if(is_query){
+        near_t qn[K]; topk(text,qn,K,NULL,NULL); int q_known=0; for(int i=0;i<K;i++) q_known+=qn[i].score; q_known/=K;
+        qnone=learned_none_support(q_known,!strcmp(R.names[s.pred],"none"),hard_ood(text));
+    }
+    out->factor_flags|=RTC_FACTOR_SUPPORT;
+    out->support=(unsupported_target(text)||qnone) ? RTC_SUPPORT_OOD : RTC_SUPPORT_SUPPORTED;
+}
+
+static int prod_eval_set(const testcase_t *cases,int n,const char *label,int print_cases){
+    int ok=0, wrong=0, miss=0;
+    for(int i=0;i<n;i++){
+        runtime_candidate_t q,c[MAXC]; runtime_choice_t out; runtime_factor_reason_t fr;
+        prod_record(cases[i].query,1,&q);
+        for(int j=0;j<cases[i].nc;j++) prod_record(cases[i].choice[j],0,&c[j]);
+        int rc=r_choose_runtime_precomputed(&q,64,c,cases[i].nc,&out,&fr);
+        int good=rc==0 && (cases[i].correct<0 ? out.winner<0 : out.winner==cases[i].correct);
+        if(good) ok++; else if(out.winner<0) miss++; else wrong++;
+        if(print_cases||!good) printf("%s case=%d correct=%d winner=%d reason=%s factor=%d query=\"%s\"\n",label,i,cases[i].correct,out.winner,r_runtime_reason_name(out.reason),fr,cases[i].query);
+    }
+    printf("%s production_flat=%d/%d wrong=%d miss=%d\n",label,ok,n,wrong,miss);
+    return ok==n&&wrong==0&&miss==0;
+}
+
+static int production_parity(void){
+    int ok=0,total=0;
+    total++; ok+=prod_eval_set(CASES,(int)(sizeof CASES/sizeof CASES[0]),"frozen",0);
+    total++; ok+=prod_eval_set(HOLDOUT,(int)(sizeof HOLDOUT/sizeof HOLDOUT[0]),"holdout_a",0);
+    total++; ok+=prod_eval_set(HOLDOUT_B,(int)(sizeof HOLDOUT_B/sizeof HOLDOUT_B[0]),"holdout_b",0);
+    total++; ok+=prod_eval_set(HOLDOUT_C,(int)(sizeof HOLDOUT_C/sizeof HOLDOUT_C[0]),"holdout_c",0);
+    printf("RUNTIME_CHOICE_PRODUCTION_PARITY checks=%d/%d score=%d/100\n",ok,total,total?(100*ok)/total:0);
+    return ok==total?0:1;
+}
 
 static decision_t decide(const testcase_t *tc,int variant){
     tvec qv,cv[MAXC]; int qa,ca[MAXC],qh[RMAXCLS],ch[MAXC][RMAXCLS]; near_t qn[K],cn[MAXC][K];
@@ -930,14 +984,14 @@ static int bit_leave_one_out(void){
     return 0;
 }
 
-static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam|--floor|--bit-floor|--bit-forensic|--fit-sweep|--bit-loo]\n"); }
+static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam|--details|--holdout|--holdout-redteam|--holdout-b|--holdout-b-redteam|--holdout-c|--holdout-c-redteam|--floor|--bit-floor|--bit-forensic|--fit-sweep|--bit-loo|--production-parity]\n"); }
 
 int main(int argc,char **argv){
     const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
-    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,floor=0,bit_floor=0,bit_forensic=0,fit=0,bit_loo=0,arg=1;
+    int red=0,details=0,holdout=0,holdout_red=0,holdout_b=0,holdout_b_red=0,holdout_c=0,holdout_c_red=0,floor=0,bit_floor=0,bit_forensic=0,fit=0,bit_loo=0,prod_parity=0,arg=1;
     if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
-    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else if(!strcmp(argv[i],"--floor"))floor=1; else if(!strcmp(argv[i],"--bit-floor"))bit_floor=1; else if(!strcmp(argv[i],"--bit-forensic"))bit_forensic=1; else if(!strcmp(argv[i],"--fit-sweep"))fit=1; else if(!strcmp(argv[i],"--bit-loo"))bit_loo=1; else {usage();return 1;} }
-    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red+floor+bit_floor+bit_forensic+fit+bit_loo>1){usage();return 1;}
+    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else if(!strcmp(argv[i],"--holdout"))holdout=1; else if(!strcmp(argv[i],"--holdout-redteam"))holdout_red=1; else if(!strcmp(argv[i],"--holdout-b"))holdout_b=1; else if(!strcmp(argv[i],"--holdout-b-redteam"))holdout_b_red=1; else if(!strcmp(argv[i],"--holdout-c"))holdout_c=1; else if(!strcmp(argv[i],"--holdout-c-redteam"))holdout_c_red=1; else if(!strcmp(argv[i],"--floor"))floor=1; else if(!strcmp(argv[i],"--bit-floor"))bit_floor=1; else if(!strcmp(argv[i],"--bit-forensic"))bit_forensic=1; else if(!strcmp(argv[i],"--fit-sweep"))fit=1; else if(!strcmp(argv[i],"--bit-loo"))bit_loo=1; else if(!strcmp(argv[i],"--production-parity"))prod_parity=1; else {usage();return 1;} }
+    if(red+details+holdout+holdout_red+holdout_b+holdout_b_red+holdout_c+holdout_c_red+floor+bit_floor+bit_forensic+fit+bit_loo+prod_parity>1){usage();return 1;}
     load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash(); train_seeded_projection();
     if(red)return redteam();
     if(holdout_red)return holdout_redteam();
@@ -948,6 +1002,7 @@ int main(int argc,char **argv){
     if(bit_forensic)return bit_floor_forensic();
     if(fit)return fit_sweep();
     if(bit_loo)return bit_leave_one_out();
+    if(prod_parity)return production_parity();
     if(details){dump_details();return 0;}
     if(holdout_c){
         stats_t st[5]; attr_t attr; int n=eval_holdout_c(st,&attr,1); int in_domain=in_domain_set(HOLDOUT_C,n);
