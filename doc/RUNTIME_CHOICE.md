@@ -225,12 +225,14 @@ Holdout C freezes unseen runtime referent binding:
     c/bin/runtime_choice_eval --holdout-c-redteam
 
 It tests that unseen locations need not be in a room vocabulary: matching query
-and candidate referents are compatible, and conflicting explicit referents reject
-relationally. Current Holdout C is:
+and candidate referents are compatible, conflicting explicit referents reject
+relationally, explicit query referents do not bind to unresolved candidates, and
+multiword referents such as `living room` are treated as one runtime referent.
+Current Holdout C is:
 
 ```text
-semhash_neighborhood accuracy=6/6 learned_coverage=4/4 wrong_act=0/6 residual_rescue=0
-attribution learned_accept=4 learned_reject=0 topology_rescue=0 operator_factor=0 domain_reject=0 location_reject=2 hard_ood_veto=0 residual_rescue=0 wrong=0
+semhash_neighborhood accuracy=9/9 learned_coverage=5/5 wrong_act=0/9 residual_rescue=0
+attribution learned_accept=5 learned_reject=0 topology_rescue=0 operator_factor=0 domain_reject=0 location_reject=4 hard_ood_veto=0 residual_rescue=0 wrong=0
 ```
 
 For atomic failure analysis:

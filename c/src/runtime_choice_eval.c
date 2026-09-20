@@ -170,7 +170,13 @@ static testcase_t HOLDOUT_C[] = {
     {"turn off the observatory lamps", "blind-c,unseen-location,off", 2, 3,
      {"turn the hallway lights off", "make the observatory brighter", "turn the observatory lights off"}},
     {"turn off the observatory lamps", "blind-c,unseen-location,conflict,off", -1, 3,
-     {"turn the hallway lights off", "make the hallway brighter", "dim the hallway lights"}}
+     {"turn the hallway lights off", "make the hallway brighter", "dim the hallway lights"}},
+    {"activate the atrium lamps", "blind-c,unseen-location,unresolved-candidate", -1, 3,
+     {"turn the lights on", "dim the lights", "turn the lights off"}},
+    {"activate the living room lamps", "blind-c,multiword-location,match,operator", 0, 3,
+     {"turn the living room lights on", "dim the living room lights", "turn the hallway lights on"}},
+    {"activate the living room lamps", "blind-c,multiword-location,conflict,operator", -1, 3,
+     {"turn the dining room lights on", "dim the dining room lights", "turn the hallway lights on"}}
 };
 
 static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
@@ -297,7 +303,7 @@ static int on_operator(const char *text){
 }
 
 static int location_stopword(const char *word){
-    return !strcmp(word,"the")||!strcmp(word,"a")||!strcmp(word,"an")||!strcmp(word,"my")||!strcmp(word,"room");
+    return !strcmp(word,"the")||!strcmp(word,"a")||!strcmp(word,"an")||!strcmp(word,"my")||!strcmp(word,"dim")||!strcmp(word,"set")||!strcmp(word,"turn")||!strcmp(word,"make")||!strcmp(word,"lower")||!strcmp(word,"raise")||!strcmp(word,"increase")||!strcmp(word,"decrease")||!strcmp(word,"activate")||!strcmp(word,"brighten")||!strcmp(word,"bright")||!strcmp(word,"brighter")||!strcmp(word,"darken")||!strcmp(word,"dark")||!strcmp(word,"darker")||!strcmp(word,"on")||!strcmp(word,"off");
 }
 
 static int location_cue(const char *word){
@@ -316,8 +322,16 @@ static int extract_light_location(const char *text,char *out,int cap){
         tok[nt][n]=0; nt++;
     }
     for(int i=1;i<nt;i++) if(!strcmp(tok[i],"light")||!strcmp(tok[i],"lights")||!strcmp(tok[i],"lamp")||!strcmp(tok[i],"lamps")||!strcmp(tok[i],"lighting")){
+        if(!strcmp(tok[i-1],"room")&&i>=2&&!location_stopword(tok[i-2])){
+            snprintf(out,(size_t)cap,"%s room",tok[i-2]);
+            return 1;
+        }
         if(location_stopword(tok[i-1])) continue;
         snprintf(out,(size_t)cap,"%s",tok[i-1]);
+        return 1;
+    }
+    for(int i=0;i+3<nt;i++) if(!strcmp(tok[i],"the")&&!location_stopword(tok[i+1])&&!strcmp(tok[i+2],"room")&&location_cue(tok[i+3])){
+        snprintf(out,(size_t)cap,"%s room",tok[i+1]);
         return 1;
     }
     for(int i=0;i+2<nt;i++) if(!strcmp(tok[i],"the")&&!location_stopword(tok[i+1])&&location_cue(tok[i+2])){
@@ -331,6 +345,7 @@ static int location_compatibility(const char *query,const char *choice){
     char q[32],c[32];
     int qh=extract_light_location(query,q,sizeof q), ch=extract_light_location(choice,c,sizeof c);
     if(qh&&ch) return !strcmp(q,c) ? 1 : -1;
+    if(qh&&!ch) return -1;
     return 0;
 }
 
@@ -697,7 +712,7 @@ static int holdout_b_redteam(void){
 static int holdout_c_redteam(void){
     int n=(int)(sizeof HOLDOUT_C/sizeof HOLDOUT_C[0]);
     rt_total=rt_pass=0;
-    rt("holdout C case count pinned",n==6);
+    rt("holdout C case count pinned",n==9);
     for(int i=0;i<n;i++){
         rt("holdout C case has enough choices",HOLDOUT_C[i].nc>=2&&HOLDOUT_C[i].nc<=MAXC);
         rt("holdout C correct index valid or NONE",HOLDOUT_C[i].correct==-1||(HOLDOUT_C[i].correct>=0&&HOLDOUT_C[i].correct<HOLDOUT_C[i].nc));
@@ -708,11 +723,11 @@ static int holdout_c_redteam(void){
     rt("holdout C semhash neighborhood solved",st[3].ok==n&&st[3].wrong==0&&st[3].miss==0);
     rt("holdout C semhash direct solved",st[2].ok==n&&st[2].wrong==0&&st[2].miss==0);
     rt("holdout C residual solved",st[4].ok==n&&st[4].wrong==0&&st[4].miss==0);
-    rt("holdout C learned coverage pinned",st[3].learned_reachable==4&&in_domain==4);
-    rt("holdout C learned accept pinned",attr.learned_accept==4);
+    rt("holdout C learned coverage pinned",st[3].learned_reachable==5&&in_domain==5);
+    rt("holdout C learned accept pinned",attr.learned_accept==5);
     rt("holdout C learned reject absent",attr.learned_reject==0);
     rt("holdout C domain reject absent",attr.domain_reject==0);
-    rt("holdout C location reject pinned",attr.location_reject==2);
+    rt("holdout C location reject pinned",attr.location_reject==4);
     rt("holdout C hard OOD veto empty",attr.hard_ood_veto==0);
     rt("holdout C residual rescue absent",attr.residual_rescue==0);
     rt("holdout C wrong acts eliminated",attr.wrong==0);
