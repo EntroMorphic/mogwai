@@ -137,7 +137,6 @@ static decision_t decide(const testcase_t *tc,int variant){
     decision_t d={-1,-(1<<28),-(1<<28),0,0,0}; int correct_reachable=0;
     int q_top=R.label[qn[0].idx];
     int q_none = (variant<2) ? !strcmp(R.names[q_top],"none") : !strcmp(R.names[q.pred],"none");
-    if(q_none){ d.score=0; d.second=0; return d; }
     for(int i=0;i<tc->nc;i++){
         topk(tc->choice[i],cn[i],K,&cv[i],&ca[i]); hist(cn[i],K,ch[i]); cs[i]=sem_encode(tc->choice[i]);
         int direct=t_score_pre(&qv,&cv[i],qa,ca[i]); int ov=overlap(qn,cn[i],K); int hd=hist_dot(qh,ch[i]); int code=code_score(q.code,cs[i].code);
@@ -147,9 +146,12 @@ static decision_t decide(const testcase_t *tc,int variant){
         else if(variant==3) score = sem_sim(q,cs[i]) + 4*ov + hd/10;
         int reach = (variant<2) ? (ov>0 || hd>=500) : (code>0 || ov>0 || hd>=500);
         if(i==tc->correct) correct_reachable=reach;
-        if(score>d.score){d.second=d.score; d.score=score; d.winner=i; d.reachable=reach;} else if(score>d.second)d.second=score;
+        if(!q_none){
+            if(score>d.score){d.second=d.score; d.score=score; d.winner=i; d.reachable=reach;} else if(score>d.second)d.second=score;
+        }
     }
     for(int i=0;i<tc->nc;i++)for(int j=i+1;j<tc->nc;j++){ int s=t_score_pre(&cv[i],&cv[j],ca[i],ca[j]); if(s>=COLLISION_WARN)d.collision=1; }
+    if(q_none){ d.score=0; d.second=0; return d; }
     d.margin=d.score-d.second;
     if(tc->correct>=0 && correct_reachable && d.winner!=tc->correct)d.reachable=2;
     return d;
@@ -163,23 +165,61 @@ static void tally(stats_t *s,const testcase_t *tc,decision_t d){
     if(d.reachable==2)s->r_not_sel++; else if(d.winner>=0 && !d.reachable)s->sel_not_r++;
 }
 
-static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv]\n"); }
-
-int main(int argc,char **argv){
-    const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
-    if(argc!=1 && argc!=5){usage();return 1;} if(argc==5)for(int i=0;i<4;i++)paths[i]=argv[i+1];
-    load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash();
-    int n=(int)(sizeof CASES/sizeof CASES[0]);
-    stats_t st[4]; memset(st,0,sizeof st);
+static void init_stats(stats_t *st){
+    memset(st,0,4*sizeof st[0]);
     st[0].name="raw_direct"; st[1].name="raw_neighborhood"; st[2].name="semhash_direct"; st[3].name="semhash_neighborhood";
-    printf("runtime_choice_eval cases=%d k=%d classes=%u index=%d\n",n,K,R.n_class,U_n);
-    printf("case\ttags\tcorrect\traw\traw_nb\tsem\tsem_nb\n");
+}
+
+static int eval_all(stats_t *st,int print_cases){
+    int n=(int)(sizeof CASES/sizeof CASES[0]);
+    init_stats(st);
+    if(print_cases){
+        printf("runtime_choice_eval cases=%d k=%d classes=%u index=%d\n",n,K,R.n_class,U_n);
+        printf("case\ttags\tcorrect\traw\traw_nb\tsem\tsem_nb\n");
+    }
     for(int i=0;i<n;i++){
         decision_t d[4]; for(int v=0;v<4;v++){d[v]=decide(&CASES[i],v); tally(&st[v],&CASES[i],d[v]);}
-        printf("%d\t%s\t%d\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\n",i,CASES[i].tag,CASES[i].correct,
+        if(print_cases) printf("%d\t%s\t%d\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\t%d/%d/%d/%c\n",i,CASES[i].tag,CASES[i].correct,
                d[0].winner,d[0].score,d[0].margin,d[0].reachable?'R':'-', d[1].winner,d[1].score,d[1].margin,d[1].reachable?'R':'-',
                d[2].winner,d[2].score,d[2].margin,d[2].reachable?'R':'-', d[3].winner,d[3].score,d[3].margin,d[3].reachable?'R':'-');
     }
+    return n;
+}
+
+static int rt_total,rt_pass;
+static void rt(const char *name,int ok){ rt_total++; if(ok)rt_pass++; else printf("  FAIL runtime_choice_eval redteam: %s\n",name); }
+
+static int redteam(void){
+    int n=(int)(sizeof CASES/sizeof CASES[0]);
+    rt("case count pinned",n==8);
+    for(int i=0;i<n;i++){
+        rt("case has enough choices",CASES[i].nc>=2&&CASES[i].nc<=MAXC);
+        rt("correct index valid or NONE",CASES[i].correct==-1||(CASES[i].correct>=0&&CASES[i].correct<CASES[i].nc));
+        rt("case has tags",CASES[i].tag&&CASES[i].tag[0]);
+    }
+    stats_t st[4]; n=eval_all(st,0);
+    rt("raw neighborhood improves raw direct",st[1].ok>st[0].ok&&st[1].wrong<st[0].wrong);
+    rt("semhash neighborhood improves semhash direct",st[3].ok>st[2].ok&&st[3].wrong<st[2].wrong);
+    rt("raw neighborhood remains strongest baseline",st[1].ok>st[3].ok);
+    rt("candidate collision rate independent of abstain gate",st[0].collisions==st[1].collisions&&st[1].collisions==st[2].collisions&&st[2].collisions==st[3].collisions);
+    rt("polarity failures still visible",st[3].polarity_fail>0);
+    rt("reachable-not-selected still visible before NSW",st[2].r_not_sel>0);
+    rt("semhash neighborhood reduces selected-not-reachable",st[3].sel_not_r<st[0].sel_not_r);
+    rt("out-of-domain wrong acts still counted",st[3].wrong>0);
+    printf("RUNTIME_CHOICE_EVAL_REDTEAM checks=%d/%d score=%d/100\n",rt_pass,rt_total,rt_total?(100*rt_pass)/rt_total:0);
+    return rt_pass==rt_total?0:1;
+}
+
+static void usage(void){ fprintf(stderr,"usage: runtime_choice_eval [train validation test nlu.csv] [--redteam]\n"); }
+
+int main(int argc,char **argv){
+    const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
+    int red=0,arg=1;
+    if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
+    for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else {usage();return 1;} }
+    load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash();
+    if(red)return redteam();
+    stats_t st[4]; int n=eval_all(st,1);
     printf("\nvariant\taccuracy\twrong_act\tmissed_none\tmean_margin\tcollision_rate\treachable_not_selected\tselected_not_reachable\tpolarity_failures\n");
     for(int v=0;v<4;v++) printf("%s\t%d/%d\t%d/%d\t%d/%d\t%ld\t%d/%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].wrong,n,st[v].miss,n,st[v].margin_sum/n,st[v].collisions,n,st[v].r_not_sel,st[v].sel_not_r,st[v].polarity_fail);
     printf("\ndecision: ");

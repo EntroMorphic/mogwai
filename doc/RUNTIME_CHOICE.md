@@ -124,3 +124,11 @@ next: raw_neighborhood is still the strongest baseline; improve the learned proj
 next: polarity failures persist; add a factorized polarity channel.
 next: reachable-but-not-selected exists; improve selection/rerank before NSW.
 ```
+
+The evaluator has a built-in red team:
+
+    c/bin/runtime_choice_eval --redteam
+
+It pins case validity, neighborhood improvements, collision-rate invariance
+across abstain gates, persistent polarity failures, reachability accounting, and
+out-of-domain wrong-act accounting.
