@@ -17,6 +17,15 @@ descriptions with the current encoder, and reports:
 - maximum candidate-to-candidate direct similarity
 - warning flags for low margin, candidate collision, and `none` basin wins
 
+The required runtime-choice measurements are printed on the `metrics:` line:
+
+- `direct`: direct query-to-winning-candidate similarity in the active encoder
+- `neighborhood_overlap` / `neighborhood_agreement`: graph-neighborhood evidence
+- `margin`: winner score minus runner-up score
+- `reachable`: whether the winner was reachable in the explored neighborhood;
+  for `choice_probe`, this means overlap or strong class-neighborhood agreement,
+  and for `semhash_probe`, this means positive learned-code agreement
+
 Run the demo:
 
     c/bin/choice_probe --demo --k=8
@@ -25,7 +34,7 @@ Run the built-in red team:
 
     c/bin/choice_probe --redteam
 
-`make regress` requires this to print `REDTEAM checks=20/20 score=100/100`.
+`make regress` requires this to print `REDTEAM checks=27/27 score=100/100`.
 
 ## Red-team findings
 
@@ -82,3 +91,7 @@ demo, the learned hash separates `increase brightness` from `decrease
 brightness`, where raw direct score could not. It still reports low-margin and
 collision cases, and it is still host-only research code, not a production
 policy.
+
+`semhash_probe` reports the same required measurements, with
+`neighborhood_agreement` meaning learned semantic-code agreement rather than
+exact top-k class-histogram agreement.

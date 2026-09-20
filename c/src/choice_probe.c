@@ -21,6 +21,7 @@
 typedef struct { int idx, score; } near_t;
 typedef struct {
     int best, best_score, second, margin, coll_i, coll_j, coll_best;
+    int best_direct, best_overlap, best_hist, best_reachable;
     int direct[MAXC], overlap[MAXC], hist[MAXC], combo[MAXC], top_cls[MAXC];
     near_t qn[MAXK], cn[MAXC][MAXK];
 } probe_result;
@@ -201,6 +202,10 @@ static probe_result eval_probe(const char *query, const char **choices, int nc, 
         if(ds>r.coll_best){r.coll_best=ds;r.coll_i=i;r.coll_j=j;}
     }
     r.margin = r.best_score - r.second;
+    r.best_direct = r.direct[r.best];
+    r.best_overlap = r.overlap[r.best];
+    r.best_hist = r.hist[r.best];
+    r.best_reachable = r.best_overlap > 0 || r.best_hist >= 500;
     return r;
 }
 
@@ -219,6 +224,8 @@ static void run_probe(const char *query, const char **choices, int nc, int k) {
     }
     printf("\nresult: choice=%d combo=%d margin=%d candidate_pair_max=%d (%d,%d)\n",
            r.best,r.best_score,r.margin,r.coll_best,r.coll_i,r.coll_j);
+    printf("metrics: direct=%d neighborhood_overlap=%d/%d neighborhood_agreement=%d margin=%d reachable=%s\n",
+           r.best_direct,r.best_overlap,k,r.best_hist,r.margin,r.best_reachable?"yes":"no");
     if(r.margin < MARGIN_WARN) printf("  WARN low_margin: %d < %d\n", r.margin, MARGIN_WARN);
     if(r.coll_best >= COLLISION_WARN) printf("  WARN candidate_collision: %d >= %d\n", r.coll_best, COLLISION_WARN);
     if(!strcmp(R.names[r.top_cls[r.best]],"none")) printf("  WARN none_basin: winning choice lands nearest to none exemplars\n");
@@ -238,6 +245,9 @@ static int run_redteam(void) {
         "turn the bedroom lights completely off"};
     probe_result r = eval_probe("make the bedroom darker", demo, 3, 8);
     rt_chk("demo keeps dim candidate on top", r.best == 1);
+    rt_chk("demo reports direct similarity", r.best_direct == r.direct[r.best]);
+    rt_chk("demo reports neighborhood agreement", r.best_hist == r.hist[r.best]);
+    rt_chk("demo reports reachability", r.best_reachable == (r.best_overlap > 0 || r.best_hist >= 500));
     rt_chk("demo exposes low margin", r.margin < MARGIN_WARN);
     rt_chk("demo exposes brightness collision", r.coll_best >= COLLISION_WARN);
     rt_chk("demo direct scores are close", abs(r.direct[1] - r.direct[0]) <= 2);
@@ -246,6 +256,7 @@ static int run_redteam(void) {
         "turn the kitchen lights on", "turn the kitchen lights off", "make the kitchen brighter"};
     r = eval_probe("turn the kitchen lights off", off, 3, 8);
     rt_chk("off case chooses off", r.best == 1);
+    rt_chk("off correct answer reachable", r.best_reachable);
     rt_chk("off case has useful margin", r.margin >= MARGIN_WARN);
     rt_chk("off exact paraphrase overlaps all neighbors", r.overlap[1] == 8);
     rt_chk("off/on collision is visible", r.coll_best >= COLLISION_WARN);
@@ -253,6 +264,7 @@ static int run_redteam(void) {
     const char *dim[] = {"lower brightness", "decrease brightness", "make darker"};
     r = eval_probe("dim lights", dim, 3, 8);
     rt_chk("topology rescue chooses lower brightness", r.best == 0);
+    rt_chk("topology rescue marks reachable", r.best_reachable);
     rt_chk("topology rescue is not direct-score driven", r.direct[0] < r.direct[1]);
     rt_chk("topology rescue has strong dim histogram", r.hist[0] > 900);
     rt_chk("topology rescue flags candidate closeness", r.coll_best >= 140);
@@ -261,6 +273,7 @@ static int run_redteam(void) {
         "lower the brightness of the lights", "raise the brightness of the lights", "turn the coffee machine on"};
     r = eval_probe("make the room less luminous", lum, 3, 8);
     rt_chk("less-luminous known failure is exposed", r.best != 0);
+    rt_chk("less-luminous reports low reachability or low margin", !r.best_reachable || r.margin < MARGIN_WARN);
     rt_chk("less-luminous failure has low margin", r.margin < MARGIN_WARN);
     rt_chk("less-luminous lower/raise collision visible", r.coll_best >= COLLISION_WARN);
     rt_chk("less-luminous rejects coffee neighborhood", r.combo[2] + 40 < r.combo[r.best]);
@@ -269,6 +282,7 @@ static int run_redteam(void) {
         "issue money back to the customer", "deny the refund request", "escalate to technical support"};
     r = eval_probe("refund the customer", refund, 3, 8);
     rt_chk("out-of-domain refund chooses closest paraphrase", r.best == 0);
+    rt_chk("out-of-domain refund reachability is none-basin", r.best_reachable);
     rt_chk("out-of-domain refund lands in none basin", !strcmp(R.names[r.top_cls[r.best]],"none"));
     rt_chk("out-of-domain none histogram dominates", r.hist[0] > 900);
     rt_chk("out-of-domain unrelated technical stays behind", r.combo[2] + 100 < r.combo[0]);

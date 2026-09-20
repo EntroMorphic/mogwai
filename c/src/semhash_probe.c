@@ -25,6 +25,11 @@ static int32_t CW[RMAXCLS][RD];
 static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0,0};
 
 typedef struct { uint64_t code; int pred, score; } sh_t;
+typedef struct {
+    int best, best_sem, second_sem, margin, coll_i, coll_j, coll_best;
+    int best_direct, best_reachable;
+    int sem[MAXC], raw[MAXC], pred[MAXC], clsfit[MAXC];
+} sem_result;
 
 static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"out of memory\n");exit(1);} return p; }
 static int js(const char*l,const char*k,char*o,int cap){
@@ -142,28 +147,41 @@ static int raw_direct(const char *a,const char *b){
     return t_score_pre(&av,&bv,t_active(&av),t_active(&bv));
 }
 
-static int run_probe(const char *query,const char **choices,int nc){
+static sem_result eval_probe(const char *query,const char **choices,int nc){
     sh_t q=sem_encode(query); int best=-1, bs=-(1<<28), second=-(1<<28);
     int sem[MAXC], raw[MAXC], pred[MAXC]; sh_t cs[MAXC];
-    printf("index %d vectors, %u classes, semhash=%d bits, epochs=%d\n",U_n,R.n_class,HD,EPOCHS);
-    printf("DIAGNOSTIC ONLY: learned hash is a host proof, not a production policy.\n\n");
-    printf("query: \"%s\"  pred=%s score=%d\n",query,R.names[q.pred],q.score);
     for(int i=0;i<nc;i++){
         cs[i]=sem_encode(choices[i]); pred[i]=cs[i].pred;
         sem[i]=sem_sim(q,cs[i]); raw[i]=raw_direct(query,choices[i]);
         if(sem[i]>bs){second=bs;bs=sem[i];best=i;} else if(sem[i]>second)second=sem[i];
     }
+    int ci=-1,cj=-1,cb=-(1<<28);
+    for(int i=0;i<nc;i++)for(int j=i+1;j<nc;j++){int s=code_score(cs[i].code,cs[j].code); if(s>cb){cb=s;ci=i;cj=j;}}
+    sem_result r; memset(&r,0,sizeof r);
+    r.best=best; r.best_sem=bs; r.second_sem=second; r.margin=bs-second;
+    r.coll_i=ci; r.coll_j=cj; r.coll_best=cb;
+    r.best_direct=raw[best]; r.best_reachable=code_score(q.code,cs[best].code)>0;
+    for(int i=0;i<nc;i++){ r.sem[i]=sem[i]; r.raw[i]=raw[i]; r.pred[i]=pred[i]; r.clsfit[i]=cs[i].score; }
+    return r;
+}
+
+static int run_probe(const char *query,const char **choices,int nc){
+    sh_t q=sem_encode(query); sem_result r=eval_probe(query,choices,nc);
+    printf("index %d vectors, %u classes, semhash=%d bits, epochs=%d\n",U_n,R.n_class,HD,EPOCHS);
+    printf("DIAGNOSTIC ONLY: learned hash is a host proof, not a production policy.\n\n");
+    printf("query: \"%s\"  pred=%s score=%d\n",query,R.names[q.pred],q.score);
     printf("\nchoices:\n");
     for(int i=0;i<nc;i++)
         printf("  [%d] sem=%4d raw=%4d pred=%-20s clsfit=%4d  \"%s\"\n",
-               i,sem[i],raw[i],R.names[pred[i]],cs[i].score,choices[i]);
-    int ci=-1,cj=-1,cb=-(1<<28);
-    for(int i=0;i<nc;i++)for(int j=i+1;j<nc;j++){int s=code_score(cs[i].code,cs[j].code); if(s>cb){cb=s;ci=i;cj=j;}}
-    printf("\nresult: choice=%d sem=%d margin=%d candidate_pair_max=%d (%d,%d)\n",best,bs,bs-second,cb,ci,cj);
-    if(bs-second<20)printf("  WARN low_margin: %d < 20\n",bs-second);
-    if(cb>=180)printf("  WARN candidate_collision: %d >= 180\n",cb);
-    if(!strcmp(R.names[pred[best]],"none"))printf("  WARN none_basin: winning choice predicts none\n");
-    return best;
+               i,r.sem[i],r.raw[i],R.names[r.pred[i]],r.clsfit[i],choices[i]);
+    printf("\nresult: choice=%d sem=%d margin=%d candidate_pair_max=%d (%d,%d)\n",
+           r.best,r.best_sem,r.margin,r.coll_best,r.coll_i,r.coll_j);
+    printf("metrics: direct=%d neighborhood_agreement=%d margin=%d reachable=%s\n",
+           r.best_direct,r.sem[r.best],r.margin,r.best_reachable?"yes":"no");
+    if(r.margin<20)printf("  WARN low_margin: %d < 20\n",r.margin);
+    if(r.coll_best>=180)printf("  WARN candidate_collision: %d >= 180\n",r.coll_best);
+    if(!strcmp(R.names[r.pred[r.best]],"none"))printf("  WARN none_basin: winning choice predicts none\n");
+    return r.best;
 }
 
 static int rt_total,rt_pass;
@@ -171,8 +189,13 @@ static void rt(const char *name,int ok){rt_total++; if(ok)rt_pass++; else printf
 
 static int redteam(void){
     const char *demo[]={"increase the brightness of the bedroom lights","decrease the brightness of the bedroom lights","turn the bedroom lights completely off"};
+    sem_result pr=eval_probe("make the bedroom darker",demo,3);
     sh_t q=sem_encode("make the bedroom darker"), a=sem_encode(demo[0]), b=sem_encode(demo[1]);
     rt("demo query predicts dim", strstr(R.names[q.pred],"lightdim")!=NULL);
+    rt("demo reports direct similarity", pr.best_direct==pr.raw[pr.best]);
+    rt("demo reports semantic agreement", pr.sem[pr.best]==pr.best_sem);
+    rt("demo reports margin", pr.margin==pr.best_sem-pr.second_sem);
+    rt("demo reports reachability", pr.best_reachable);
     rt("decrease candidate closer than increase", sem_sim(q,b)>sem_sim(q,a));
 
     const char *off[]={"turn the kitchen lights on","turn the kitchen lights off","make the kitchen brighter"};

@@ -220,8 +220,8 @@ chk "--route declines nonsense below threshold" "$(c/bin/compare --ship --route=
 # leaked nine more. Assert NO bracketed diagnostic line survives, whatever it is.
 chk "--route output is clean (no diagnostics at all)" \
     "$(c/bin/compare --ship --route=x 2>&1 | grep -cE '^\s*\[')" "0"
-chk "choice_probe red-team passes 100/100" "$(c/bin/choice_probe --redteam 2>/dev/null | grep -c '^REDTEAM checks=20/20 score=100/100$')" "1"
-chk "semhash_probe red-team passes 100/100" "$(c/bin/semhash_probe --redteam 2>/dev/null | grep -c '^SEMHASH_REDTEAM checks=11/11 score=100/100$')" "1"
+chk "choice_probe red-team passes 100/100" "$(c/bin/choice_probe --redteam 2>/dev/null | grep -c '^REDTEAM checks=27/27 score=100/100$')" "1"
+chk "semhash_probe red-team passes 100/100" "$(c/bin/semhash_probe --redteam 2>/dev/null | grep -c '^SEMHASH_REDTEAM checks=15/15 score=100/100$')" "1"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that
 # claim was first checked.
