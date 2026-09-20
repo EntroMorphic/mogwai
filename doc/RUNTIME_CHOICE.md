@@ -1,5 +1,9 @@
 # Runtime-choice probe
 
+Production promotion is tracked separately in
+[`RUNTIME_CHOICE_PRODUCTION_PLAN.md`](RUNTIME_CHOICE_PRODUCTION_PLAN.md). The
+probes below remain host-only until that plan's gates are satisfied.
+
 `c/bin/choice_probe` is the first host-only probe for Jev-like runtime choices.
 It does **not** add a learned semantic hash and it does **not** implement NSW.
 It asks a narrower question first:

@@ -438,7 +438,8 @@ The layout, and what parity does *not* cover:
                        out), VALIDATION (host-parity harness), +WiFi, and two
                        measurement probes (WiFi heap cost, power)
                        Sources are SYMLINKS into c/src
-    doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT, FRAME, ARCHIVE, TODO
+    doc/               QUICKSTART, EXPERIMENTS, METHOD, TOOLS, BLOB_FORMAT,
+                       RUNTIME_CHOICE_PRODUCTION_PLAN, FRAME, ARCHIVE, TODO
     journal/           Lincoln Manifold Method artifacts, 10 cycles
     flash/             the browser flasher, published to Pages by CI on every tag
     scripts/           fetch.sh (curl only, pinned revisions, verifies checksums),
