@@ -224,9 +224,11 @@ static int polarity(const char *text){
     return 0;
 }
 
-static int hard_ood(const char *text){
+static int unsupported_target(const char *text){
     return has_phrase(text,"light rail")||has_word(text,"rail")||has_word(text,"train")||has_word(text,"refund")||has_word(text,"ticket")||has_word(text,"customer")||has_word(text,"transit")||has_word(text,"mood")||has_word(text,"mortgage")||has_word(text,"phone")||has_word(text,"screen")||has_word(text,"display")||has_word(text,"day")||has_word(text,"account")||has_word(text,"balance")||has_word(text,"appetite");
 }
+
+static int hard_ood(const char *text){ return unsupported_target(text); }
 
 static int polarity_score(int qp,int cp){
     if(!qp||!cp) return 0;
@@ -403,13 +405,13 @@ static int eval_all(stats_t *st,int print_cases){
     return n;
 }
 
-typedef struct { int learned_accept, learned_reject, topology_rescue, operator_factor, hard_ood_veto, residual_rescue, wrong; } attr_t;
+typedef struct { int learned_accept, learned_reject, topology_rescue, operator_factor, domain_reject, hard_ood_veto, residual_rescue, wrong; } attr_t;
 
 static void holdout_attr(const testcase_t *tc,decision_t sem_direct,decision_t sem_nb,decision_t residual,attr_t *a){
     int ok = (tc->correct<0) ? sem_nb.winner<0 : sem_nb.winner==tc->correct;
     int residual_ok = (tc->correct<0) ? residual.winner<0 : residual.winner==tc->correct;
     if(!ok){ if(residual_ok)a->residual_rescue++; else a->wrong++; return; }
-    if(tc->correct<0){ if(hard_ood(tc->query)) a->hard_ood_veto++; else a->learned_reject++; return; }
+    if(tc->correct<0){ if(unsupported_target(tc->query)) a->domain_reject++; else if(hard_ood(tc->query)) a->hard_ood_veto++; else a->learned_reject++; return; }
     if(sem_direct.winner!=tc->correct && sem_nb.winner==tc->correct) a->topology_rescue++;
     else if(strstr(tc->tag,"polarity")) a->operator_factor++;
     else a->learned_accept++;
@@ -428,7 +430,7 @@ static int eval_holdout(stats_t *st,attr_t *attr,int print_cases){
         tally(&st[2],&HOLDOUT[i],sd); tally(&st[3],&HOLDOUT[i],sn); tally(&st[4],&HOLDOUT[i],rs);
         holdout_attr(&HOLDOUT[i],sd,sn,rs,attr);
         const char *why = "learned_accept";
-        if(HOLDOUT[i].correct<0) why=hard_ood(HOLDOUT[i].query)?"hard_ood_veto":"learned_reject";
+        if(HOLDOUT[i].correct<0) why=unsupported_target(HOLDOUT[i].query)?"domain_reject":hard_ood(HOLDOUT[i].query)?"hard_ood_veto":"learned_reject";
         else if(sn.winner!=HOLDOUT[i].correct && rs.winner==HOLDOUT[i].correct) why="residual_rescue";
         else if(sd.winner!=HOLDOUT[i].correct && sn.winner==HOLDOUT[i].correct) why="topology_rescue";
         else if(strstr(HOLDOUT[i].tag,"polarity")) why="operator_factor";
@@ -516,11 +518,12 @@ static int holdout_redteam(void){
     rt("holdout residual perfect",st[4].ok==n&&st[4].wrong==0&&st[4].miss==0);
     rt("holdout learned coverage pinned",st[3].learned_reachable==8&&in_domain==9);
     rt("holdout learned accept visible",attr.learned_accept==1);
-    rt("holdout hard OOD veto pinned",attr.hard_ood_veto==8);
+    rt("holdout domain reject pinned",attr.domain_reject==8);
+    rt("holdout hard OOD veto empty",attr.hard_ood_veto==0);
     rt("holdout residual rescue pinned",attr.residual_rescue==1);
     rt("holdout no topology rescue",attr.topology_rescue==0);
     rt("holdout operator factor pinned",attr.operator_factor==7);
-    rt("holdout attribution sums",attr.learned_accept+attr.learned_reject+attr.topology_rescue+attr.operator_factor+attr.hard_ood_veto+attr.residual_rescue+attr.wrong==n);
+    rt("holdout attribution sums",attr.learned_accept+attr.learned_reject+attr.topology_rescue+attr.operator_factor+attr.domain_reject+attr.hard_ood_veto+attr.residual_rescue+attr.wrong==n);
     printf("RUNTIME_CHOICE_HOLDOUT_REDTEAM checks=%d/%d score=%d/100\n",rt_pass,rt_total,rt_total?(100*rt_pass)/rt_total:0);
     return rt_pass==rt_total?0:1;
 }
@@ -541,7 +544,7 @@ int main(int argc,char **argv){
         stats_t st[5]; attr_t attr; int n=eval_holdout(st,&attr,1); int in_domain=in_domain_set(HOLDOUT,n);
         printf("\nvariant\taccuracy\tcommit_precision\tlearned_coverage\twrong_act\tmissed_none\tlearned_reachable\tresidual_rescue\tunsupported\n");
         for(int v=2;v<5;v++){ int committed=n-st[v].miss; printf("%s\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d/%d\t%d\t%d\t%d\n",st[v].name,st[v].ok,n,st[v].ok,committed,st[v].learned_reachable,in_domain,st[v].wrong,n,st[v].miss,n,st[v].learned_reachable,st[v].residual_rescue,st[v].unsupported); }
-        printf("\nattribution\tlearned_accept=%d\tlearned_reject=%d\ttopology_rescue=%d\toperator_factor=%d\thard_ood_veto=%d\tresidual_rescue=%d\twrong=%d\n",attr.learned_accept,attr.learned_reject,attr.topology_rescue,attr.operator_factor,attr.hard_ood_veto,attr.residual_rescue,attr.wrong);
+        printf("\nattribution\tlearned_accept=%d\tlearned_reject=%d\ttopology_rescue=%d\toperator_factor=%d\tdomain_reject=%d\thard_ood_veto=%d\tresidual_rescue=%d\twrong=%d\n",attr.learned_accept,attr.learned_reject,attr.topology_rescue,attr.operator_factor,attr.domain_reject,attr.hard_ood_veto,attr.residual_rescue,attr.wrong);
         printf("decision: blind holdout separates learned coverage from hard OOD vetoes; keep this set frozen.\n");
         return 0;
     }
