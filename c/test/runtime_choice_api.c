@@ -122,7 +122,23 @@ int main(void) {
     make_blob(blob, 1);
     put32(blob + 8 + 12, 0);
     chk("candidate blob factor mismatch rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    put32(blob + 8 + 12, 0x80000000u);
+    chk("candidate blob unknown factor rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    blob[8 + 16] = 2;
+    chk("candidate blob bad polarity rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    blob[8 + 17] = 99;
+    chk("candidate blob bad color rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    blob[8 + 18] = 0x80;
+    chk("candidate blob bad composition rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
+    make_blob(blob, 1);
+    blob[8 + 20] = 99;
+    chk("candidate blob bad support rejects", r_runtime_parse_candidates(blob, 8 + RTC_CAND_RECORD_BYTES, parsed, 2, &parsed_n) == -3 && parsed_n == 0);
     chk("candidate blob size helper", r_runtime_candidates_size(2) == 8 + 2 * RTC_CAND_RECORD_BYTES && r_runtime_candidates_size(-1) == 0 && r_runtime_candidates_size(RUNTIME_CHOICE_MAX_CANDIDATES + 1) == 0);
+    chk("candidate blob max size pinned", r_runtime_candidates_size(RUNTIME_CHOICE_MAX_CANDIDATES) == RTC_CAND_MAX_BYTES && RTC_CAND_MAX_BYTES == 9000u);
     chk("candidate blob writer rejects small buffer", r_runtime_write_candidates(blob2, sizeof blob2 - 1, perm_a, 2, &written) == -2 && written == 0);
     chk("candidate blob parser rejects small output cap", r_runtime_parse_candidates(blob2, sizeof blob2, parsed, 1, &parsed_n) == -2 && parsed_n == 0);
     chk("candidate blob writer rejects malformed", r_runtime_write_candidates(blob2, sizeof blob2, hidden_pol, 1, &written) == -3 && written == 0);
@@ -181,6 +197,7 @@ int main(void) {
     chk("query encoder rejects bad args", r_runtime_make_query(NULL, 0, 0, RTC_SUPPORT_SUPPORTED, &qenc) == -1 && r_runtime_make_query("", 0, 0, RTC_SUPPORT_SUPPORTED, &qenc) == -1 && r_runtime_make_query("x", 0, 0, 99, &qenc) == -1);
     chk("query encoder derives factors", r_runtime_make_query("activate the hallway lamps red", 0x55, 17, RTC_SUPPORT_SUPPORTED, &qenc) == 0 && qenc.sem_code == 0x55 && qenc.sem_score == 17 && qenc.polarity == RTC_POLARITY_POSITIVE && qenc.color == RTC_COLOR_RED && qenc.composition == (RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION) && qenc.location_id == 1 && qenc.support == RTC_SUPPORT_SUPPORTED);
     chk("query encoder keeps unknown support neutral", r_runtime_make_query("brew espresso", 0x77, 3, RTC_SUPPORT_UNKNOWN, &qenc) == 0 && qenc.factor_flags == 0 && qenc.support == RTC_SUPPORT_UNKNOWN);
+    chk("query encoder rejects unsupported derived factors", r_runtime_make_query("brighten my day", 0x77, 3, RTC_SUPPORT_UNKNOWN, &qenc) == -1 && qenc.text == NULL && qenc.factor_flags == 0);
     runtime_candidate_t qmatch[1] = {{"turn on hallway lights", 1, 0, RTC_FACTOR_POLARITY|RTC_FACTOR_COMPOSITION|RTC_FACTOR_LOCATION|RTC_FACTOR_SUPPORT, RTC_POLARITY_POSITIVE, 0, RTC_COMP_LIGHTING|RTC_COMP_ACTIVATION, 1, RTC_SUPPORT_SUPPORTED}};
     chk("query encoder feeds precomputed API", r_runtime_make_query("activate the hallway lamps", 1, 0, RTC_SUPPORT_SUPPORTED, &qenc) == 0 && r_choose_runtime_precomputed(&qenc, 2, qmatch, 1, &out, &freason) == 0 && out.reason == RTC_REASON_OK && out.winner == 0);
 

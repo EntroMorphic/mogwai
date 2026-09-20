@@ -256,6 +256,13 @@ Acceptance gates:
 
 ### P0.7 Add Firmware and Blob Regression Pins
 
+Status: **started**. The `RTC1` parser and writer are now regression-pinned for
+exact EOF, bad counts, missing output storage, reserved bytes, text termination,
+hidden trailing text, factor/value mismatches, unknown factor bits, and invalid
+polarity/color/composition/support enum values. `RTC1` has no offsets, so offset
+corruption is structurally not applicable to this format. The maximum serialized
+candidate-set size is pinned as `RTC_CAND_MAX_BYTES == 9000` bytes.
+
 Deliverable: regression checks equivalent in seriousness to the current blob and
 router guardrails.
 
@@ -270,6 +277,19 @@ Required tests:
 - memory and runtime remain below the documented firmware budget
 
 ### P0.8 Decide the Runtime Memory and Update Model
+
+Status: **decided for the first production path**. Runtime meanings are supplied
+per request as a bounded explicit query record plus at most
+`RUNTIME_CHOICE_MAX_CANDIDATES` candidate records. They are not rebuilt into
+`router.bin`, persisted in NVS/flash, or cached in an ephemeral graph. Optional
+`RTC1` blobs are separate host/device inputs with their own magic and parser; an
+invalid blob or malformed candidate list rejects the whole request before any
+selection. Reset behavior is therefore deterministic: no runtime-choice state
+survives outside the caller-owned request/blob.
+
+Current worst-case serialized candidate storage is `RTC_CAND_MAX_BYTES` (`9000`
+bytes). The C struct is not the persisted format and must not be used as a flash
+ABI because it contains a host/device pointer-sized text reference.
 
 Deliverable: a production decision on where runtime meanings live.
 
@@ -289,6 +309,11 @@ Acceptance gates:
 - firmware memory budget includes worst-case candidate storage
 
 ### P0.9 Revisit NSW Only as Candidate Generation
+
+Status: **blocked by design** until P0.1-P0.8 are complete and the flat direct
+scorer has parity against the promotion suite. No topology/NSW result is allowed
+to decide actuation; it may only propose candidates that are rescored by the flat
+semhash+factor path.
 
 Deliverable: optional graph experiment after P0.1-P0.8 are satisfied.
 

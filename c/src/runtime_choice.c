@@ -82,6 +82,10 @@ int r_runtime_make_query(const char *text,
     if (out->composition) out->factor_flags |= RTC_FACTOR_COMPOSITION;
     out->location_id = rtc_text_location(text);
     if (out->location_id != RTC_LOCATION_NONE) out->factor_flags |= RTC_FACTOR_LOCATION;
+    if (support == RTC_SUPPORT_UNKNOWN && out->factor_flags != 0) {
+        memset(out, 0, sizeof *out);
+        return -1;
+    }
     return rtc_validate_candidate(out) ? 0 : -1;
 }
 
