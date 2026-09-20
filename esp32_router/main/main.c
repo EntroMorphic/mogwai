@@ -9,6 +9,7 @@
 #include "esp_timer.h"
 #include "esp_chip_info.h"
 #include "esp_heap_caps.h"
+#include "sdkconfig.h"
 #include "ternary.h"
 
 extern const uint8_t blob_start[] asm("_binary_router_bin_start");
@@ -49,7 +50,17 @@ static int route(const char *txt, int *score_out) {
 /* What does the RTOS actually cost in the hot loop? Time the identical scan
    three ways, using the raw cycle counter so the measurement does not depend
    on any IDF service. */
+#ifdef CONFIG_IDF_TARGET_ESP32
 #include "xtensa/core-macros.h"
+static uint32_t cycle_count(void) { return XTHAL_GET_CCOUNT(); }
+#endif
+#ifndef CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ
+#define CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ 160
+#endif
+#define CYCLE_MHZ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ
+#ifndef CONFIG_IDF_TARGET_ESP32
+static uint32_t cycle_count(void) { return (uint32_t)(esp_timer_get_time() * CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ); }
+#endif
 /* Where do 2,336 cycles per index vector actually go?
  * Separate memory bandwidth from arithmetic by running identical work over a
  * SMALL index that fits in the 32KB cache, versus the full 672KB one. */
@@ -57,7 +68,7 @@ static volatile int g_sink;
 
 static uint32_t bench(const char *label, const tvec *q, const uint8_t *Eq, int nq,
                       int aa, uint32_t n, int mode) {
-    uint32_t c0 = XTHAL_GET_CCOUNT(); int acc = 0;
+    uint32_t c0 = cycle_count(); int acc = 0;
     for (uint32_t i = 0; i < n; i++) {
         const uint32_t *b = TI[i].w;
         switch (mode) {
@@ -73,7 +84,7 @@ static uint32_t bench(const char *label, const tvec *q, const uint8_t *Eq, int n
             acc += t_score_ex(q->m, Eq, nq, b, BEP(i), BEN(i), aa, IX.act[i]); break;
         }
     }
-    uint32_t c1 = XTHAL_GET_CCOUNT(); g_sink = acc;
+    uint32_t c1 = cycle_count(); g_sink = acc;
     printf("    %-34s %8.1f cycles/vector\n", label, (double)(c1 - c0) / n);
     return c1 - c0;
 }
@@ -83,6 +94,7 @@ typedef struct { const tvec *q; const uint8_t *Eq; int nq;
                  int aa; uint32_t lo, hi; int best; uint32_t bi; } job_t;
 static job_t g_job;
 static TaskHandle_t g_worker, g_main;
+static int g_dual_core;
 
 static void scan_range(job_t *j) {
     int best = -(1 << 28); uint32_t bi = j->lo;
@@ -122,6 +134,11 @@ static int route_mt(const char *txt, int *score_out) {
     return r_apply_polarity(&R, R.label[bi], txt);
 }
 static void bench_mt(void) {
+    if (!g_dual_core) {
+        printf("\n  --- handing the scan to the idle core ---\n");
+        printf("    skipped: single-core target\n");
+        return;
+    }
     g_main = xTaskGetCurrentTaskHandle();
     xTaskCreatePinnedToCore(worker_task, "scan1", 4096, NULL, 5, &g_worker, 1);
     const uint8_t *p = REFP; int agree = 0; int64_t tot1 = 0, tot2 = 0;
@@ -261,12 +278,13 @@ static void dram_vs_flash(void) {
 static void bulk_and_pipeline(void) {
     printf("\n  === can bulk transfer amortise the per-access overhead? ===\n");
     const uint32_t KB[] = { 4, 16, 64, 128 };
+    volatile uint8_t mem_sink = 0;
     for (int k = 0; k < 4; k++) {
         size_t n = KB[k] * 1024;
         void *dst = malloc(n);
         if (!dst) { printf("    %3u KB: alloc failed\n", (unsigned)KB[k]); continue; }
         int64_t t0 = esp_timer_get_time();
-        for (int r = 0; r < 8; r++) memcpy(dst, (const void *)TI, n);
+        for (int r = 0; r < 8; r++) { memcpy(dst, (const void *)TI, n); mem_sink ^= ((uint8_t *)dst)[r & (int)(n - 1)]; }
         int64_t dt = esp_timer_get_time() - t0;
         double mbs = (double)n * 8 / (dt / 1e6) / 1048576.0;
         printf("    memcpy %3u KB flash->DRAM: %6.2f MB/s  (%5lld ns per 64B vector)\n",
@@ -301,10 +319,16 @@ static void bulk_and_pipeline(void) {
         uint16_t *ta = ca; ca = na; na = ta;
     }
     int64_t dt = esp_timer_get_time() - t0;
+    t0 = esp_timer_get_time();
+    volatile int sink = 0;
+    for (uint32_t i = 0; i < R.n_index; i++)
+        sink += t_score_ex(q.m, Eq, nq, TI[i].w, BEP(i), BEN(i), aa, IX.act[i]);
+    int64_t straight = esp_timer_get_time() - t0;
     printf("\n    double-buffered scan (%u-vector chunks): %lld us   best=%d idx=%u\n",
-           (unsigned)CH, dt, best, (unsigned)bi);
-    printf("    vs straight flash-mapped scan          : 43498 us\n");
-    printf("    -> %.2fx\n", 43498.0 / (double)dt);
+            (unsigned)CH, dt, best, (unsigned)bi);
+    printf("    vs straight flash-mapped scan          : %lld us\n", straight);
+    printf("    -> %.2fx\n", (double)straight / (double)dt);
+    (void)mem_sink; (void)sink;
     free(b0); free(b1); free(a0); free(a1);
 }
 /* The byte cost is not bandwidth we can accelerate — 656 KB at 24 MB/s is a
@@ -332,6 +356,14 @@ static void two_stage(void) {
     printf("    signature table: %u KB in SRAM, heap left %u B\n",
            (unsigned)(R.n_index * 8 / 1024), (unsigned)esp_get_free_heap_size());
 
+    tvec refq; t_encode(&R, "turn off the light in the bathroom", &refq);
+    int refaa = t_active(&refq), refbest = -(1 << 28); uint8_t refEq[RD]; int refnq = t_exceptions(&refq, refEq);
+    int64_t full_t0 = esp_timer_get_time();
+    for (uint32_t i = 0; i < R.n_index; i++) {
+        int s = t_score_ex(refq.m, refEq, refnq, TI[i].w, BEP(i), BEN(i), refaa, IX.act[i]);
+        if (s > refbest) refbest = s;
+    }
+    int64_t full_us = esp_timer_get_time() - full_t0;
     const uint8_t *p = REFP; int agree = 0; int64_t tot = 0;
     for (uint32_t K = 64; K <= 512; K *= 4) {
         p = REFP; agree = 0; tot = 0;
@@ -362,8 +394,8 @@ static void two_stage(void) {
             if (cls == hc && best == hs) agree++;
             (void)seen;
         }
-        printf("    K>=%-4u  %6lld us/query  exact-match vs full scan: %d/%lu  (%.2fx vs 43498)\n",
-               (unsigned)K, tot / NREF, agree, (unsigned long)NREF, 43498.0 / (double)(tot / NREF));
+        printf("    K>=%-4u  %6lld us/query  exact-match vs full scan: %d/%lu  (%.2fx vs %lld)\n",
+               (unsigned)K, tot / NREF, agree, (unsigned long)NREF, (double)full_us / (double)(tot / NREF), full_us);
     }
     free(SIG64);
 }
@@ -373,11 +405,11 @@ static void redteam(void) {
     printf("  -- full index (%lu vec, %lu KB, flash-resident) --\n",
            (unsigned long)full, (unsigned long)(full * sizeof(rvec) / 1024));
     reps("1 core", 1, full);
-    reps("2 cores", 2, full);
+    if (g_dual_core) reps("2 cores", 2, full);
     printf("  -- SMALL index (%lu vec, %lu KB, CACHE-resident) --\n",
            (unsigned long)small, (unsigned long)(small * sizeof(rvec) / 1024));
     reps("1 core", 1, small);
-    reps("2 cores", 2, small);
+    if (g_dual_core) reps("2 cores", 2, small);
     /* CONFOUND: the three flashed indexes differed in CONTENT as well as size,
      * so "time is proportional to bytes" could be a content effect (branch
      * behaviour in the argmax update, say). Same blob, same vectors, only N
@@ -395,15 +427,17 @@ static void redteam(void) {
         }
     }
     /* dispatch cost with zero work: is degraded scaling just sync overhead? */
-    int64_t s[NREP]; tvec q; t_encode(&R, "x", &q); int aa = t_active(&q);
-    uint8_t Eq[RD]; int nq = t_exceptions(&q, Eq);
-    for (int r = 0; r < NREP; r++) {
-        int64_t t0 = esp_timer_get_time();
-        for (int k = 0; k < 64; k++) scan_n2(&q, Eq, nq, aa, 0);
-        s[r] = (esp_timer_get_time() - t0) / 64;
+    if (g_dual_core) {
+        int64_t s[NREP]; tvec q; t_encode(&R, "x", &q); int aa = t_active(&q);
+        uint8_t Eq[RD]; int nq = t_exceptions(&q, Eq);
+        for (int r = 0; r < NREP; r++) {
+            int64_t t0 = esp_timer_get_time();
+            for (int k = 0; k < 64; k++) scan_n2(&q, Eq, nq, aa, 0);
+            s[r] = (esp_timer_get_time() - t0) / 64;
+        }
+        isort(s, NREP);
+        printf("  -- dual-core dispatch+join, zero work: med %lld us --\n", s[NREP/2]);
     }
-    isort(s, NREP);
-    printf("  -- dual-core dispatch+join, zero work: med %lld us --\n", s[NREP/2]);
 }
 static void profile(const char *txt) {
     tvec q; t_encode(&R, txt, &q); int aa = t_active(&q);
@@ -421,35 +455,37 @@ static void profile(const char *txt) {
     bench("+ popcount dot (t_dot)", &q, Eq, nq, aa, small, 1);
     bench("+ t_active(b) recompute", &q, Eq, nq, aa, small, 2);
     bench("+ integer divide (full t_score)", &q, Eq, nq, aa, small, 3);
-    uint32_t e0 = XTHAL_GET_CCOUNT(); tvec z; t_encode(&R, txt, &z);
-    uint32_t e1 = XTHAL_GET_CCOUNT();
+    uint32_t e0 = cycle_count(); tvec z; t_encode(&R, txt, &z);
+    uint32_t e1 = cycle_count();
     printf("\n    encode the query once            %8lu cycles (%.3f ms)\n",
-           (unsigned long)(e1 - e0), (e1 - e0) / 240000.0);
+           (unsigned long)(e1 - e0), (e1 - e0) / (1000.0 * CYCLE_MHZ));
 }
 static void rtos_tax(const char *txt) {
     int s; uint32_t c0, c1, normal, nosched, noint;
-    c0 = XTHAL_GET_CCOUNT(); route(txt, &s); c1 = XTHAL_GET_CCOUNT();
+    c0 = cycle_count(); route(txt, &s); c1 = cycle_count();
     normal = c1 - c0;
     vTaskSuspendAll();
-    c0 = XTHAL_GET_CCOUNT(); route(txt, &s); c1 = XTHAL_GET_CCOUNT();
+    c0 = cycle_count(); route(txt, &s); c1 = cycle_count();
     xTaskResumeAll();
     nosched = c1 - c0;
     portDISABLE_INTERRUPTS();
-    c0 = XTHAL_GET_CCOUNT(); route(txt, &s); c1 = XTHAL_GET_CCOUNT();
+    c0 = cycle_count(); route(txt, &s); c1 = cycle_count();
     portENABLE_INTERRUPTS();
     noint = c1 - c0;
     printf("\n  --- what FreeRTOS costs in the scan ---\n");
     printf("    normal (task, ticks on) : %10lu cycles  %6.1f ms\n",
-           (unsigned long)normal, normal / 240000.0);
+           (unsigned long)normal, normal / (1000.0 * CYCLE_MHZ));
     printf("    scheduler suspended     : %10lu cycles  %6.1f ms  (%+.2f%%)\n",
-           (unsigned long)nosched, nosched / 240000.0, 100.0 * ((double)nosched - normal) / normal);
+           (unsigned long)nosched, nosched / (1000.0 * CYCLE_MHZ), 100.0 * ((double)nosched - normal) / normal);
     printf("    interrupts disabled     : %10lu cycles  %6.1f ms  (%+.2f%%)\n",
-           (unsigned long)noint, noint / 240000.0, 100.0 * ((double)noint - normal) / normal);
+           (unsigned long)noint, noint / (1000.0 * CYCLE_MHZ), 100.0 * ((double)noint - normal) / normal);
     printf("    -> cycles/index-vector  : %.1f\n", (double)noint / R.n_index);
 }
 void app_main(void) {
     t_popcnt_init();          /* no-op unless the 16-bit table is compiled in */
+    vTaskDelay(pdMS_TO_TICKS(1500));  /* lets USB-serial/JTAG re-enumerate before benchmark output */
     esp_chip_info_t ci; esp_chip_info(&ci);
+    g_dual_core = ci.cores > 1;
     printf("\n===== twin-ternary router on ESP32 =====\n");
     printf("chip        : %d core, rev %d\n", ci.cores, ci.revision);
     printf("free heap   : %lu bytes\n", (unsigned long)esp_get_free_heap_size());
