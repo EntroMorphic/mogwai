@@ -31,7 +31,7 @@ chk "tools+tests build with zero warnings" "$BUILD_N" "0"
 if [ "$BUILD_N" != "0" ]; then
   printf '%s\n' "$BUILD_OUT" | grep -E 'warning|error' | head -20 | sed 's/^/        /'
 fi
-chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "18"
+chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "19"
 
 echo "=== CORPUS ==="
 chk "corpus checksums" "$(shasum -a 256 -c data/SHA256 2>/dev/null | grep -c OK)" "4"
@@ -222,6 +222,7 @@ chk "--route output is clean (no diagnostics at all)" \
     "$(c/bin/compare --ship --route=x 2>&1 | grep -cE '^\s*\[')" "0"
 chk "choice_probe red-team passes 100/100" "$(c/bin/choice_probe --redteam 2>/dev/null | grep -c '^REDTEAM checks=27/27 score=100/100$')" "1"
 chk "semhash_probe red-team passes 100/100" "$(c/bin/semhash_probe --redteam 2>/dev/null | grep -c '^SEMHASH_REDTEAM checks=15/15 score=100/100$')" "1"
+chk "runtime_choice_eval reports architecture decision" "$(c/bin/runtime_choice_eval 2>/dev/null | grep -c '^decision: semhash_neighborhood improves the learned path; add topology there next\.$')" "1"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that
 # claim was first checked.

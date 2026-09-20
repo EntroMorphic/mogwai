@@ -95,3 +95,32 @@ policy.
 `semhash_probe` reports the same required measurements, with
 `neighborhood_agreement` meaning learned semantic-code agreement rather than
 exact top-k class-histogram agreement.
+
+## Dataset evaluator
+
+`runtime_choice_eval` is the next artifact after the single-case probes. It uses
+a fixed tagged runtime-choice eval set:
+
+- query
+- arbitrary candidate descriptions
+- correct candidate index, or `-1` for `NONE`
+- tags: `paraphrase`, `polarity`, `collision`, `out-of-domain`, `bridged`,
+  `unbridged`
+
+It scores every case four ways:
+
+- `raw_direct`
+- `raw_neighborhood`
+- `semhash_direct`
+- `semhash_neighborhood`
+
+It reports accuracy, wrong-act rate, missed/none rate, mean margin, collision
+rate, reachable-but-not-selected count, selected-but-not-reachable count, and
+polarity failures. The current diagnostic decision is:
+
+```text
+decision: semhash_neighborhood improves the learned path; add topology there next.
+next: raw_neighborhood is still the strongest baseline; improve the learned projection before replacing it.
+next: polarity failures persist; add a factorized polarity channel.
+next: reachable-but-not-selected exists; improve selection/rerank before NSW.
+```
