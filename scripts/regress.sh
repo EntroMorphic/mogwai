@@ -237,7 +237,7 @@ chk "runtime_choice_bit_forensic explains the cliff" "$(c/bin/runtime_choice_eva
 chk "runtime_choice_fit_sweep shows 20-bit score artifact" "$(c/bin/runtime_choice_eval --fit-sweep 2>/dev/null | grep -c '^RUNTIME_CHOICE_FIT_SWEEP bits=20 passing=1/7$')" "1"
 chk "runtime_choice_bit_loo isolates the late bit" "$(c/bin/runtime_choice_eval --bit-loo 2>/dev/null | grep -c '^RUNTIME_CHOICE_BIT_LOO bits=21 passing=20/21$')" "1"
 chk "runtime_choice production API fails closed" "$(c/bin/runtime_choice_api 2>/dev/null | grep -c '^RUNTIME_CHOICE_API checks=83/83$')" "1"
-chk "runtime_choice production promotion cases pass" "$(c/bin/runtime_choice_promotion 2>/dev/null | grep -c '^RUNTIME_CHOICE_PROMOTION checks=8/8$')" "1"
+chk "runtime_choice production promotion cases pass" "$(c/bin/runtime_choice_promotion 2>/dev/null | grep -c '^RUNTIME_CHOICE_PROMOTION checks=15/15$')" "1"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that
 # claim was first checked.

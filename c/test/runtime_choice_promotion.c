@@ -75,6 +75,36 @@ int main(void) {
             SUP("clean the flat", 0x33),
             {{0}},
             0, -1, RTC_REASON_NONE_NO_CANDIDATES, RTC_FACTOR_REASON_BAD_ARGUMENT
+        },
+        {
+            "candidate order permutation preserves winner",
+            SUP("make coffee", 0x12),
+            {SUP("start cleaning", 0x3f), SUP("make coffee", 0x12), SUP("turn lights on", 0x00)},
+            3, 1, RTC_REASON_OK, RTC_FACTOR_REASON_OK
+        },
+        {
+            "near collision distractor loses to exact code",
+            SUP("clean the flat", 0x30),
+            {SUP("make coffee", 0x31), SUP("start cleaning apartment", 0x30)},
+            2, 1, RTC_REASON_OK, RTC_FACTOR_REASON_OK
+        },
+        {
+            "unsupported object rejects by support",
+            {"activate hallway speaker", 0x44, 0, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_UNSUPPORTED},
+            {SUP("turn hallway lights on", 0x44)},
+            1, -1, RTC_REASON_FACTOR_REJECT, RTC_FACTOR_REASON_SUPPORT
+        },
+        {
+            "unsupported location rejects by location",
+            LOC("activate garage lamps", 0x45, 11),
+            {LOC("activate hallway lamps", 0x45, 1)},
+            1, -1, RTC_REASON_FACTOR_REJECT, RTC_FACTOR_REASON_LOCATION
+        },
+        {
+            "metaphorical OOD rejects by support",
+            {"brighten my day", 0x46, 0, RTC_FACTOR_SUPPORT, 0, 0, 0, 0, RTC_SUPPORT_OOD},
+            {SUP("make hallway brighter", 0x46)},
+            1, -1, RTC_REASON_FACTOR_REJECT, RTC_FACTOR_REASON_SUPPORT
         }
     };
 
@@ -85,6 +115,12 @@ int main(void) {
         int rc = r_choose_runtime_precomputed(&cases[i].query, 6, cases[i].cand, cases[i].n, &out, &freason);
         chk(cases[i].name, rc == 0 && out.winner == cases[i].want_winner && out.reason == cases[i].want_reason && freason == cases[i].want_factor);
     }
+    runtime_choice_t out;
+    runtime_factor_reason_t freason = RTC_FACTOR_REASON_BAD_ARGUMENT;
+    runtime_candidate_t malformed[1] = {{"hidden polarity", 0, 0, 0, RTC_POLARITY_POSITIVE, 0, 0, 0, 0}};
+    chk("malformed candidate list rejects", r_choose_runtime_precomputed(&cases[0].query, 6, malformed, 1, &out, &freason) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE);
+    runtime_candidate_t permuted[3] = {cases[8].cand[2], cases[8].cand[0], cases[8].cand[1]};
+    chk("candidate order permutation changes only index", r_choose_runtime_precomputed(&cases[8].query, 6, permuted, 3, &out, &freason) == 0 && out.reason == RTC_REASON_OK && out.winner == 2 && freason == RTC_FACTOR_REASON_OK);
 
     printf("RUNTIME_CHOICE_PROMOTION checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;
