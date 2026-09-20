@@ -53,6 +53,11 @@ This contract must be implemented before any runtime-choice result can actuate.
 
 ### P0.1 Define the Production API
 
+Status: **scaffolded** in `c/src/runtime_choice.h` and
+`c/src/runtime_choice.c`. The API validates inputs and fails closed with
+`RTC_REASON_UNSUPPORTED_SCORER` until the flat scorer is promoted behind it.
+`c/test/runtime_choice_api.c` pins this boundary.
+
 Deliverable: a C API that accepts a query plus runtime candidates and returns a
 candidate index or `NONE`.
 
