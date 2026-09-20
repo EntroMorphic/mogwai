@@ -174,6 +174,9 @@ int main(void) {
     chk("flat chooser all factor rejects abstain", r_runtime_choose_flat(&flat_q, 2, flat_c, 1, &out, &freason) == 0 && out.reason == RTC_REASON_FACTOR_REJECT && out.winner == -1 && freason == RTC_FACTOR_REASON_SUPPORT);
     chk("flat chooser empty abstains", r_runtime_choose_flat(&flat_q, 2, NULL, 0, &out, &freason) == 0 && out.reason == RTC_REASON_NONE_NO_CANDIDATES && out.winner == -1);
     chk("flat chooser rejects malformed candidate", r_runtime_choose_flat(&flat_q, 2, hidden_pol, 1, &out, &freason) == -1 && out.reason == RTC_REASON_MALFORMED_CANDIDATE && out.winner == -1);
+    chk("precomputed API uses flat scorer", r_choose_runtime_precomputed(&flat_q, 2, flat_c, 3, &out, &freason) == 0 && out.reason == RTC_REASON_OK && out.winner == 1 && freason == RTC_FACTOR_REASON_OK);
+    chk("precomputed API preserves factor attribution", r_choose_runtime_precomputed(&flat_q, 2, flat_c, 1, &out, &freason) == 0 && out.reason == RTC_REASON_FACTOR_REJECT && out.winner == -1 && freason == RTC_FACTOR_REASON_SUPPORT);
+    chk("text API remains fail closed", r_choose_runtime(&r, "brew espresso", flat_c, 3, &out) == 0 && out.reason == RTC_REASON_UNSUPPORTED_SCORER && out.winner == -1);
 
     printf("RUNTIME_CHOICE_API checks=%d/%d\n", pass, total);
     return pass == total ? 0 : 1;

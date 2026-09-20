@@ -84,6 +84,12 @@ int r_choose_runtime(const router_t *r,
                      const runtime_candidate_t *cands,
                      int n_cands,
                      runtime_choice_t *out);
+int r_choose_runtime_precomputed(const runtime_candidate_t *query,
+                                 int bits,
+                                 const runtime_candidate_t *cands,
+                                 int n_cands,
+                                 runtime_choice_t *out,
+                                 runtime_factor_reason_t *factor_reason_out);
 
 const char *r_runtime_reason_name(runtime_choice_reason_t reason);
 int r_runtime_parse_candidates(const uint8_t *base,

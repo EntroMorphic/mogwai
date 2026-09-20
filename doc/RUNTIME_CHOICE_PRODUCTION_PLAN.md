@@ -61,6 +61,11 @@ the flat scorer is promoted behind it. Exact score ties, once scoring lands,
 resolve to the lowest candidate index in the caller's original order.
 `c/test/runtime_choice_api.c` pins this boundary.
 
+The text API remains fail-closed until text-to-query-record encoding exists.
+`r_choose_runtime_precomputed()` is the production entry point for callers that
+already have a bounded query semcode/factor record; it delegates to the flat
+direct scorer and preserves factor-refusal attribution.
+
 Deliverable: a C API that accepts a query plus runtime candidates and returns a
 candidate index or `NONE`.
 
@@ -200,7 +205,8 @@ Status: **started**. `r_runtime_choose_flat()` combines the production semantic
 code score with `r_runtime_factor_score()` over explicit query/candidate records.
 It skips factor-rejected candidates, surfaces the first factor refusal when all
 candidates reject, ignores `sem_score`, preserves lowest-index tie resolution,
-and is not yet wired into text-based `r_choose_runtime`.
+and is wired through `r_choose_runtime_precomputed()`. Text-based
+`r_choose_runtime` remains fail-closed until query encoding exists.
 
 Deliverable: a flat candidate scan using the production semhash+factor scorer.
 

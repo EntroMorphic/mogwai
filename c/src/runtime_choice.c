@@ -307,3 +307,12 @@ int r_choose_runtime(const router_t *r,
     rtc_none(out, RTC_REASON_UNSUPPORTED_SCORER);
     return 0;
 }
+
+int r_choose_runtime_precomputed(const runtime_candidate_t *query,
+                                 int bits,
+                                 const runtime_candidate_t *cands,
+                                 int n_cands,
+                                 runtime_choice_t *out,
+                                 runtime_factor_reason_t *factor_reason_out) {
+    return r_runtime_choose_flat(query, bits, cands, n_cands, out, factor_reason_out);
+}
