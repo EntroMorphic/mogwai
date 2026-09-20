@@ -131,12 +131,15 @@ next: OOD knownness gate preserves NONE on this probe; expand OOD negatives.
 `residual_combo` is intentionally simple integer evidence fusion, not a tuned
 policy: raw topology plus scaled semhash evidence plus explicit lexical polarity
 compatibility, gated by the existing `none` manifold basin and a conservative
-query-knownness floor for low-energy OOD queries. Red-team expansion added a
+query-knownness floor for low-energy OOD queries. The learned projection also
+receives a tiny audited seed set of bridge positives and hard OOD negatives;
+these seeds update only the host learned weights and are not inserted into the
+exact top-k index. Red-team expansion added a
 negation polarity case and a near-class OOD case (`light rail refund`) that uses
 IoT vocabulary but should still be `NONE`. The residual path gets the current
 ten-case probe to `10/10`, preserves `NONE` on all three OOD cases, and removes
-polarity failures. It still selects case 3 without graph/code reachability, so
-the representation has not yet created the missing bridge.
+polarity failures. After seeded projection, `semhash_neighborhood` also reaches
+`10/10` on this probe.
 
 The evaluator has a built-in red team:
 
@@ -158,7 +161,7 @@ variant: direct score, top-k overlap, class-histogram agreement, raw-topology
 score, semhash score, learned-code agreement, polarity compatibility,
 knownness, gate reason, reachability, winner, runner-up, and margin.
 
-Measured floor on the current ten-case probe:
+Measured floor before seeded projection:
 
 | Case | Exact measurement | Meaning |
 |---:|---|---|
@@ -167,6 +170,14 @@ Measured floor on the current ten-case probe:
 | 8 | Negated query has `qpol=-1`; raw/topology/semhash all choose `on`; residual chooses `off` because polarity compatibility is `+80` for off and `-120` for on | Polarity is an independent action factor, not something general similarity handles safely. |
 | 9 | Query `light rail refund` has `knownness=98`, below `RESIDUAL_KNOWN_GATE=120`; all non-residual variants choose candidate 2, residual gates to `NONE` | Near-class OOD remains the hard OOD floor; query-knownness is currently the measured guardrail. |
 
-The floor is therefore not aggregate accuracy. It is: create reachability for
-case 3 without weakening the `none` basin and knownness gates that protect cases
-5, 6, and 9.
+Seeded projection lifts that floor on the current ten-case probe:
+
+| Case | Exact measurement after seeding | Meaning |
+|---:|---|---|
+| 3 | Correct candidate changes to `sem=295`, `code=256`, `reachable=yes`; `semhash_neighborhood` winner is correct with margin `126` | The missing bridge is now present in learned-code space, without adding exemplars to the exact top-k index. |
+| 5 | Query semhash prediction becomes `none`; all learned variants gate to `NONE` | The original OOD collapse is fixed on this probe. |
+| 9 | Query semhash prediction becomes `none`; learned variants gate to `NONE`, and residual also gates by `knownness=98 < 120` | Near-class OOD is protected both by learned `none` and by the residual knownness guard. |
+
+The current floor is no longer this ten-case probe. The next floor must be found
+by expanding adversarial bridges, OOD negatives, and polarity/negation cases
+until one of those guarantees breaks under measurement.

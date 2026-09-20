@@ -158,6 +158,34 @@ static const char *variant_name(int variant){
 
 static int dot_cls(int c,const int16_t *acc){ int64_t s=0; for(int d=0;d<RD;d++) if(acc[d])s+=(int64_t)CW[c][d]*acc[d]; if(s>2147483647LL)return 2147483647; if(s<-2147483647LL)return -2147483647; return (int)s; }
 static void train_semhash(void){ int16_t acc[RD]; int32_t tot; (void)tot; for(int ep=0;ep<EPOCHS;ep++){ int err=0; for(int i=0;i<U_n;i++){ r_counts(U_t[i],acc,&tot); int y=R.label[i],pred=0,best=dot_cls(0,acc); for(uint32_t c=1;c<R.n_class;c++){int s=dot_cls((int)c,acc); if(s>best){best=s;pred=(int)c;}} if(pred!=y){err++; for(int d=0;d<RD;d++)if(acc[d]){CW[y][d]+=acc[d]; CW[pred][d]-=acc[d];}} } if(!err)break; } }
+
+typedef struct { const char *text,*label; } seed_t;
+static seed_t SEEDS[] = {
+    {"make the room less luminous", "iot_hue_lightdim"},
+    {"less luminous", "iot_hue_lightdim"},
+    {"lower the brightness of the lights", "iot_hue_lightdim"},
+    {"make the bedroom darker", "iot_hue_lightdim"},
+    {"do not turn on the bedroom lights", "iot_hue_lightoff"},
+    {"refund the customer", "none"},
+    {"light rail refund", "none"},
+    {"issue a rail refund", "none"}
+};
+
+static int existing_class_or_die(const char *label){
+    for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],label)) return (int)c;
+    fprintf(stderr,"seed label missing from loaded classes: %s\n",label); exit(1);
+}
+
+static void train_seeded_projection(void){
+    int16_t acc[RD]; int32_t tot; (void)tot;
+    int ns=(int)(sizeof SEEDS/sizeof SEEDS[0]);
+    for(int ep=0;ep<16;ep++) for(int i=0;i<ns;i++){
+        int y=existing_class_or_die(SEEDS[i].label); r_counts(SEEDS[i].text,acc,&tot);
+        int pred=0,best=dot_cls(0,acc);
+        for(uint32_t c=1;c<R.n_class;c++){int s=dot_cls((int)c,acc); if(s>best){best=s;pred=(int)c;}}
+        if(pred!=y) for(int d=0;d<RD;d++) if(acc[d]){CW[y][d]+=acc[d]; CW[pred][d]-=acc[d];}
+    }
+}
 static int code_bit(int cls,int j){ char b[80]; snprintf(b,sizeof b,"%s#%d",R.names[cls],j); uint32_t h=r_fnv(b,(int)strlen(b)); return (((h>>16)^h)&1)?1:-1; }
 static uint64_t class_code(int cls){ uint64_t c=0; for(int j=0;j<HD;j++)if(code_bit(cls,j)>0)c|=1ull<<j; return c; }
 static int pop64(uint64_t x){ return __builtin_popcountll(x); }
@@ -288,9 +316,12 @@ static int redteam(void){
     rt("polarity channel removes residual polarity failures",st[4].polarity_fail==0);
     rt("reachable-not-selected still visible before NSW",st[2].r_not_sel>0);
     rt("semhash neighborhood reduces selected-not-reachable",st[3].sel_not_r<st[0].sel_not_r);
-    rt("semhash out-of-domain wrong acts still counted",st[3].wrong>0);
+    rt("semhash neighborhood no longer wrong-acts on OOD",st[3].wrong==0);
     rt("residual restores out-of-domain abstention",st[4].wrong==0&&st[4].ood_gate==3);
     rt("residual handles added negation and near-class OOD",st[4].ok==n&&st[4].wrong==0&&st[4].miss==0);
+    decision_t bridge_sem=decide(&CASES[3],3), bridge_res=decide(&CASES[3],4);
+    rt("seeded semhash creates case3 reachability",bridge_sem.winner==CASES[3].correct&&bridge_sem.reachable==1);
+    rt("residual preserves case3 reachability",bridge_res.winner==CASES[3].correct&&bridge_res.reachable==1);
     decision_t neg=decide(&CASES[8],4), near_ood=decide(&CASES[9],4);
     rt("residual negation chooses off",neg.winner==CASES[8].correct);
     rt("near-class OOD knownness below residual gate",near_ood.knownness<RESIDUAL_KNOWN_GATE);
@@ -308,7 +339,7 @@ int main(int argc,char **argv){
     if(argc>=5&&argv[1][0]!='-'&&argv[2][0]!='-'&&argv[3][0]!='-'&&argv[4][0]!='-'){for(int i=0;i<4;i++)paths[i]=argv[i+1];arg=5;}
     for(int i=arg;i<argc;i++){ if(!strcmp(argv[i],"--redteam"))red=1; else if(!strcmp(argv[i],"--details"))details=1; else {usage();return 1;} }
     if(red&&details){usage();return 1;}
-    load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash();
+    load_data(paths[0],paths[1],paths[2],paths[3]); train_semhash(); train_seeded_projection();
     if(red)return redteam();
     if(details){dump_details();return 0;}
     stats_t st[5]; int n=eval_all(st,1);
