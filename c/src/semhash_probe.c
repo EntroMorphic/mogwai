@@ -35,7 +35,9 @@ static char *xstrdup(const char *s){ char *p=strdup(s); if(!p){fprintf(stderr,"o
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
     const char*p=strstr(l,pat); if(!p)return 0; p+=strlen(pat);
-    while(*p==' ')p++; if(*p!='"')return 0; p++;
+    while(*p==' ')p++;
+    if(*p!='"')return 0;
+    p++;
     int n=0; while(*p&&*p!='"'&&n<cap-1){if(*p=='\\'&&p[1])p++;o[n++]=*p++;} o[n]=0; return 1; }
 static int isiot(const char*l){return !strncmp(l,"iot_",4);}
 
@@ -45,7 +47,9 @@ static void hs_add(const char*s){ char b[512]; r_norm(s,b,sizeof b); uint32_t h=
     for(int n=0;HS[h]&&n<HN;n++,h=(h+1)%HN) if(!strcmp(HS[h],b))return;
     if(HS[h]){fprintf(stderr,"hash set full\n");exit(1);} HS[h]=xstrdup(b); }
 static int hs_has(const char*s){ char b[512]; r_norm(s,b,sizeof b); uint32_t h=r_fnv(b,(int)strlen(b))%HN;
-    for(int n=0;HS[h]&&n<HN;n++,h=(h+1)%HN) if(!strcmp(HS[h],b))return 1; return 0; }
+    for(int n=0;HS[h]&&n<HN;n++,h=(h+1)%HN) if(!strcmp(HS[h],b))return 1;
+    return 0;
+}
 static void push(char**ta,char la[][RNAMELEN],int*n,int cap,const char*t,const char*l){
     if(*n>=cap){fprintf(stderr,"too many utterances (max %d)\n",cap);exit(1);}
     ta[*n]=xstrdup(t); if(la)snprintf(la[*n],RNAMELEN,"%s",l); (*n)++; }
@@ -92,8 +96,10 @@ static void load_data(const char *train,const char *val,const char *test,const c
     f=fopen(nlu,"r"); if(!f){perror(nlu);exit(1);} while(fgets(line,sizeof line,f)){
         char*fl[12]={0}; int nf=0,inq=0; char*p=line; fl[nf++]=p;
         for(;*p&&nf<12;p++){ if(*p=='"')inq=!inq; else if(*p==';'&&!inq){*p=0;fl[nf++]=p+1;} }
-        if(nf<10)continue; for(int i=0;i<nf;i++){char*s=fl[i];int L=(int)strlen(s); while(L&&(s[L-1]=='\n'||s[L-1]=='\r'))s[--L]=0; if(L>=2&&s[0]=='"'&&s[L-1]=='"'){s[L-1]=0;fl[i]=s+1;}}
-        if(strcmp(fl[2],"iot")||hs_has(fl[9]))continue; char lb[RNAMELEN]; snprintf(lb,sizeof lb,"iot_%s",fl[3]); push(U_t,U_l,&U_n,MAXU,fl[9],lb); hs_add(fl[9]);
+        if(nf<10)continue;
+        for(int i=0;i<nf;i++){char*s=fl[i];int L=(int)strlen(s); while(L&&(s[L-1]=='\n'||s[L-1]=='\r'))s[--L]=0; if(L>=2&&s[0]=='"'&&s[L-1]=='"'){s[L-1]=0;fl[i]=s+1;}}
+        if(strcmp(fl[2],"iot")||hs_has(fl[9]))continue;
+        char lb[RNAMELEN]; snprintf(lb,sizeof lb,"iot_%s",fl[3]); push(U_t,U_l,&U_n,MAXU,fl[9],lb); hs_add(fl[9]);
     } fclose(f);
     inv_disjoint("index vs DEV",U_t,U_n,V_t,V_n); inv_disjoint("index vs TEST",U_t,U_n,T_t,T_n);
     memset(&R,0,sizeof R); R.magic=RMAGIC; R.dim=RD; R.n_index=U_n; R.threshold=RSHIP_TH;
@@ -111,7 +117,9 @@ static void load_data(const char *train,const char *val,const char *test,const c
 
 static int dot_cls(int c,const int16_t *acc){
     int64_t s=0; for(int d=0;d<RD;d++) if(acc[d]) s+=(int64_t)CW[c][d]*acc[d];
-    if(s>2147483647LL)return 2147483647; if(s<-2147483647LL)return -2147483647; return (int)s;
+    if(s>2147483647LL)return 2147483647;
+    if(s<-2147483647LL)return -2147483647;
+    return (int)s;
 }
 
 static void train_semhash(void){

@@ -296,7 +296,8 @@ int main(int argc, char **argv) {
     const char *paths[4]={"data/train.json","data/validation.json","data/test.json","data/nlu_home.csv"};
     int arg=1, k=8, demo=0, redteam=0; const char *query=NULL; const char *choices[MAXC]; int nc=0;
     if(argc>=5 && argv[1][0]!='-' && argv[2][0]!='-' && argv[3][0]!='-' && argv[4][0]!='-'){
-        for(int i=0;i<4;i++) paths[i]=argv[1+i]; arg=5;
+        for(int i=0;i<4;i++) paths[i]=argv[1+i];
+        arg=5;
     }
     for(int i=arg;i<argc;i++){
         if(!strcmp(argv[i],"--demo")) demo=1;
