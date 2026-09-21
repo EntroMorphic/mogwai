@@ -298,6 +298,30 @@ measured about 9.6 ms; dual-core rows are skipped because the target has one cor
 That proves the blob/parser/scoring path is portable beyond Xtensa, not that the
 C6 product firmware, pins, WiFi reserve or power budget have been validated.
 
+Footprint, current tree:
+
+| area | item | footprint / runtime |
+|---|---|---:|
+| shipping router | `router.bin` blob size | 147,377 B |
+| shipping router | resident index | 137 KB |
+| shipping router | index vectors | 3840 |
+| shipping router | SRAM residency | 3840/3840, 100% |
+| shipping router | flash use during query | untouched in shipped scan |
+| ESP32 latency | classic ESP32, no WiFi | 4.3 ms/query |
+| ESP32 latency | classic ESP32, WiFi associated | 4.3 ms/query |
+| ESP32-C6 validation | full-index one-core path | ~9.6 ms/query |
+| validation | host/device parity | 64/64 class and score |
+| heap | total free heap observed | ~295 KB |
+| heap | largest contiguous block observed | ~164 KB |
+| memory tier | DRAM vector cost | 1154 ns/vector |
+| memory tier | IRAM-only vector cost | 1386 ns/vector |
+| memory tier | flash-mapped vector cost | 2474 ns/vector |
+| power | scan current delta | 23 mA |
+| power | energy per query | 0.496 mJ |
+| method artifact | `results/log_triage.mog1` | 3,180 B |
+| method artifact | runtime status | host-only currently |
+| regression | current check count | 105 |
+
 † v1 layout, not re-run under v2.
 ‡ measured associated (DHCP lease held) and unchanged by it: 4.33–4.52 ms
   associated against 4.29–4.51 ms merely initialised. A live TLS fetch over the
