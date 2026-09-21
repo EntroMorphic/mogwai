@@ -40,7 +40,10 @@ static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static int T_n;
 static router_t R; static tvec *TI; static uint16_t *ACT; static int32_t CW[RMAXCLS][RD];
-static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0,0};
+/* Runtime-choice diagnostics are pinned to the index used when their frozen
+   promotion cases were recorded. The actuator router may ship a different
+   negative selector without silently changing this separate probe. */
+static prune_opt PRUNE = {0,0,0,2685,0,0};
 static int FACTORS = FF_ALL;
 static int CODE_BITS = HD;
 static int CODE_OMIT_BIT = -1;

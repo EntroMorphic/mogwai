@@ -41,7 +41,7 @@ static int wcmp(const uint32_t *a, const uint32_t *b, size_t bytes) {
  * the fallback degrades gracefully rather than falling off a cliff.
  *
  * It is kept because the condition that needs it is a function of index size,
- * not of the format: raise RSHIP_NEGTOP, widen RD, or add classes and DRAM runs
+ * not of the format: raise RSHIP_NEGBOUND, widen RD, or add classes and DRAM runs
  * out again.
  */
 /* Allocate a chunk from the IRAM-ONLY pool, or return NULL.

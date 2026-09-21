@@ -54,11 +54,13 @@ near-duplicate explanation was tested and refuted. Every change therefore costs
 a budget unit to evaluate. No action known — recorded so it is not rediscovered.
 
 ## Closed
-- **P2-1 · The held-out cost of the 240 KB index.** Test evaluation #6, budget
-  entry 8: `recall 84.1% ±2.5, fa 12, wa 15, missed 20` against the unpruned
-  baseline's `84.1%, fa 8, wa 15, missed 20`. Four of four pre-registered
-  predictions held, no falsifier fired, `missed` and `wa` bit-identical. The
-  240 KB index stands.
+- **P2-1 · The held-out cost of the pruned resident index.** Test evaluation #6,
+  budget entry 8: `recall 84.1% ±2.5, fa 12, wa 15, missed 20` against the
+  unpruned baseline's `84.1%, fa 8, wa 15, missed 20`. Evaluation #7 retested the
+  same 3840-vector budget with boundary-witness selection at `fa 11`. Four of
+  four pre-registered predictions held, no falsifier fired, `missed` and `wa`
+  bit-identical. The pruned resident index stands; v1 documentation calls it 240
+  KB, while the current shipped v2 blob stores it in 137 KB.
 
 - **P0-1 · Three commits existed only on one disk.** The upstream `.git` and its
   own bundle were co-located on a disk at 95% capacity, and three commits were

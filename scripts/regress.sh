@@ -101,6 +101,10 @@ BAD_MKBLOB=0
 c/bin/mkblob /no/such/train data/validation.json data/test.json data/nlu_home.csv /tmp/_bad.bin >/tmp/_bad_mkblob.out 2>&1 || BAD_MKBLOB=$?
 rm -f /tmp/_bad.bin /tmp/_bad_mkblob.out
 chk "mkblob rejects missing inputs without crashing" "$BAD_MKBLOB" "1"
+c/bin/mkblob $D /tmp/_unpruned.bin --unpruned --threshold=136 >/tmp/_unpruned.out 2>&1
+UNPRUNED_N=$(od -An -tu4 -j8 -N4 /tmp/_unpruned.bin | tr -d ' ')
+rm -f /tmp/_unpruned.bin /tmp/_unpruned.out
+chk "mkblob --unpruned clears shipped pruning" "$UNPRUNED_N" "10500"
 # Dropping these from esp32_router/main/CMakeLists.txt fails ASYMMETRICALLY:
 # main.c stops compiling (TPOPCNT undeclared) but product.c builds clean and
 # silently runs `#if TPOPCNT == 1` as false - shipping the SWAR path instead of
@@ -119,7 +123,7 @@ chk "sdkconfig.wifi pins the measured settings" \
 # still fire. The rule was violated twice by hand before it was automated - once
 # inflating a claimed improvement from +3 to +38 commands.
 CTL=0
-for m in "--ship --abstain" "--ship --corrob" "--prune-negtop=2685 --fixth=136 --dumpdisp"; do
+for m in "--ship --abstain" "--ship --corrob" "--prune-negbound=2685 --fixth=136 --dumpdisp"; do
   CTL=$(( CTL + $(c/bin/compare $m 2>&1 | grep -c 'reproduces the product') ))
 done
 chk "decision experiments assert their control" "$CTL" "3"
@@ -177,7 +181,7 @@ chk "blob reproducible byte-identical" "$BLOB_RC" "0"
 echo "=== SHIPPED CONFIG (ROW: 1=ROW 2=split 3=variant 4=acc 5=se 6=fa 7=wa 8=missed 9=kb 10=th 11=n) ==="
 row=$(c/bin/compare $D --ship 2>&1 | grep '^ROW' | grep twin)
 chk "recall 85.9"   "$(echo "$row" | cut -f4)"  "85.9"
-chk "fa 6"          "$(echo "$row" | cut -f6)"  "6"
+chk "fa 4"          "$(echo "$row" | cut -f6)"  "4"
 chk "wa 13"         "$(echo "$row" | cut -f7)"  "13"
 chk "missed 14"     "$(echo "$row" | cut -f8)"  "14"
 chk "index 240 KB"  "$(echo "$row" | cut -f9)"  "240"
@@ -193,6 +197,7 @@ c/bin/compare $D --leak >/dev/null 2>&1; LEAK_RC=$?
 chk "leak guard ABORTS on a deliberate leak" "$LEAK_RC" "2"
 chk "invariant RAN and reported on DEV"  "$(echo "$o" | grep -c 'index vs DEV .*disjoint')"  "1"
 chk "invariant RAN and reported on TEST" "$(echo "$o" | grep -c 'index vs TEST .*disjoint')" "1"
+chk "ambiguous train text resolves to none" "$(echo "$o" | grep -c 'production hygiene: 1 normalized train texts resolve to none')" "1"
 chk "dev  code-overlap zero" "$(echo "$o" | grep 'diag. DEV'  | grep -c 'entry: 0 ')" "1"
 chk "test code-overlap zero" "$(echo "$o" | grep 'diag. TEST' | grep -c 'entry: 0 ')" "1"
 
@@ -233,7 +238,7 @@ chk "runtime_choice_holdout_b red-team passes 100/100" "$(c/bin/runtime_choice_e
 chk "runtime_choice_holdout_c red-team passes 100/100" "$(c/bin/runtime_choice_eval --holdout-c-redteam 2>/dev/null | grep -c '^RUNTIME_CHOICE_HOLDOUT_C_REDTEAM checks=51/51 score=100/100$')" "1"
 chk "runtime_choice_floor pins the factor floor" "$(c/bin/runtime_choice_eval --floor 2>/dev/null | grep -c '^RUNTIME_CHOICE_FLOOR passing_masks=1/32$')" "1"
 chk "runtime_choice_bit_floor pins semhash width" "$(c/bin/runtime_choice_eval --bit-floor 2>/dev/null | grep -c '^RUNTIME_CHOICE_BIT_FLOOR min_bits=21 passing=44/64$')" "1"
-chk "runtime_choice_bit_forensic explains the cliff" "$(c/bin/runtime_choice_eval --bit-forensic 2>/dev/null | grep -c '^BIT_FLOOR_FAIL bits=20 set=holdout_c case=10 correct=0 winner=1 query="clean the flat" winner_text="make coffee"')" "1"
+chk "runtime_choice_bit_forensic explains the cliff" "$(c/bin/runtime_choice_eval --bit-forensic 2>/dev/null | grep -c '^BIT_FLOOR_FAIL bits=20 set=holdout_c case=10 correct=0 winner=1 query="clean the flat" winner_text="make coffee" score=284 margin=7')" "1"
 chk "runtime_choice_fit_sweep shows 20-bit score artifact" "$(c/bin/runtime_choice_eval --fit-sweep 2>/dev/null | grep -c '^RUNTIME_CHOICE_FIT_SWEEP bits=20 passing=1/7$')" "1"
 chk "runtime_choice_bit_loo isolates the late bit" "$(c/bin/runtime_choice_eval --bit-loo 2>/dev/null | grep -c '^RUNTIME_CHOICE_BIT_LOO bits=21 passing=20/21$')" "1"
 chk "runtime_choice production parity proves frozen cases" "$(c/bin/runtime_choice_eval --production-parity 2>/dev/null | grep -c '^RUNTIME_CHOICE_PRODUCTION_PARITY checks=4/4 score=100/100$')" "1"

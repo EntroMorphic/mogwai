@@ -414,12 +414,12 @@ alternative decision rule was compared against a "baseline" that thresholded the
 best *positive* while ignoring whether a negative outranked it — silently
 deleting the `none` check the router already has. The first time it inflated a
 claimed improvement from **+3 commands to +38**. The second time the control
-reported `fa=24` against a product that does `fa=6`, and one of the two baseline
+reported `fa=24` against a product that now does `fa=4`, and one of the two baseline
 lines turned out to be a **hardcoded string that was never computed at all**.
 
 Twice is not a discipline problem. `control_or_die()` now takes each
 experiment's own computed baseline and, if it does not reproduce the shipped
-`fa=6 wa=13 missed=14 iot_ok=165 th=136`, prints why and **exits before a single
+`fa=4 wa=13 missed=14 iot_ok=165 th=136`, prints why and **exits before a single
 treatment number reaches stdout**. Not a warning in the report — the comparison
 cannot exist unless its control is valid.
 

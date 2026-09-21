@@ -22,7 +22,7 @@ static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static int T_n;
 static router_t R; static tvec *TI; static uint16_t *ACT;
 static int32_t CW[RMAXCLS][RD];
-static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0,0};
+static prune_opt PRUNE = {0,0,0,0,RSHIP_NEGBOUND,0};
 
 typedef struct { uint64_t code; int pred, score; } sh_t;
 typedef struct {

@@ -4,6 +4,7 @@
 #include <string.h>
 
 int prune_parse(const char *a, prune_opt *o) {
+    if (!strcmp(a, "--unpruned")) { memset(o, 0, sizeof *o); return 1; }
     if (!strcmp(a, "--prune-dup")) { o->dup = 1; return 1; }
     if (!strcmp(a, "--prune-cnn")) { o->cnn = 1; return 1; }
     if (!strncmp(a, "--prune-neg=", 12)) { o->neg_k = atoi(a + 12); return 1; }
@@ -105,9 +106,9 @@ int prune_index(char **U_t, char (*U_l)[RNAMELEN], router_t *R,
      * sitting on the boundary AROUND POSITIVE space: the ones a command-like
      * non-command would land on.
      *
-     * Measured motivation: the shipped 2685-negative index has fa=6 on dev, the
-     * unpruned 9345-negative index has fa=1. The rejection information existed
-     * and negtop discarded it.
+     * Measured motivation: the previous 2685-negative negtop index had fa=6 on
+     * dev, while the unpruned 9345-negative index had fa=1. The rejection
+     * information existed and negtop discarded it.
      *
      * So count differently: for each POSITIVE exemplar find its nearest
      * negatives and credit those. Same budget, same leave-one-out discipline,

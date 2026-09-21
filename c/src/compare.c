@@ -19,6 +19,7 @@
 static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[MAXV]; static char V_l[MAXV][RNAMELEN]; static int V_n;
 static char *T_t[MAXT]; static char T_l[MAXT][RNAMELEN]; static int T_n;
+static char C_t[MAXU][512]; static char C_l[MAXU][RNAMELEN]; static uint8_t C_conf[MAXU]; static int C_n;
 static router_t R; static tvec *TI; static tvec TSIG[RMAXCLS];
 static int SIGMODE = 0;  /* re-open: mask choice also came from leaked dev */
 static int NOVETO  = 1;   /* signature veto DROPPED: hash-derived, measured inert */
@@ -61,6 +62,7 @@ static int js(const char*l,const char*k,char*o,int cap){
     p++;
     int n=0; while(*p&&*p!='"'&&n<cap-1){if(*p=='\\'&&p[1])p++;o[n++]=*p++;} o[n]=0; return 1; }
 static int isiot(const char*l){return !strncmp(l,"iot_",4);}
+static const char *prod_label(const char *l){ return isiot(l) ? l : "none"; }
 static void push(char**ta,char la[][RNAMELEN],int*n,int cap,const char*t,const char*l){
     if (*n >= cap) { fprintf(stderr,"  corpus capacity exceeded (%d)\n",cap); exit(1); }
     ta[*n]=strdup(t); if(!ta[*n]){fprintf(stderr,"  out of memory\n");exit(1);}
@@ -78,6 +80,20 @@ static void hs_add(const char*s){ char b[512]; r_norm(s,b,sizeof b);
 static int hs_has(const char*s){ char b[512]; r_norm(s,b,sizeof b);
     uint32_t h=r_fnv(b,(int)strlen(b))%HN;
     while(HS[h]){ if(!strcmp(HS[h],b))return 1; h=(h+1)%HN; } return 0; }
+static int c_find_norm(const char *s){ char b[512]; r_norm(s,b,sizeof b);
+    for(int i=0;i<C_n;i++) if(!strcmp(C_t[i],b)) return i; return -1; }
+static void c_add_train(const char *t,const char *l){ char b[512]; r_norm(t,b,sizeof b);
+    const char *pl=prod_label(l); int i=c_find_norm(t);
+    if(i<0){ if(C_n>=MAXU){fprintf(stderr,"  too many normalized train texts\n");exit(1);}
+        snprintf(C_t[C_n],sizeof C_t[C_n],"%s",b); snprintf(C_l[C_n],RNAMELEN,"%s",pl); C_n++; return; }
+    if(strcmp(C_l[i],pl)){ C_conf[i]=1; snprintf(C_l[i],RNAMELEN,"none"); }
+}
+static const char *c_prod_label(const char *t,const char *l){ int i=c_find_norm(t); return (i>=0&&C_conf[i]) ? "none" : prod_label(l); }
+static void audit_train_conflicts(const char *path){ char line[8192],t[512],l[RNAMELEN]; FILE *f=open_corpus(path);
+    while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)) c_add_train(t,l);
+    fclose(f); int n=0; for(int i=0;i<C_n;i++) n+=C_conf[i]!=0;
+    if(n && !ROUTE1 && !REPL) fprintf(stderr,"  production hygiene: %d normalized train texts resolve to none because labels conflict\n",n);
+}
 
 /* each scorer returns the best score and the class it would emit (pre-threshold) */
 typedef struct { int score, cls; } hit;
@@ -737,7 +753,9 @@ static void abstain(void) {
            was a hardcoded string that was never evaluated against anything. */
         int bfa=0,bwa=0,bms=0,bok=0;
         for (int i = 0; i < V_n; i++) {
-            const char *p = (P[i] > RSHIP_TH && P[i] - N[i] > 0) ? R.names[C[i]] : "none";
+            hit h = score_ter(V_t[i]);
+            int c = (h.score > RSHIP_TH) ? h.cls : -1;
+            const char *p = c < 0 ? "none" : R.names[c];
             int gn = !strcmp(V_l[i], "none");
             if (!gn && !strcmp(p, V_l[i])) bok++;
             if (!strcmp(p, V_l[i])) continue;
@@ -1151,7 +1169,9 @@ static void corrob(void) {
     printf("  no rescue of a \"none\" verdict.\n\n");
     {   int bfa=0,bwa=0,bms=0,bok=0;
         for (int i = 0; i < V_n; i++) {
-            const char *p = (P[i] > th && P[i] > Nn[i]) ? R.names[C[i]] : "none";
+            hit h = score_ter(V_t[i]);
+            int c = (h.score > th) ? h.cls : -1;
+            const char *p = c < 0 ? "none" : R.names[c];
             int gn = !strcmp(V_l[i], "none");
             if (!gn && !strcmp(p, V_l[i])) bok++;
             if (!strcmp(p, V_l[i])) continue;
@@ -1189,7 +1209,7 @@ static void corrob(void) {
                 if (gn) fa++; else if (!strcmp(p, "none")) ms++; else wa++;
             }
             printf("  %-8d %-8d %5d %5d %8d %8d   %s\n", D, M, fa, wa, ms, ok,
-                   (di == 0 && mi == 0) ? "<- shipped (no rescue)" : "");
+                   (di == 0 && mi == 0) ? "<- no rescue under P/N rule" : "");
         }
     }
     /* The raw table above compares against ONE shipped point. That is not the
@@ -1241,20 +1261,20 @@ static void corrob(void) {
  * function, and if the baseline does not reproduce the shipped numbers the
  * process exits before a single treatment figure is printed. */
 static void control_or_die(const char *what, int fa, int wa, int ms, int ok, int th) {
-    if (FIXTH != RSHIP_TH || PRUNE.neg_top != RSHIP_NEGTOP || PRUNE.neg_bound
+    if (FIXTH != RSHIP_TH || PRUNE.neg_top || PRUNE.neg_bound != RSHIP_NEGBOUND
         || PRUNE.neg_halo || PRUNE.cnn || PRUNE.dup || PRUNE.neg_k > 1) {
         printf("  [control] not the shipped configuration — assertion skipped\n");
         return;
     }
-    if (fa == 6 && wa == 13 && ms == 14 && ok == 165 && th == RSHIP_TH) {
+    if (fa == 4 && wa == 13 && ms == 14 && ok == 165 && th == RSHIP_TH) {
         printf("  [control] %s baseline reproduces the product: "
-               "fa=6 wa=13 missed=14 iot_ok=165 th=%d\n", what, th);
+               "fa=4 wa=13 missed=14 iot_ok=165 th=%d\n", what, th);
         return;
     }
     fprintf(stderr,
         "\n  *** CONTROL FAILED (%s) — METHOD 19 ***\n"
         "      this experiment's baseline gave  fa=%d wa=%d missed=%d ok=%d th=%d\n"
-        "      the shipped product gives        fa=6 wa=13 missed=14 ok=165 th=%d\n"
+        "      the shipped product gives        fa=4 wa=13 missed=14 ok=165 th=%d\n"
         "      The control does not reproduce the product, so any treatment\n"
         "      number computed against it is meaningless. Aborting before one\n"
         "      is printed.\n\n", what, fa, wa, ms, ok, th, RSHIP_TH);
@@ -1783,6 +1803,7 @@ static void usage(void) {
 "  --test                 evaluate on the test split. Prefer `make testset`.\n"
 "\n"
 "INDEX PRUNING\n"
+"  --unpruned             clear every prune selector\n"
 "  --prune-dup            drop identical codes (measured: zero exist at d=256)\n"
 "  --prune-cnn            drop negatives that are nobody's nearest neighbour\n"
 "  --prune-neg=K          keep 1-in-K negatives\n"
@@ -2395,7 +2416,7 @@ int main(int argc,char**argv){
         else if (!strcmp(a,"--corrob")) CORROB=1;
         else if (!strcmp(a,"--dumpdisp")) DUMPDISP=1;
         else if (!strcmp(a,"--prune-diag")) PRUNEDIAG=1;
-        else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_top=RSHIP_NEGTOP; }
+        else if (!strcmp(a,"--ship")) { FIXTH=RSHIP_TH; PRUNE.neg_bound=RSHIP_NEGBOUND; }
         else if (prune_parse(a,&PRUNE)) { /* consumed */ }
         else { fprintf(stderr,"  unknown flag: %s\n  try --help\n", a); return 1; }
     }
@@ -2433,6 +2454,7 @@ int main(int argc,char**argv){
             fprintf(bf,"\n"); fclose(bf); }
         fprintf(stderr,"  *** TEST SET TOUCHED (use #%d). Every touch is a chance to overfit. ***\n",used);
     } else if(!ROUTE1 && !REPL) fprintf(stderr,"  reporting on VALIDATION (pass --test to evaluate on test)\n");
+    audit_train_conflicts(argv[1]);
     char line[8192],t[512],l[RNAMELEN];
     FILE*f;
     /* TEST is loaded FIRST so the index can exclude any string that
@@ -2446,11 +2468,11 @@ int main(int argc,char**argv){
        from it is n=59 and cannot resolve anything. Train has 769. */
     f=open_corpus(argv[1]); int ti=0, tn=0;
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)){
-        int io=isiot(l);
+        const char *pl=c_prod_label(t,l); int io=strcmp(pl,"none")!=0;
         if(hs_has(t)) continue;                 /* MASSIVE train repeats strings */
-        if(io && (ti++ % 4)==0){ push(V_t,V_l,&V_n,MAXV,t,l); if(!LEAKTEST) hs_add(t); continue; }
+        if(io && (ti++ % 4)==0){ push(V_t,V_l,&V_n,MAXV,t,pl); if(!LEAKTEST) hs_add(t); continue; }
         if(!io && (tn++ % 8)==0){ push(V_t,V_l,&V_n,MAXV,t,"none"); hs_add(t); continue; }
-        push(U_t,U_l,&U_n,MAXU,t,io?l:"none"); hs_add(t);
+        push(U_t,U_l,&U_n,MAXU,t,pl); hs_add(t);
     }
     fclose(f); int n_train=U_n;
     f=open_corpus(argv[2]);
@@ -2477,6 +2499,7 @@ int main(int argc,char**argv){
     inv_disjoint("index vs TEST", U_t, U_n, T_t, T_n);
     memset(&R,0,sizeof R); R.magic=RMAGIC; R.dim=RD; R.n_index=U_n;
     for(int i=0;i<U_n;i++){ int fnd=-1;
+        if(strcmp(U_l[i],"none") && !isiot(U_l[i])){fprintf(stderr,"  non-production class in index: %s\n",U_l[i]);return 1;}
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){fnd=c;break;}
         if(fnd<0){
             if(R.n_class>=RMAXCLS){fprintf(stderr,"  too many classes (max %d): %s\n",RMAXCLS,U_l[i]);return 1;}

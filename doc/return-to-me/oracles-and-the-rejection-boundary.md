@@ -510,7 +510,7 @@ utterance talks like this", and the remedy is stored utterances that do.
 
 # Coverage audit: where does the failing vocabulary live?
 
-*`compare --prune-negtop=0 --fixth=136 --coverage` and `--rankoracle`. Dev only.*
+*`compare --unpruned --fixth=136 --coverage` and `--rankoracle`. Dev only.*
 
 Prompted by SSTT (`../sstt/`), whose headline is the **mirror image** of this
 one: *"zero retrieval failures — every correct class is retrievable from 60,000
@@ -629,7 +629,7 @@ index-only.
 ## Result, identical budget (2685 negatives, 3840 vectors, 240 KB)
 
     criterion         fa   wa  missed   recall
-    negtop             6   13    14     85.9%   <- shipped
+    negtop             6   13    14     85.9%   <- previous shipped
     negbound K=1       3   13    14     85.9%
     negbound K=2       3   13    14     85.9%
     negbound K=4       4   13    14     85.9%
@@ -843,10 +843,10 @@ and no second channel at all.
 ## And METHOD 19 fired again
 
 The first version of this experiment reported a baseline of `fa=24` against the
-shipped `fa=6`, because it thresholded the best *positive* while ignoring
+then-shipped `fa=6`, because it thresholded the best *positive* while ignoring
 whether a negative outranked it — dropping the none-check, the exact strawman
 METHOD 19 was written for two days earlier. Caught by the rule, not by judgement.
-The corrected baseline reproduces `th=136 ok=165 fa=6 wa=13 missed=14` exactly.
+The corrected baseline reproduced `th=136 ok=165 fa=6 wa=13 missed=14` exactly.
 
 ---
 
@@ -917,7 +917,7 @@ spend budget without it appearing in the audit log as two touches.)*
 Four findings against the section above. Two of the claims do not survive.
 
 **1. I applied METHOD 19 to the diagnostic only after publishing it.** The dump
-does reproduce the product — `fa=6 wa=13 missed=14 ok=165`, and the two dumps are
+reproduced the then-shipped product — `fa=6 wa=13 missed=14 ok=165`, and the two dumps are
 row-aligned on both index and text, 0 mismatches of 1527 — but I checked *after*
 reporting the transition table, not before. The rule exists because a control is
 worthless once you already believe the treatment.

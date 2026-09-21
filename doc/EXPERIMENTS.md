@@ -401,8 +401,9 @@ The cnn+2 blob flashed in the previous section therefore ran at 136 instead of
 passed**, because the host reference queries were computed with the same wrong
 value. That is the blind spot worth naming: *parity proves host == device, it
 does not prove either is correct.* Fixed: `mkblob` now refuses to guess and
-errors out telling you to run `compare` and pass `--threshold=N`. Verified the
-unpruned blob is byte-identical to the shipped one.
+errors out telling you to run `compare` and pass `--threshold=N`. At the time,
+the unpruned blob was the shipped one, so this also verified byte identity
+against the device artifact then in use.
 
 **2. Content/size confound.** The three flashed indexes differed in content as
 well as size, so byte-proportionality could have been a content effect (branch
@@ -697,7 +698,8 @@ than the history supports. Budget: 2 used.
 ## Raising the threshold for precision — the knob does not do what I claimed
 
 > **The curve in this section is the UNPRUNED 656 KB index**, which has `fa=1`.
-> The shipped index is 240 KB with `fa=6`, so its curve is different and the
+> The current shipped 3840-vector index has `fa=4` on dev and is 137 KB in the v2
+> blob format, so its curve is different and the
 > "flat at 1" observation below does not describe it. The conclusion survives on
 > the shipped index for a different reason — see
 > [the same knob on the shipped index](#the-same-knob-on-the-shipped-index--and-where-fa-actually-comes-from).
@@ -709,7 +711,7 @@ on a genuine command). Collapsing them into "wrong" hid the safety-critical one.
 `fa=1` + `wa=13`. One actuation on a non-command out of 1335 negatives (0.07%).
 
     th    unbidden(fa)  wrong_act(wa)  missed  iot_acc
-    136        1             13          14     85.9%   <- shipped
+    136        1             13          14     85.9%   <- shipped threshold
     148        1             10          25     81.8%
     160        1             10          37     75.5%
     172        1              5          63     64.6%
@@ -802,8 +804,10 @@ figure (84.1% +-2.5) is at th=136 and does NOT describe the shipped config.
 
 > No longer true, twice over: 136 was restored, and
 > [test evaluation #6](#test-evaluation-6--result-the-invariance-transferred-and-the-cost-is-half-what-i-predicted)
-> measured the shipped 240 KB index directly at 84.1% +-2.5, fa 12, wa 15,
-> missed 20.
+> measured the previous shipped 240 KB index directly at 84.1% +-2.5, fa 12,
+> wa 15, missed 20. [Test evaluation #7](#test-evaluation-7--result-no-falsifier-fired-and-the-effect-is-one-event)
+> measured the current boundary-witness selector at fa 11 with `wa` and `missed`
+> unchanged.
 
 ## The accuracy metric is blind to false actuations — read every number above with this in mind
 
@@ -815,7 +819,7 @@ a plateau of 89.6%. Mapping the whole curve shows what the plateau actually is:
       40        11             15           5     89.6%
       96        10             15           5     89.6%
      120         7             15           5     89.6%
-     126         3             15           8     88.0%   <- shipped
+     126         3             15           8     88.0%   <- then-shipped
      136         1             13          14     85.9%
 
 **Peak dev accuracy occurs at th=-512 — the threshold disabled entirely.** The
@@ -1543,9 +1547,9 @@ prove nothing about it.
 
 | | v1 | v2 |
 |---|---:|---:|
-| blob | 261,036 B | **147,377 B** |
-| vector payload | 245,760 B | **132,101 B** |
-| SRAM resident | 245,760 B | **139,781 B** |
+| blob | 261,036 B | **147,259 B** |
+| vector payload | 245,760 B | **131,983 B** |
+| SRAM resident | 245,760 B | **139,663 B** |
 | bytes/vector | 64 | **34.4** |
 | device latency | 6.46 ms | **4.3 ms** |
 | with WiFi up | 9.3 ms at 70% resident | **4.3 ms at 100%** |
@@ -1850,9 +1854,11 @@ earlier condensation-beats-random result rather than overturning it.
 
 ## The shipped index is pruned to 240 KB for full SRAM residency
 
-> **Sizes below are the v1 64-byte format.** The pruning decision — 3840
-> vectors, `RSHIP_NEGTOP=2685`, `fa` 1 → 6 — stands unchanged and is what still
-> ships. Only the *storage* moved: the same 3840 vectors are 137 KB in the v2
+> **Sizes below are the v1 64-byte format.** The memory decision — 3840
+> vectors — stands unchanged. The current shipped selector is
+> `RSHIP_NEGBOUND=2685`, with `fa` 1 -> 4 on dev at the same byte/runtime
+> budget where the previous `RSHIP_NEGTOP=2685` selector gave `fa` 6. Only the
+> *storage* moved: the same 3840 vectors are 137 KB in the v2
 > exception format, not 240 KB, and route in 4.3 ms rather than 6.3. See
 > [The sign plane is an exception set](#the-sign-plane-is-an-exception-set-not-a-bit-plane).
 
@@ -1860,7 +1866,7 @@ The chunked lift put 34% of the 656 KB index in SRAM. The obvious next question
 is what size would be **100%** resident, and it has an exact answer: chunks are
 8 KB, the heap reserve is 40 KB, and 30 chunks is the most that fits — so
 **3840 vectors (30 x 128) is the largest fully-resident index.** That is a
-memory number, not an accuracy number, and it is now `RSHIP_NEGTOP = 2685` in
+memory number, not an accuracy number, and it is now `RSHIP_NEGBOUND = 2685` in
 `router.h`, next to `RSHIP_TH`.
 
 Measured on device, shipped firmware:
@@ -1928,19 +1934,22 @@ usually go.
 | | recall | fa | wa | missed | index | resident | per query |
 |---|---|---|---|---|---|---|---|
 | unpruned | 85.9% ±2.5 | **1** | 13 | 14 | 656 KB | 34% | 34.3 ms |
-| **SHIPPED** | 85.9% ±2.5 | **6** | 13 | 14 | 240 KB | **100%** | **6.3 ms** |
+| previous shipped `negtop` | 85.9% ±2.5 | **6** | 13 | 14 | 240 KB | **100%** | **6.3 ms** |
+| **SHIPPED `negbound`** | 85.9% ±2.5 | **4** | 13 | 14 | 240 KB / 137 KB v2 | **100%** | **4.3 ms** |
 
-Every column is identical except `fa`. The entire price of a 2.7x smaller
-footprint and a 5.4x faster scan is **5 extra false actuations in 1335 dev
-non-commands** — 0.45% against 0.07%.
+Every routing column is identical except `fa`. The current selector cuts the
+fully resident index's dev cost from **5 extra false actuations** to **3 extra
+false actuations in 1335 dev non-commands** — 0.30% against 0.07% — at the same
+vector count. The v2 exception format then stores those same decisions in 137 KB
+and routes in 4.3 ms.
 
-This is a deliberate regression on the one property
+This remains a deliberate regression on the one property
 [the metric section](#the-accuracy-metric-is-blind-to-false-actuations--read-every-number-above-with-this-in-mind)
 says to weigh above recall. It is recorded here as a trade that was *chosen*,
 not as an improvement. Two things make it defensible and neither makes it free:
-the IoT side is bit-for-bit unchanged, and 5 events is the same order as the
-±2.5 dev standard error, so dev cannot resolve this finely. The held-out
-question is pre-registered below.
+the IoT side is bit-for-bit unchanged, and the remaining 3 events are the same
+order as the ±2.5 dev standard error, so dev cannot resolve this finely. The
+held-out question is pre-registered below and then updated by evaluation #7.
 
 `mkblob` now **defaults** to this configuration, so `mkblob <data> out.bin`
 reproduces the shipped blob exactly and `regress.sh` can prove reproducibility
@@ -1952,7 +1961,7 @@ to prevent. It now compares the whole `prune_opt` struct against the shipped one
 and cannot go stale when a mode is added.
 
 To build the unpruned index instead:
-`mkblob <data> out.bin --prune-negtop=0 --threshold=136`. The firmware lifts
+`mkblob <data> out.bin --unpruned --threshold=136`. The firmware lifts
 whatever fits and is correct either way.
 
 ## Test evaluation #6 — PRE-REGISTERED: does the pruning cost transfer?
@@ -2002,10 +2011,11 @@ stronger thing to test and an easier thing to break.
 
 Run at `73a97fc`, clean tree, `make testset-ship` (`--test --ship`, threshold
 pinned at 136 — no auto-tuning, so no repeat of eval #5's deviation). Budget
-entry 8. 220 IoT, 2754 non-commands.
+entry 8. 220 IoT, 2754 non-commands. This was the previous shipped `negtop`
+selector; evaluation #7 below supersedes it for the current `negbound` selector.
 
-    TEST baseline (656 KB, eval #3)   recall 84.1% ±2.5   fa= 8   wa=15   missed=20
-    TEST SHIPPED  (240 KB, this run)  recall 84.1% ±2.5   fa=12   wa=15   missed=20
+    TEST baseline (656 KB, eval #3)        recall 84.1% ±2.5   fa= 8   wa=15   missed=20
+    TEST then-shipped (240 KB, negtop)     recall 84.1% ±2.5   fa=12   wa=15   missed=20
 
 ### Predictions scored: 4 of 4
 
@@ -2024,8 +2034,10 @@ rejected — and it survived the strongest test available to this project. None 
 the falsifiers fired: `missed` did not rise, `wa` did not move, `fa` landed well
 inside 10–30 and nowhere near the 30 that would have meant reverting.
 
-**The 240 KB index stands.** 2.7x smaller, 5.4x faster, four extra false
-actuations in 2754 non-commands.
+**The pruned resident index stood.** At this point it was 2.7x smaller, 5.4x
+faster, and four extra false actuations in 2754 non-commands. Evaluation #7
+kept the same 3840-vector budget but changed which negatives survive, reducing
+the held-out cost by one event.
 
 ### Where the prediction was wrong, and it matters
 
@@ -2221,9 +2233,9 @@ before starting an update.
 ## The same knob on the shipped index — and where fa actually comes from
 
 The curve above was measured on the unpruned 656 KB index, where `fa=1` and is
-flat from 136 to 184. The shipped 240 KB index has `fa=6`, so the question
-deserved re-asking: with six false actuations instead of one, several of them
-sitting just above the bar, does raising the threshold now buy precision?
+flat from 136 to 184. The then-shipped 240 KB `negtop` index had `fa=6`, so the
+question deserved re-asking: with six false actuations instead of one, several of
+them sitting just above the bar, does raising the threshold now buy precision?
 
 Measured on the shipped configuration (`compare --ship --curve`, dev, 192 IoT /
 1335 non-commands). `th=136` reproduces the shipped row exactly, so the curve and
@@ -2413,7 +2425,7 @@ result will be appended beside it whether or not it agrees.
 ### Treatment and control
 
     treatment   --prune-negbound=2685, K=4      (boundary witnesses)
-    control     --prune-negtop=2685             (the shipped selector)
+    control     --prune-negtop=2685             (then-shipped selector)
 
 Identical budget, identical vector count (3840), identical blob size (240 KB),
 identical scan, identical firmware. The only change is *which* negatives survive.
@@ -2722,3 +2734,24 @@ representation. The representation errors are dominated by cross-scenario
 confusion on non-IoT classes. On IoT — what the router ships on — the gap is
 17.3%, and the router's infrastructure (threshold, polarity, pruning) closes
 1.4 of that. The representation is at its ceiling on what it was built for.
+
+### Production response
+
+The 72.0% all-60 number is a representation stress test, not a production
+target. Production quality is governed by the IoT router's accept/reject curve,
+wrong-action count, and refusal behavior. The lowest-risk remediations are
+therefore applied to the production surface rather than to the benchmark score:
+
+- **Index hygiene:** normalized MASSIVE training texts that carry conflicting
+  production labels are treated as ambiguous evidence and resolve to `none`.
+  A contradictory utterance is allowed to teach refusal, not actuation.
+- **Catch-all handling:** non-`iot_*` MASSIVE labels, including
+  `general_quirky`, are outside the actuator surface and enter the production
+  router as `none` negatives.
+- **Task partitioning:** shipped blobs are restricted to production classes:
+  `none` plus `iot_*`. Any non-production label reaching the blob builder is a
+  build error.
+
+This is intentionally conservative. Recovering benchmark points by forcing a
+class on ambiguous or catch-all utterances is the wrong objective for hardware
+control; safe refusal is preferred over an unsupported actuation.

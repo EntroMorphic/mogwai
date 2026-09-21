@@ -30,7 +30,7 @@ static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static int T_n;
 static router_t R; static tvec *TI; static uint16_t *ACT;
-static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0,0};
+static prune_opt PRUNE = {0,0,0,0,RSHIP_NEGBOUND,0};
 
 static char *xstrdup(const char *s) {
     char *p = strdup(s);

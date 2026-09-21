@@ -26,6 +26,11 @@ Before any further representation work, partition the gap:
    categories. The clean number is not a new claim; it is an analysis of the
    existing result.
 
+4. **Production prefers refusal over benchmark recovery.** For the shipped
+   router, non-`iot_*` labels are negatives, `general_quirky` is not a product
+   class, and conflicting normalized training texts should resolve to `none`.
+   This may leave benchmark accuracy on the table; it improves actuator safety.
+
 ## Implementation Spec
 
 ### Step 1: quantify the data ceiling
@@ -69,3 +74,5 @@ categories. Does the cascade help on the "representation" partition?
 - [ ] The cascade is re-tested on clean data (dev only)
 - [ ] The result is recorded in EXPERIMENTS.md as an analysis, not a new test
       evaluation (no budget unit spent)
+- [x] Production blob/evaluation paths reject non-production classes and map
+      ambiguous training evidence to `none`

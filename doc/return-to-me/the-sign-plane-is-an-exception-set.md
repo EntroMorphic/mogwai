@@ -150,10 +150,10 @@ arm hammers the dense, evenly-signed corners real data never reaches.
 |---|---:|---:|
 | today, `m` + `s` planes | 245,760 B | — |
 | masks only | 122,880 B | |
-| + 1 count byte/vector + positions | **128,259 B** | **47.8% smaller** |
-| + `uint16` offset table + positions | 132,101 B | 46.2% smaller, *random access* |
+| + 1 count byte/vector + positions | **128,141 B** | **47.9% smaller** |
+| + `uint16` offset table + positions | 131,983 B | 46.3% smaller, *random access* |
 
-Whole file 261,036 -> 143,535 B (45.0%) sequential, or 147,377 B (43.5%) with
+Whole file 261,036 -> 143,417 B (45.1%) sequential, or 147,259 B (43.6%) with
 random access. Mean **34.4 bytes per vector**, down from 64.
 
 Prefer the offset-table variant unless profiling says otherwise: the sequential
@@ -188,7 +188,7 @@ through a live TLS handshake.
 - **`--exstream` is a feasibility proof, not a guard.** If the format is
   adopted, the bit-identity test belongs in the suite and on the device.
 - **The exception count is data-dependent.** 1,539 is a property of this corpus
-  and this prune. A different corpus, a different `RSHIP_NEGTOP`, or a
+  and this prune. A different corpus, a different `RSHIP_NEGBOUND`, or a
   re-centred encoder moves it. The format degrades gracefully — worst case is
   `mask + count + all-active-positions` — but the 34.4 B/vector figure is not a
   constant of nature.

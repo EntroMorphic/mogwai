@@ -12,12 +12,13 @@
 static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
 static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
 static char *T_t[4000]; static int T_n;
+static char C_t[MAXU][512]; static char C_l[MAXU][RNAMELEN]; static uint8_t C_conf[MAXU]; static int C_n;
 static router_t R; static tvec *TI;
 /* Default IS the shipped configuration, so `mkblob <data> out.bin` with no
    flags reproduces exactly what the device runs. regress.sh relies on that to
    prove router.bin is reproducible; if the default were "unpruned" that check
    would be comparing against a blob nobody ships. */
-static prune_opt PRUNE = {0,0,0,RSHIP_NEGTOP,0,0};
+static prune_opt PRUNE = {0,0,0,0,RSHIP_NEGBOUND,0};
 static int THRESH = -1;   /* --threshold=N; required when pruning */
 static int js(const char*l,const char*k,char*o,int cap){
     char pat[64]; snprintf(pat,sizeof pat,"\"%s\":",k);
@@ -42,12 +43,28 @@ static int hs_has(const char*s){ char b[512]; r_norm(s,b,sizeof b);
     while(HS[h]){ if(!strcmp(HS[h],b))return 1; h=(h+1)%HN; } return 0; }
 static void push(char**ta,char la[][RNAMELEN],int*n,int cap,const char*t,const char*l){
     if(*n>=cap){fprintf(stderr,"too many utterances (max %d)\n",cap);exit(1);} ta[*n]=xstrdup(t); if(la) snprintf(la[*n],RNAMELEN,"%s",l); (*n)++; }
+static const char *prod_label(const char *l){ return isiot(l) ? l : "none"; }
+static int c_find_norm(const char *t){ char b[512]; r_norm(t,b,sizeof b);
+    for(int i=0;i<C_n;i++) if(!strcmp(C_t[i],b)) return i; return -1; }
+static void c_add_train(const char *t,const char *l){ char b[512]; r_norm(t,b,sizeof b);
+    const char *pl=prod_label(l); int i=c_find_norm(t);
+    if(i<0){ if(C_n>=MAXU){fprintf(stderr,"too many normalized train texts\n");exit(1);}
+        snprintf(C_t[C_n],sizeof C_t[C_n],"%s",b); snprintf(C_l[C_n],RNAMELEN,"%s",pl); C_n++; return; }
+    if(strcmp(C_l[i],pl)){ C_conf[i]=1; snprintf(C_l[i],RNAMELEN,"none"); }
+}
+static const char *c_prod_label(const char *t,const char *l){ int i=c_find_norm(t); return (i>=0&&C_conf[i]) ? "none" : prod_label(l); }
+static void audit_train_conflicts(const char *path){ char line[8192],t[512],l[RNAMELEN]; FILE *f=xfopen(path,"r");
+    while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)) c_add_train(t,l);
+    fclose(f); int n=0; for(int i=0;i<C_n;i++) n+=C_conf[i]!=0;
+    if(n) fprintf(stderr,"  production hygiene: %d normalized train texts resolve to none because labels conflict\n",n);
+}
 
 int main(int argc,char**argv){
-    if(argc<6){fprintf(stderr,"usage: mkblob train val test nlu.csv out.bin [--prune-dup] [--prune-cnn] [--prune-neg=K] [--prune-negtop=N] [--prune-negbound=N]\n");return 1;}
+    if(argc<6){fprintf(stderr,"usage: mkblob train val test nlu.csv out.bin [--unpruned] [--prune-dup] [--prune-cnn] [--prune-neg=K] [--prune-negtop=N] [--prune-negbound=N]\n");return 1;}
     for(int i=6;i<argc;i++) if(!strncmp(argv[i],"--threshold=",12)) THRESH=atoi(argv[i]+12);
         else if(!prune_parse(argv[i],&PRUNE))
         { fprintf(stderr,"  unknown flag %s\n",argv[i]); return 1; }
+    audit_train_conflicts(argv[1]);
     char line[8192],t[512],l[RNAMELEN]; FILE*f;
     f=xfopen(argv[3],"r");
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l))
@@ -55,11 +72,11 @@ int main(int argc,char**argv){
     fclose(f);
     f=xfopen(argv[1],"r"); int ti=0,tn=0;
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)){
-        int io=isiot(l);
+        const char *pl=c_prod_label(t,l); int io=strcmp(pl,"none")!=0;
         if(hs_has(t)) continue;
-        if(io&&(ti++%4)==0){ push(V_t,V_l,&V_n,3000,t,l); hs_add(t); continue; }
+        if(io&&(ti++%4)==0){ push(V_t,V_l,&V_n,3000,t,pl); hs_add(t); continue; }
         if(!io&&(tn++%8)==0){ push(V_t,V_l,&V_n,3000,t,"none"); hs_add(t); continue; }
-        push(U_t,U_l,&U_n,MAXU,t,io?l:"none"); hs_add(t);
+        push(U_t,U_l,&U_n,MAXU,t,pl); hs_add(t);
     }
     fclose(f);
     f=xfopen(argv[2],"r");
@@ -83,6 +100,7 @@ int main(int argc,char**argv){
     inv_disjoint("index vs TEST", U_t,U_n,T_t,T_n);
     memset(&R,0,sizeof R); R.magic=RMAGIC; R.dim=RD; R.n_index=U_n;
     for(int i=0;i<U_n;i++){ int fnd=-1;
+        if(strcmp(U_l[i],"none") && !isiot(U_l[i])){fprintf(stderr,"non-production class in blob: %s\n",U_l[i]);return 1;}
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){fnd=c;break;}
         if(fnd<0&&R.n_class<RMAXCLS) snprintf(R.names[R.n_class++],RNAMELEN,"%.*s",RNAMELEN-1,U_l[i]); }
     int64_t sum[RD]; memset(sum,0,sizeof sum); int16_t acc[RD]; int32_t tot;
@@ -106,7 +124,7 @@ int main(int argc,char**argv){
            neg_top - a blob pruned with --prune-negtop would have taken RSHIP_TH
            silently, which is the exact failure this guard exists to prevent.
            Comparing the whole struct cannot go stale when a mode is added. */
-        static const prune_opt SHIPPED = {0,0,0,RSHIP_NEGTOP,0,0};
+        static const prune_opt SHIPPED = {0,0,0,0,RSHIP_NEGBOUND,0};
         if(THRESH>=0) R.threshold=THRESH;
         else if(!memcmp(&PRUNE,&SHIPPED,sizeof PRUNE)) R.threshold=RSHIP_TH;
         else {

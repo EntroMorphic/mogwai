@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Shipped pruning now uses boundary-witness selection (`RSHIP_NEGBOUND=2685`)
+  instead of NN-coverage selection at the same 3840-vector budget. Dev false
+  actuations move from `6` to `4` with `wa=13` and `missed=14` unchanged;
+  held-out false actuations move from `12` to `11` with `wa` and `missed`
+  unchanged.
+- Production blob/index hygiene now maps non-`iot_*` MASSIVE classes to `none`
+  and resolves conflicting normalized training texts to `none`, preferring
+  refusal over ambiguous actuation.
+- The shipped v2 router blob is regenerated at 147,259 B.
+
 ## v0.1.6 — 2026-08-25
 
 **The representation claim generalises beyond 9-class IoT routing.** Pre-registered

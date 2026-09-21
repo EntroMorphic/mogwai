@@ -56,8 +56,8 @@ qualification applies to every held-out figure in the README; the README says
 where the governance lives and points here rather than repeating it.
 
 The pruning trade deserves the same label. The shipped index (3840 vectors,
-`RSHIP_NEGTOP`) buys a 2.7× smaller footprint and a 5.4× faster scan for **four
-extra false actuations in 2754 held-out non-commands** (0.44% against 0.29%
+`RSHIP_NEGBOUND`) buys a 2.7× smaller footprint and a 5.4× faster scan for **three
+extra false actuations in 2754 held-out non-commands** (0.40% against 0.29%
 unpruned). It is a regression on the property this project weighs above recall,
 taken deliberately, and it is reversible per-application — the README shows the
 `mkblob` invocation that builds the unpruned blob.
@@ -87,7 +87,7 @@ them as sizing estimates. The assumptions and falsifiers are in
 - Optimisations are real and each preserved parity: 200.4 → 34.3 ms. The shipped
   index is then pruned to 3840 vectors for full SRAM residency → 6.3 ms, which is
   NOT parity-preserving in the same sense: it is a smaller index, and it costs fa
-  1 → 6 on dev. Stated as a trade, not an optimisation. Storing it in the v2
+  1 → 4 on dev. Stated as a trade, not an optimisation. Storing it in the v2
   exception format → 4.3 ms at 137 KB **is** parity-preserving: bit-identical
   routing, proved on hardware.
 

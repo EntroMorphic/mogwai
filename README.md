@@ -33,7 +33,7 @@ queries for device parity.
 - **Integer-only hot path**: `int32_t`, bit masks, popcount, and fixed layout.
 - **Deterministic decisions**: every accepted command has a score, margin, label,
   and nearest stored utterances on the host.
-- **MCU-sized footprint**: shipped `router.bin` is 147,377 B; resident index is
+- **MCU-sized footprint**: shipped `router.bin` is 147,259 B; resident index is
   137 KB; all 3840 vectors fit in ESP32 SRAM.
 - **Lossless v2 blob format**: the sign plane is stored as exceptions, preserving
   bit-identical routing while cutting resident bytes.
@@ -109,6 +109,9 @@ cd esp32_router
 idf.py -DPRODUCT=1 -DRD=256 -DTPOPCNT=1 build flash monitor
 ```
 
+To build the full unpruned index instead, pass `--unpruned --threshold=136` to
+`mkblob`; the firmware lifts whatever fits and preserves the same arithmetic.
+
 Build and flash the validation firmware:
 
 ```sh
@@ -142,7 +145,7 @@ an unmodified board.
 
 | area | result |
 |---|---:|
-| shipped blob | 147,377 B |
+| shipped blob | 147,259 B |
 | resident index | 137 KB |
 | index vectors | 3840 |
 | SRAM residency | 3840/3840 vectors |
@@ -150,7 +153,7 @@ an unmodified board.
 | ESP32 product latency with WiFi associated | 4.3 ms/query |
 | ESP32 validation parity | 64/64 class and score, bit-exact |
 | ESP32-C6 validation parity | 64/64 class and score, bit-exact |
-| validation suite | 105 checks |
+| validation suite | 107 checks |
 | scan energy, measured on devkit | 0.496 mJ/query |
 
 Latest attached-board validation:
@@ -168,7 +171,7 @@ The shipped operating point uses the twin-ternary representation with threshold
 
 | split | command recall | non-command set size | per query |
 |---|---:|---:|---:|
-| dev | 85.9% +/-2.5 | 1330 | 4.3 ms |
+| dev | 85.9% +/-2.5 | 1335 | 4.3 ms |
 | held-out | 84.1% +/-2.5 | 2754 | 4.3 ms |
 
 The representation result also holds on all 60 MASSIVE intents as pure nearest
