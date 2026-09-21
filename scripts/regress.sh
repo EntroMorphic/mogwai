@@ -31,7 +31,7 @@ chk "tools+tests build with zero warnings" "$BUILD_N" "0"
 if [ "$BUILD_N" != "0" ]; then
   printf '%s\n' "$BUILD_OUT" | grep -E 'warning|error' | head -20 | sed 's/^/        /'
 fi
-chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "24"
+chk "binary count" "$(ls c/bin | wc -l | tr -d ' ')" "25"
 
 echo "=== CORPUS ==="
 chk "corpus checksums" "$(shasum -a 256 -c data/SHA256 2>/dev/null | grep -c OK)" "4"
@@ -240,10 +240,15 @@ chk "runtime_choice production parity proves frozen cases" "$(c/bin/runtime_choi
 chk "runtime_choice production API fails closed" "$(c/bin/runtime_choice_api 2>/dev/null | grep -c '^RUNTIME_CHOICE_API checks=90/90$')" "1"
 chk "runtime_choice production promotion cases pass" "$(c/bin/runtime_choice_promotion 2>/dev/null | grep -c '^RUNTIME_CHOICE_PROMOTION checks=15/15$')" "1"
 chk "runtime_choice device parity and budget pins pass" "$(c/bin/runtime_choice_device 2>/dev/null | grep -c '^RUNTIME_CHOICE_DEVICE checks=12/12$')" "1"
-chk "mogwai_method log triage curve is pinned" "$(c/bin/mogwai_method_eval 2>/dev/null | grep -c $'^CURVE\t110\t20\t5\t0\t0\t5\t2$')" "1"
-chk "mogwai_method artifact metadata is pinned" "$(c/bin/mogwai_method_eval 2>/dev/null | grep -c '^ARTIFACT magic=MOG1 wire_bytes=3180 schema=log_triage backend=zero_center_twin_ternary score=tt_dice_256 calibration=heuristic_bucket threshold=110 margin=20 refs=12$')" "1"
-chk "mogwai_method red-team passes" "$(c/bin/mogwai_method_eval --redteam 2>/dev/null | grep -c '^MOGWAI_METHOD_REDTEAM checks=8/8$')" "1"
-chk "mogwai_method guard rejects corrupt artifacts" "$(c/bin/mogwai_method_guard 2>/dev/null | grep -c '^MOGWAI_METHOD_GUARD checks=9/9$')" "1"
+make -s results/log_triage.mog1
+chk "mogwai_method artifact is tracked" "$(git ls-files results/log_triage.mog1 | wc -l | tr -d ' ')" "1"
+chk "mogwai_method artifact size is pinned" "$(wc -c < results/log_triage.mog1 | tr -d ' ')" "3180"
+chk "mogwai_method artifact hash is pinned" "$(shasum -a 256 results/log_triage.mog1 | awk '{print $1}')" "8fa35ab79d1124ac136795c38204cfbce568ca1defb3f6b7ed9433c6c86c460b"
+chk "mogwai_method builder reproduces artifact" "$(c/bin/mogwai_method_build --check results/log_triage.mog1 2>/dev/null | grep -c '^MOGWAI_METHOD_BUILD_CHECK path=results/log_triage.mog1 bytes=3180$')" "1"
+chk "mogwai_method log triage curve is pinned" "$(c/bin/mogwai_method_eval results/log_triage.mog1 2>/dev/null | grep -c $'^CURVE\t110\t20\t5\t0\t0\t5\t2$')" "1"
+chk "mogwai_method artifact metadata is pinned" "$(c/bin/mogwai_method_eval results/log_triage.mog1 2>/dev/null | grep -c '^ARTIFACT magic=MOG1 wire_bytes=3180 schema=log_triage backend=zero_center_twin_ternary score=tt_dice_256 calibration=heuristic_bucket threshold=110 margin=20 refs=12$')" "1"
+chk "mogwai_method red-team passes" "$(c/bin/mogwai_method_eval --redteam results/log_triage.mog1 2>/dev/null | grep -c '^MOGWAI_METHOD_REDTEAM checks=8/8$')" "1"
+chk "mogwai_method guard rejects corrupt artifacts" "$(c/bin/mogwai_method_guard results/log_triage.mog1 2>/dev/null | grep -c '^MOGWAI_METHOD_GUARD checks=9/9$')" "1"
 chk "runtime_choice hot path has no heap calls" "$(grep -cE '\b(malloc|calloc|realloc|free)\s*\(' c/src/runtime_choice.c)" "0"
 # Every flag the parser accepts must appear in --help. doc/TOOLS.md states that
 # --help is the single source of truth for flags; three were missing when that

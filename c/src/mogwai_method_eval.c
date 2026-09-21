@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include "mogwai_method.h"
 
@@ -109,24 +110,41 @@ static int run_redteam(const router_t *r, const uint8_t *wire, size_t wire_size,
     return pass == checks ? 0 : 1;
 }
 
+static size_t load_wire(const char *path, uint8_t *wire, size_t cap) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }
+    long n = ftell(f);
+    if (n < 0 || (size_t)n > cap) { fclose(f); return 0; }
+    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return 0; }
+    size_t got = fread(wire, 1, (size_t)n, f);
+    int ok = fclose(f) == 0;
+    return ok && got == (size_t)n ? got : 0;
+}
+
 int main(int argc, char **argv) {
     int details = 0, redteam = 0;
-    if (argc > 2) {
-        fprintf(stderr, "usage: %s [--details|--redteam]\n", argv[0]);
+    const char *path = NULL;
+    if (argc > 3) {
+        fprintf(stderr, "usage: %s [--details|--redteam] [artifact.mog1]\n", argv[0]);
         return 1;
     }
-    if (argc == 2) {
-        if (!strcmp(argv[1], "--details")) details = 1;
-        else if (!strcmp(argv[1], "--redteam")) redteam = 1;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--details")) details = 1;
+        else if (!strcmp(argv[i], "--redteam")) redteam = 1;
         else {
-            fprintf(stderr, "usage: %s [--details|--redteam]\n", argv[0]);
-            return 1;
+            if (path) {
+                fprintf(stderr, "usage: %s [--details|--redteam] [artifact.mog1]\n", argv[0]);
+                return 1;
+            }
+            path = argv[i];
         }
     }
     router_t r = {0};
     r.dim = RD;
     uint8_t wire[MOG_WIRE_MAX_BYTES];
-    size_t wire_size = mog_build_log_triage_wire(wire, sizeof wire);
+    size_t wire_size = path ? load_wire(path, wire, sizeof wire)
+                            : mog_build_log_triage_wire(wire, sizeof wire);
     if (!wire_size) return 2;
     mog_artifact_t artifact;
     if (mog_parse_wire(&r, wire, wire_size, &artifact) != 0) return 3;

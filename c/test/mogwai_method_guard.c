@@ -8,11 +8,29 @@ static int expect_reject(const router_t *r, uint8_t *wire, size_t n) {
     return mog_parse_wire(r, wire, n, &a) != 0;
 }
 
-int main(void) {
+static size_t load_wire(const char *path, uint8_t *wire, size_t cap) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }
+    long n = ftell(f);
+    if (n < 0 || (size_t)n > cap) { fclose(f); return 0; }
+    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return 0; }
+    size_t got = fread(wire, 1, (size_t)n, f);
+    int ok = fclose(f) == 0;
+    return ok && got == (size_t)n ? got : 0;
+}
+
+int main(int argc, char **argv) {
+    if (argc > 2) {
+        fprintf(stderr, "usage: %s [artifact.mog1]\n", argv[0]);
+        return 1;
+    }
     router_t r = {0};
     r.dim = RD;
     uint8_t wire[MOG_WIRE_MAX_BYTES];
-    size_t n = mog_build_log_triage_wire(wire, sizeof wire);
+    size_t n = argc == 2 ? load_wire(argv[1], wire, sizeof wire)
+                         : mog_build_log_triage_wire(wire, sizeof wire);
+    if (!n) return 2;
     int checks = 0, pass = 0;
     mog_artifact_t a;
     checks++;

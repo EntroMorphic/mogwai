@@ -135,6 +135,10 @@ $(BIN)/mogwai_method_guard: c/test/mogwai_method_guard.c $(SRC)/mogwai_method.c 
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/mogwai_method_guard.c $(SRC)/mogwai_method.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
 
+results/log_triage.mog1: $(BIN)/mogwai_method_build
+	@mkdir -p results
+	@$(BIN)/mogwai_method_build $@ >/dev/null
+
 .PHONY: tools
 tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard $(BIN)/imgcheck $(BIN)/runtime_choice_api $(BIN)/runtime_choice_promotion $(BIN)/runtime_choice_device $(BIN)/mogwai_method_guard
 	@echo "  all tools + tests built: $$(ls $(BIN) | tr '\n' ' ')"

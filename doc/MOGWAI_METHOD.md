@@ -135,9 +135,10 @@ calibrated probability.
     schema -> examples/negatives -> host evaluator -> operating curve -> typed ABI
 
 Firmware remains untouched until the host-only proof produces stable semantics.
-The wire compiler/parser now lives outside the evaluator and has a standalone
-guard. The next proof is to make `MOG1` a real on-disk artifact with a separate
-compiler command, rather than a demo artifact built in memory.
+The wire compiler/parser now lives outside the evaluator, has a standalone guard,
+and the demo artifact is tracked on disk at `results/log_triage.mog1`. The next
+proof is empirical calibration: replacing heuristic buckets with validation-set
+reliability buckets.
 
 ## Non-Goals
 
