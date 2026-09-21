@@ -6,7 +6,7 @@ measured rather than a copy of it.
 
     idf.py -DPRODUCT=1 -DRD=256 -DTPOPCNT=1 build flash monitor   # the device
     idf.py            -DRD=256 -DTPOPCNT=1 build flash monitor    # validation
-    idf.py -B build-c6 -DSDKCONFIG=sdkconfig.c6 -DIDF_TARGET=esp32c6 \
+    idf.py -B build-c6 -DSDKCONFIG=/tmp/mogwai-sdkconfig-c6 -DIDF_TARGET=esp32c6 \
            -DRD=256 -DTPOPCNT=1 build flash monitor               # C6 validation
 
 ## `PRODUCT=1` — the device
