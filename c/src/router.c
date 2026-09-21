@@ -136,20 +136,53 @@ int r_route(const router_t *r, const char *text, int *score_out) {
     return cls;
 }
 
+static int add_overflow(size_t a, size_t b, size_t *out) {
+    if (a > (size_t)-1 - b) return 1;
+    *out = a + b;
+    return 0;
+}
+
+static int mul_overflow(size_t a, size_t b, size_t *out) {
+    if (a && b > (size_t)-1 / a) return 1;
+    *out = a * b;
+    return 0;
+}
+
+static int add_mul_overflow(size_t *acc, size_t a, size_t b) {
+    size_t v;
+    if (mul_overflow(a, b, &v) || add_overflow(*acc, v, acc)) return 1;
+    return 0;
+}
+
+static int mask_active(const uint32_t *m) {
+    int n = 0;
+    for (int i = 0; i < RWORDS; i++) n += __builtin_popcount(m[i]);
+    return n;
+}
+
 /* ---- v2 blob parse, shared by eval (host) and the firmware ---------------
  * One implementation, so the layout cannot drift between the thing we measure
  * and the thing we flash. Every section is bounds-checked against `have`
  * before it is pointed at. */
 int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have) {
     if (have < 20) return -1;
+    if (((uintptr_t)base & 3u) != 0) return -8;
     uint32_t h[5]; memcpy(h, base, 20);
     if (h[0] != RMAGIC2 || h[1] != (uint32_t)RD) return -1;
     uint32_t n = h[2];
     if (n == 0) return -2;
+    if (h[3] == 0 || h[3] > RMAXCLS) return -7;
 
-    size_t off  = 20 + (size_t)RMAXCLS * RNAMELEN + (size_t)RD * 4;
-    size_t need = off + (size_t)n * RMASKB + ((size_t)n + 1) * 2
-                      + (size_t)n * 2 + n + 4;
+    size_t off = 20;
+    if (add_mul_overflow(&off, RMAXCLS, RNAMELEN)) return -2;
+    if (add_mul_overflow(&off, RD, 4)) return -2;
+
+    size_t need = off;
+    if (add_mul_overflow(&need, n, RMASKB)) return -2;
+    if (add_mul_overflow(&need, (size_t)n + 1, 2)) return -2;
+    if (add_mul_overflow(&need, n, 2)) return -2;
+    if (add_overflow(need, n, &need)) return -2;
+    if (add_overflow(need, 4, &need)) return -2;
     if (need > have) return -2;
 
     memset(r, 0, sizeof *r);
@@ -157,6 +190,8 @@ int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have) {
     r->n_class = h[3]; r->threshold = (int32_t)h[4];
     memcpy(r->names,  base + 20, (size_t)RMAXCLS * RNAMELEN);
     memcpy(r->centre, base + 20 + (size_t)RMAXCLS * RNAMELEN, (size_t)RD * 4);
+    for (uint32_t c = 0; c < r->n_class; c++)
+        if (r->names[c][RNAMELEN - 1] != 0) return -7;
 
     const uint8_t *p = base + off;
     ix->mask  = (const uint32_t *)(const void *)p; p += (size_t)n * RMASKB;
@@ -164,9 +199,10 @@ int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have) {
     ix->act   = (const uint16_t *)(const void *)p; p += (size_t)n * 2;
     ix->label = p;                                 p += n;
     r->label  = (uint8_t *)ix->label;
+    for (uint32_t i = 0; i < n; i++) if (ix->label[i] >= r->n_class) return -7;
     ix->nex   = ix->eoff[n];
+    if ((size_t)(p - base) > have || (size_t)ix->nex > have - (size_t)(p - base) - 4) return -2;
     ix->epos  = p;                                 p += ix->nex;
-    if ((size_t)(p - base) + 4 > have) return -2;
     memcpy(&ix->nref, p, 4);                       p += 4;
     ix->refp  = p;
 
@@ -175,6 +211,7 @@ int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have) {
      * read inside the scoring loop. At RD=256 a uint8 position cannot exceed
      * the mask, but a smaller RD build makes that reachable. */
     for (uint32_t i = 0; i < n; i++) if (ix->eoff[i] > ix->eoff[i + 1]) return -3;
+    for (uint32_t i = 0; i < n; i++) if (ix->act[i] != (uint16_t)mask_active(ix->mask + (size_t)i * RWORDS)) return -9;
     /* Positions must ascend WITHIN each slice, not merely across slices.
      * t_dot_ex MERGES the two exception lists, so an unsorted (or duplicated)
      * slice silently under-counts the overlap and returns a wrong dot with no
@@ -185,10 +222,17 @@ int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have) {
         for (uint32_t k = (uint32_t)ix->eoff[i] + 1; k < ix->eoff[i + 1]; k++)
             if (ix->epos[k - 1] >= ix->epos[k]) return -5;
 #if RD < 256
-    /* Only reachable below RD=256: a uint8 position cannot exceed a 256-bit
-       mask, and the compiler rightly rejects the comparison as dead there. */
+    /* Must precede the mask-membership check below: with RD<256, a corrupt
+     * uint8 position can name a word outside the shorter mask. */
     for (uint32_t i = 0; i < ix->nex; i++) if (ix->epos[i] >= RD) return -4;
 #endif
+    for (uint32_t i = 0; i < n; i++) {
+        const uint32_t *mask = ix->mask + (size_t)i * RWORDS;
+        for (uint32_t k = ix->eoff[i]; k < ix->eoff[i + 1]; k++) {
+            uint8_t d = ix->epos[k];
+            if (((mask[d >> 5] >> (d & 31)) & 1u) == 0) return -10;
+        }
+    }
     /* The reference records are the last section, and until now nothing bounded
      * them: r_parse2 validated everything up to nref and then handed out refp.
      * main.c's parity loop walks those records, so a blob truncated inside the

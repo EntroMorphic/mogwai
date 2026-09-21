@@ -33,6 +33,16 @@ static int load(void) {
     NREF = IX.nref; REFP = IX.refp;
     return 0;
 }
+static int ref_next(const uint8_t **pp, char *txt, size_t cap, int32_t *score, int8_t *cls) {
+    const uint8_t *p = *pp;
+    uint8_t len = *p++;
+    if ((size_t)len >= cap) return -1;
+    memcpy(txt, p, len); txt[len] = 0; p += len;
+    memcpy(score, p, 4); p += 4;
+    *cls = (int8_t)*p++;
+    *pp = p;
+    return 0;
+}
 /* the whole router: encode, scan, polarity. No allocation, no float. */
 static int route(const char *txt, int *score_out) {
     tvec q; t_encode(&R, txt, &q);
@@ -143,10 +153,8 @@ static void bench_mt(void) {
     xTaskCreatePinnedToCore(worker_task, "scan1", 4096, NULL, 5, &g_worker, 1);
     const uint8_t *p = REFP; int agree = 0; int64_t tot1 = 0, tot2 = 0;
     for (uint32_t i = 0; i < NREF; i++) {
-        uint8_t len = *p++; char txt[128];
-        memcpy(txt, p, len); txt[len] = 0; p += len;
-        int32_t hs; memcpy(&hs, p, 4); p += 4;
-        int8_t hc = (int8_t)*p++;
+        char txt[128]; int32_t hs; int8_t hc;
+        if (ref_next(&p, txt, sizeof txt, &hs, &hc)) { printf("    bad reference record\n"); return; }
         int s1, s2; int64_t t0;
         t0 = esp_timer_get_time(); int c1 = route(txt, &s1);    tot1 += esp_timer_get_time() - t0;
         t0 = esp_timer_get_time(); int c2 = route_mt(txt, &s2); tot2 += esp_timer_get_time() - t0;
@@ -193,8 +201,9 @@ static int64_t reps(const char *label, int cores, uint32_t n) {
     for (int r = 0; r < NREP; r++) {
         const uint8_t *p = REFP; int64_t acc = 0;
         for (uint32_t i = 0; i < NREF; i++) {
-            uint8_t len = *p++; char txt[128];
-            memcpy(txt, p, len); txt[len] = 0; p += len + 5;
+            char txt[128]; int32_t hs; int8_t hc;
+            if (ref_next(&p, txt, sizeof txt, &hs, &hc)) { printf("    bad reference record\n"); return 0; }
+            (void)hs; (void)hc;
             tvec q; t_encode(&R, txt, &q); int aa = t_active(&q);
             uint8_t Eq[RD]; int nq = t_exceptions(&q, Eq);
             int64_t t0 = esp_timer_get_time();
@@ -368,10 +377,8 @@ static void two_stage(void) {
     for (uint32_t K = 64; K <= 512; K *= 4) {
         p = REFP; agree = 0; tot = 0;
         for (uint32_t r = 0; r < NREF; r++) {
-            uint8_t len = *p++; char txt[128];
-            memcpy(txt, p, len); txt[len] = 0; p += len;
-            int32_t hs; memcpy(&hs, p, 4); p += 4;
-            int8_t hc = (int8_t)*p++;
+            char txt[128]; int32_t hs; int8_t hc;
+            if (ref_next(&p, txt, sizeof txt, &hs, &hc)) { printf("    bad reference record\n"); return; }
             int64_t t0 = esp_timer_get_time();
             tvec q; t_encode(&R, txt, &q); int aa = t_active(&q);
             uint8_t Eq[RD]; int nq = t_exceptions(&q, Eq);
@@ -501,10 +508,8 @@ void app_main(void) {
     int agree_cls = 0, agree_score = 0; int64_t total_us = 0; int worst = 0;
     printf("\n  %-38s %-8s %-8s %s\n", "query", "host", "device", "us");
     for (uint32_t i = 0; i < NREF; i++) {
-        uint8_t len = *p++; char txt[128];
-        memcpy(txt, p, len); txt[len] = 0; p += len;
-        int32_t hs; memcpy(&hs, p, 4); p += 4;
-        int8_t hc = (int8_t)*p++;
+        char txt[128]; int32_t hs; int8_t hc;
+        if (ref_next(&p, txt, sizeof txt, &hs, &hc)) { printf("BAD REFERENCE RECORD\n"); return; }
         int ds; int64_t t0 = esp_timer_get_time();
         int dc = route(txt, &ds);
         int64_t us = esp_timer_get_time() - t0;

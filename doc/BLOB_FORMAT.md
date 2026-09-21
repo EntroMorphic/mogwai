@@ -67,6 +67,13 @@ the negatives — which is why 83% of the exceptions are in `none`.
 `REXMAX` bounds the stream because the offset table is `uint16`. `mkblob` aborts
 above it rather than silently wrapping.
 
+The runtime parser refuses malformed v2 blobs before handing out section
+pointers: bad magic or `RD`, zero vectors, too many classes, unterminated class
+names, labels outside `n_class`, non-ascending exception offsets, unsorted or
+duplicated exception positions, exception positions outside the active mask,
+wrong `act[]` counts, overrun reference records, and unaligned blob bases. Those
+are format invariants, not merely offline checks; `blobguard` mutates each one.
+
 ## Why `act[]` is stored
 
 `t_active(b)` is fixed at build time but was being recomputed for every index

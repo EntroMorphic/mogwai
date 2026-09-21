@@ -49,6 +49,10 @@ int main(int argc, char **argv) {
         expect("zero n_index is refused", b, SZ, -2); free(b); }
     {   unsigned char *b = copy(); uint32_t huge = 1u << 20; memcpy(b + 8, &huge, 4);
         expect("an n_index past the extent is refused", b, SZ, -2); free(b); }
+    {   unsigned char *b = copy(); uint32_t many = RMAXCLS + 1; memcpy(b + 12, &many, 4);
+        expect("too many classes are refused", b, SZ, -7); free(b); }
+    {   unsigned char *b = copy(); b[20 + RNAMELEN - 1] = 'X';
+        expect("unterminated class names are refused", b, SZ, -7); free(b); }
 
     /* Truncation: any refusal is correct. Below 20 bytes there is not even a
        header, so the parser says -1 rather than -2; demanding a specific code
@@ -98,12 +102,20 @@ int main(int argc, char **argv) {
         unsigned char *b = copy();
         r_parse2(&R, &IX, b, SZ);
         uint16_t *eoff = (uint16_t *)(void *)IX.eoff;
-        uint32_t at = 0;
+        uint32_t at = 0; int found = 0;
         for (uint32_t i = 0; i + 1 < R.n_index; i++)
-            if (eoff[i] != eoff[i+1]) { at = i; break; }
-        if (at) { uint16_t t = eoff[at]; eoff[at] = eoff[at+1]; eoff[at+1] = t;
-                  expect("non-ascending offsets are refused", b, SZ, -3); }
+            if (eoff[i] != eoff[i+1]) { at = i; found = 1; break; }
+        if (found) { uint16_t t = eoff[at]; eoff[at] = eoff[at+1]; eoff[at+1] = t;
+                     expect("non-ascending offsets are refused", b, SZ, -3); }
         else printf("  (no differing adjacent offsets; check skipped)\n");
+        free(b); }
+
+    {   router_t R; rindex2 IX;
+        unsigned char *b = copy();
+        r_parse2(&R, &IX, b, SZ);
+        uint16_t *act = (uint16_t *)(void *)IX.act;
+        act[0]++;
+        expect("wrong active counts are refused", b, SZ, -9);
         free(b); }
 
     {   router_t R; rindex2 IX;
@@ -126,10 +138,36 @@ int main(int argc, char **argv) {
     {   router_t R; rindex2 IX;
         unsigned char *b = copy();
         r_parse2(&R, &IX, b, SZ);
+        uint32_t v = 0; int found = 0;
+        for (uint32_t i = 0; i < R.n_index; i++)
+            if (IX.eoff[i] != IX.eoff[i+1]) { v = i; found = 1; break; }
+        if (found) {
+            uint8_t *slice = (uint8_t *)IX.epos + IX.eoff[v];
+            const uint32_t *mask = IX.mask + (size_t)v * RWORDS;
+            uint8_t save = slice[0]; uint32_t bad = 0;
+            while (bad < RD && ((mask[bad >> 5] >> (bad & 31)) & 1u)) bad++;
+            if (bad < RD) { slice[0] = (uint8_t)bad; expect("inactive exception positions are refused", b, SZ, -10); slice[0] = save; }
+            else printf("  (no inactive dim available; membership check skipped)\n");
+        } else printf("  (no exception slice; membership check skipped)\n");
+        free(b); }
+
+    {   router_t R; rindex2 IX;
+        unsigned char *b = copy();
+        r_parse2(&R, &IX, b, SZ);
+        uint8_t *label = (uint8_t *)IX.label;
+        label[0] = (uint8_t)R.n_class;
+        expect("out-of-range labels are refused", b, SZ, -7);
+        free(b); }
+
+    {   router_t R; rindex2 IX;
+        unsigned char *b = copy();
+        r_parse2(&R, &IX, b, SZ);
         uint8_t *nref = (uint8_t *)IX.refp - 4;
         uint32_t many = IX.nref + 64; memcpy(nref, &many, 4);
         expect("reference records past the end are refused", b, SZ, -6);
         free(b); }
+    {   unsigned char *b = malloc((size_t)SZ + 1); memcpy(b + 1, ORIG, (size_t)SZ);
+        expect("unaligned blobs are refused", b + 1, (size_t)SZ, -8); free(b); }
     printf("\n  %s (%d failures)\n", fails ? "*** BLOBGUARD FAILED ***" : "blobguard OK", fails);
     return fails ? 1 : 0;
 }

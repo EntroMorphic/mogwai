@@ -13,9 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 jobs:
   # A tag must not be able to publish a build that does not pass. Without this
@@ -102,6 +100,27 @@ jobs:
           cp mogwai-esp32.bin flash/
           ls -l flash/
 
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-assets
+          path: |
+            mogwai-esp32.bin
+            mogwai-esp32.bin.sha256
+            flash
+
+  publish:
+    name: attach release assets
+    needs: image
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: release-assets
+
       # A re-run of this workflow REPLACES the published assets. That is how
       # v0.1.0's binary was silently swapped 83 minutes after the release: the
       # Pages deploy had failed, the run was re-run to fix it, and the attach
@@ -111,7 +130,6 @@ jobs:
       # tag. Refuse instead: to republish Pages alone, re-run only the deploy
       # job; to change the binary, cut a new tag.
       - name: Refuse to overwrite published assets
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -124,7 +142,6 @@ jobs:
           echo "no existing assets on ${GITHUB_REF_NAME} — safe to attach"
 
       - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
           files: |
@@ -136,7 +153,6 @@ jobs:
       # quietly downgrading the provenance of a page whose whole job is to tell
       # people which build they are about to put on their hardware.
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           path: flash
 
@@ -152,9 +168,12 @@ jobs:
   # like a working deployment that spontaneously died.
   deploy:
     name: publish the flasher
-    needs: image
+    needs: publish
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

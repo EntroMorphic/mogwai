@@ -342,12 +342,18 @@ void app_main(void) {
 #endif
     fflush(stdout);
 
-    char line[256]; int n = 0;
+    char line[256]; int n = 0, overflow = 0;
     for (;;) {
         uint8_t ch;
         int got = uart_read_bytes(UART_NUM_0, &ch, 1, portMAX_DELAY);
         if (got != 1) continue;
         if (ch == '\r' || ch == '\n') {
+            if (overflow) {
+                printf("\n  REJECTED     input line too long — no output changed\n\n> ");
+                fflush(stdout);
+                n = 0; overflow = 0;
+                continue;
+            }
             if (!n) continue;              /* bare newline: no prompt, no noise */;
             line[n] = 0;
 #ifdef MOGWAI_WIFI
@@ -372,6 +378,8 @@ void app_main(void) {
             n = 0;
         } else if (n < (int)sizeof(line) - 1 && ch >= 0x20) {
             line[n++] = (char)ch;
+        } else if (ch >= 0x20) {
+            overflow = 1;
         }
     }
 }

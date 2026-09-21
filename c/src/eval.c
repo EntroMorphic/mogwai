@@ -41,12 +41,17 @@ static int load_blob(const char *path) {
     int rc = r_parse2(&R, &IX, BLOB, (size_t)sz);
     if (rc) {
         static const char *why[] = { "", "bad magic or dim (a v1 blob? rebuild)",
-                                     "truncated / extent overflow",
-                                     "exception offsets not ascending",
-                                     "exception position out of range",
-                                     "exception slice not ascending (or duplicated)",
-                                     "reference records overrun the blob" };
-        fprintf(stderr, "  blob rejected: %s\n", why[-rc]);
+                                      "truncated / extent overflow",
+                                      "exception offsets not ascending",
+                                      "exception position out of range",
+                                      "exception slice not ascending (or duplicated)",
+                                      "reference records overrun the blob",
+                                      "bad class metadata or label",
+                                      "unaligned blob base",
+                                      "wrong active counts",
+                                      "exception position outside active mask" };
+        int i = -rc;
+        fprintf(stderr, "  blob rejected: %s\n", (i > 0 && i < (int)(sizeof why / sizeof why[0])) ? why[i] : "unknown parse error");
         return 1;
     }
     NREF = IX.nref; REFP = IX.refp;

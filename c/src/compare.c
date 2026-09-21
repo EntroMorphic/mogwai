@@ -14,9 +14,11 @@
 #include <time.h>
 
 #define MAXU 40000
+#define MAXV 3000
+#define MAXT 4000
 static char *U_t[MAXU]; static char U_l[MAXU][RNAMELEN]; static int U_n;
-static char *V_t[3000]; static char V_l[3000][RNAMELEN]; static int V_n;
-static char *T_t[4000]; static char T_l[4000][RNAMELEN]; static int T_n;
+static char *V_t[MAXV]; static char V_l[MAXV][RNAMELEN]; static int V_n;
+static char *T_t[MAXT]; static char T_l[MAXT][RNAMELEN]; static int T_n;
 static router_t R; static tvec *TI; static tvec TSIG[RMAXCLS];
 static int SIGMODE = 0;  /* re-open: mask choice also came from leaked dev */
 static int NOVETO  = 1;   /* signature veto DROPPED: hash-derived, measured inert */
@@ -59,8 +61,15 @@ static int js(const char*l,const char*k,char*o,int cap){
     p++;
     int n=0; while(*p&&*p!='"'&&n<cap-1){if(*p=='\\'&&p[1])p++;o[n++]=*p++;} o[n]=0; return 1; }
 static int isiot(const char*l){return !strncmp(l,"iot_",4);}
-static void push(char**ta,char la[][RNAMELEN],int*n,const char*t,const char*l){
-    ta[*n]=strdup(t); snprintf(la[*n],RNAMELEN,"%s",l); (*n)++; }
+static void push(char**ta,char la[][RNAMELEN],int*n,int cap,const char*t,const char*l){
+    if (*n >= cap) { fprintf(stderr,"  corpus capacity exceeded (%d)\n",cap); exit(1); }
+    ta[*n]=strdup(t); if(!ta[*n]){fprintf(stderr,"  out of memory\n");exit(1);}
+    snprintf(la[*n],RNAMELEN,"%s",l); (*n)++; }
+static FILE *open_corpus(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) { perror(path); exit(1); }
+    return f;
+}
 #define HN 65536
 static char *HS[HN];
 static void hs_add(const char*s){ char b[512]; r_norm(s,b,sizeof b);
@@ -2395,11 +2404,13 @@ int main(int argc,char**argv){
         pos[2]="data/test.json";  pos[3]="data/nlu_home.csv"; np=4;
     }
     if (np != 4) { fprintf(stderr,"  need 4 corpus paths or none (defaults to data/)\n  try --help\n"); return 1; }
-    { FILE *probe = fopen(pos[0], "r");
-      if (!probe) { fprintf(stderr,
-          "  cannot open %s\n"
-          "  the corpora are fetched, not vendored — run:  make fetch\n", pos[0]); return 1; }
-      fclose(probe); }
+    for (int i = 0; i < 4; i++) {
+        FILE *probe = fopen(pos[i], "r");
+        if (!probe) { fprintf(stderr,
+            "  cannot open %s\n"
+            "  the corpora are fetched, not vendored — run:  make fetch\n", pos[i]); return 1; }
+        fclose(probe);
+    }
     argv[1]=(char*)pos[0]; argv[2]=(char*)pos[1]; argv[3]=(char*)pos[2]; argv[4]=(char*)pos[3];
     if(ROUTE1 || REPL) INV_QUIET = 1;
     if(USE_TEST){
@@ -2426,27 +2437,28 @@ int main(int argc,char**argv){
     FILE*f;
     /* TEST is loaded FIRST so the index can exclude any string that
        also appears in test — MASSIVE train and test share utterances. */
-    f=fopen(argv[3],"r");
+    f=open_corpus(argv[3]);
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l))
-        { push(T_t,T_l,&T_n,t,isiot(l)?l:"none"); hs_add(t); }
+        { push(T_t,T_l,&T_n,MAXT,t,isiot(l)?l:"none"); hs_add(t); }
     fclose(f);
 
     /* DEV comes out of TRAIN: validation has only 118 IoT, so a dev set carved
        from it is n=59 and cannot resolve anything. Train has 769. */
-    f=fopen(argv[1],"r"); int ti=0, tn=0;
+    f=open_corpus(argv[1]); int ti=0, tn=0;
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l)){
         int io=isiot(l);
         if(hs_has(t)) continue;                 /* MASSIVE train repeats strings */
-        if(io && (ti++ % 4)==0){ push(V_t,V_l,&V_n,t,l); if(!LEAKTEST) hs_add(t); continue; }
-        if(!io && (tn++ % 8)==0){ push(V_t,V_l,&V_n,t,"none"); hs_add(t); continue; }
-        push(U_t,U_l,&U_n,t,io?l:"none"); hs_add(t);
+        if(io && (ti++ % 4)==0){ push(V_t,V_l,&V_n,MAXV,t,l); if(!LEAKTEST) hs_add(t); continue; }
+        if(!io && (tn++ % 8)==0){ push(V_t,V_l,&V_n,MAXV,t,"none"); hs_add(t); continue; }
+        push(U_t,U_l,&U_n,MAXU,t,io?l:"none"); hs_add(t);
     }
     fclose(f); int n_train=U_n;
-    f=fopen(argv[2],"r");
+    f=open_corpus(argv[2]);
     while(fgets(line,sizeof line,f)) if(js(line,"text",t,sizeof t)&&js(line,"label_text",l,sizeof l))
-        if(isiot(l)){ push(U_t,U_l,&U_n,t,l); hs_add(t); }   /* all val IoT -> index */
+        if(isiot(l)){ push(U_t,U_l,&U_n,MAXU,t,l); hs_add(t); }   /* all val IoT -> index */
+    fclose(f);
 
-    f=fopen(argv[4],"r"); int added=0,dup=0;
+    f=open_corpus(argv[4]); int added=0,dup=0;
     while(fgets(line,sizeof line,f)){
         char*fl[12]={0}; int nf=0,inq=0; char*p=line; fl[nf++]=p;
         for(;*p&&nf<12;p++){ if(*p=='"')inq=!inq; else if(*p==';'&&!inq){*p=0;fl[nf++]=p+1;} }
@@ -2457,7 +2469,7 @@ int main(int argc,char**argv){
         if(strcmp(fl[2],"iot"))continue;
         if(hs_has(fl[9])){dup++;continue;}
         char lb[RNAMELEN]; snprintf(lb,sizeof lb,"iot_%s",fl[3]);
-        push(U_t,U_l,&U_n,fl[9],lb); hs_add(fl[9]); added++;
+        push(U_t,U_l,&U_n,MAXU,fl[9],lb); hs_add(fl[9]); added++;
     } fclose(f);
     if(!ROUTE1 && !REPL) fprintf(stderr,"  index %d (train %d, +NLU %d new, %d dedup) | DEV %d | test %d\n",
             U_n,n_train,added,dup,V_n,T_n);
@@ -2466,7 +2478,10 @@ int main(int argc,char**argv){
     memset(&R,0,sizeof R); R.magic=RMAGIC; R.dim=RD; R.n_index=U_n;
     for(int i=0;i<U_n;i++){ int fnd=-1;
         for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){fnd=c;break;}
-        if(fnd<0&&R.n_class<RMAXCLS) snprintf(R.names[R.n_class++],RNAMELEN,"%.*s",RNAMELEN-1,U_l[i]); }
+        if(fnd<0){
+            if(R.n_class>=RMAXCLS){fprintf(stderr,"  too many classes (max %d): %s\n",RMAXCLS,U_l[i]);return 1;}
+            snprintf(R.names[R.n_class++],RNAMELEN,"%.*s",RNAMELEN-1,U_l[i]);
+        } }
     int64_t sum[RD]; memset(sum,0,sizeof sum); int16_t acc[RD]; int32_t tot;
     int64_t nz[RD]; memset(nz,0,sizeof nz);
     for(int i=0;i<U_n;i++){ r_counts(U_t[i],acc,&tot);
@@ -2478,8 +2493,10 @@ int main(int argc,char**argv){
        99.3%% ones, i.e. 32 bytes/vector carrying ~0.06 bits per active dim. */
     for(int d=0;d<RD;d++) R.centre[d]=(int32_t)(sum[d]/(CONDCENTRE?(nz[d]?nz[d]:1):U_n));
     R.index=calloc(U_n,sizeof(rvec)); R.label=calloc(U_n,1); TI=calloc(U_n,sizeof(tvec));
-    for(int i=0;i<U_n;i++){ r_encode(&R,U_t[i],&R.index[i]); t_encode(&R,U_t[i],&TI[i]);
-        for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){R.label[i]=c;break;} }
+    for(int i=0;i<U_n;i++){ int fnd=-1; r_encode(&R,U_t[i],&R.index[i]); t_encode(&R,U_t[i],&TI[i]);
+        for(uint32_t c=0;c<R.n_class;c++) if(!strcmp(R.names[c],U_l[i])){fnd=(int)c;break;}
+        if(fnd<0){fprintf(stderr,"  class disappeared: %s\n",U_l[i]);return 1;}
+        R.label[i]=(uint8_t)fnd; }
     /* Pruning runs AFTER encoding with the full-index centre, so every surviving
        code is bit-identical to the unpruned run: this isolates "fewer stored
        vectors" from "different encoder". Shared with mkblob (see prune.h). */

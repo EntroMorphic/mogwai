@@ -50,6 +50,10 @@ non-commands (0.44%)** — test evaluation #6. The unpruned 656 KB index measure
 GPIO2 is the onboard LED on most ESP32 devkits, so the light intents are
 visible without wiring anything.
 
+Input lines are bounded at 255 printable bytes. An overlong line is rejected and
+drained until newline, rather than routing a truncated prefix and possibly
+actuating from a malformed serial frame.
+
 ## `PRODUCT=0` (default) — validation
 
 Flashing this does **not** give you a device. It runs a parity check and several

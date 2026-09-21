@@ -14,6 +14,9 @@
 #ifndef RD
 #define RD        256
 #endif
+#if RD <= 0 || RD > 256 || (RD % 32) != 0
+#error "RD must be a positive multiple of 32 and no larger than 256"
+#endif
 #define RWORDS    (RD / 32)          /* 8 words per bit-plane; a tvec holds two
                                         (mask+sign) = 16 words = 64 bytes */
 #define RMAXCLS   16
@@ -131,6 +134,10 @@ typedef struct {
  *   -3 offsets not ascending -4 exception position out of range
  *   -5 an exception slice is not strictly ascending
  *   -6 the reference records overrun the blob
+ *   -7 bad class metadata or label
+ *   -8 blob base is not aligned for in-place typed reads
+ *   -9 act[] disagrees with the active mask
+ *   -10 exception position is not active in the mask
  * The extent check matters because magic and dim survive a truncated blob
  * while n_index does not describe what is really there. */
 int r_parse2(router_t *r, rindex2 *ix, const uint8_t *base, size_t have);
