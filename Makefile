@@ -8,7 +8,7 @@ CFLAGS  := -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -D_POSIX_C_SOURCE=20
 LDLIBS  := -lm
 SRC     := c/src
 BIN     := c/bin
-CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c $(SRC)/prior.c $(SRC)/prune.c $(SRC)/cue.c $(SRC)/gate.c $(SRC)/runtime_choice.c
+CORE    := $(SRC)/router.c $(SRC)/ternary.c $(SRC)/cascade.c $(SRC)/invariants.c $(SRC)/prior.c $(SRC)/prune.c $(SRC)/cue.c $(SRC)/gate.c $(SRC)/runtime_choice.c $(SRC)/mogwai_method.c
 DATA    := data/train.json data/validation.json data/test.json data/nlu_home.csv
 LOG     := results/RESULTS.tsv
 
@@ -131,8 +131,12 @@ $(BIN)/runtime_choice_device: c/test/runtime_choice_device.c $(SRC)/runtime_choi
 	@mkdir -p $(BIN)
 	@$(CC) $(CFLAGS) -o $@ c/test/runtime_choice_device.c $(SRC)/runtime_choice.c $(SRC)/router.c $(LDLIBS)
 
+$(BIN)/mogwai_method_guard: c/test/mogwai_method_guard.c $(SRC)/mogwai_method.c $(SRC)/mogwai_method.h $(SRC)/router.c $(SRC)/ternary.c $(SRC)/router.h $(SRC)/ternary.h
+	@mkdir -p $(BIN)
+	@$(CC) $(CFLAGS) -o $@ c/test/mogwai_method_guard.c $(SRC)/mogwai_method.c $(SRC)/router.c $(SRC)/ternary.c $(LDLIBS)
+
 .PHONY: tools
-tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard $(BIN)/imgcheck $(BIN)/runtime_choice_api $(BIN)/runtime_choice_promotion $(BIN)/runtime_choice_device
+tools: $(patsubst $(SRC)/%.c,$(BIN)/%,$(filter-out $(CORE),$(wildcard $(SRC)/*.c))) $(BIN)/t_popcnt $(BIN)/blobfmt $(BIN)/blobguard $(BIN)/imgcheck $(BIN)/runtime_choice_api $(BIN)/runtime_choice_promotion $(BIN)/runtime_choice_device $(BIN)/mogwai_method_guard
 	@echo "  all tools + tests built: $$(ls $(BIN) | tr '\n' ' ')"
 
 # Full host regression. Run after any structural change.

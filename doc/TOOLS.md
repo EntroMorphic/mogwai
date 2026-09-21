@@ -3,8 +3,9 @@
     make tools      # builds every tool AND both tests — run this after any
                     # signature change; it is what catches bit-rot
 
-Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
-`router.c ternary.c cascade.c invariants.c prior.c prune.c`.
+Individually: `make c/bin/<name>`. `CORE`, linked into all of them, includes
+`router.c ternary.c cascade.c invariants.c prior.c prune.c cue.c gate.c
+runtime_choice.c mogwai_method.c`.
 
 ## Shipping path
 
@@ -18,6 +19,7 @@ Individually: `make c/bin/<name>`. `CORE`, linked into all of them, is
 | `gate.c` | the word prior compacted for the device: 2.13 MB -> 74 KB, bit-exact. Built but NOT shipped — the selector it serves failed held-out |
 | `cue.c` | index-derived hard word cues. Built, swept, measured harmful at every lift threshold |
 | `runtime_choice.c` | production runtime-choice API scaffold. Fails closed until the flat semhash+factor scorer is promoted behind it |
+| `mogwai_method.c` | shared host-only Mogwai Method wire artifact compiler/parser/scorer for the log-triage proof. Not linked into firmware |
 
 ## Harness
 
@@ -70,6 +72,7 @@ signature, which is why `make tools` now exists.
 | `runtime_choice_api.c` | the production runtime-choice API boundary fails closed: malformed inputs reject, empty sets abstain, and valid calls return unsupported until the scorer is promoted |
 | `runtime_choice_promotion.c` | P0 production-promotion runtime-choice cases over explicit query/candidate records: expected winners and expected factor-refusal attribution |
 | `runtime_choice_device.c` | firmware-equivalent runtime-choice parity and budget pins: worst-case 32-candidate flat scoring, `RTC1` round-trip parity, exact score/margin/reason, and serialized/operation ceilings |
+| `mogwai_method_guard.c` | corruption guard for the `MOG1` method artifact parser: good parse, bad magic, truncation, count overflow, threshold drift, invalid negative flag and unterminated text all pinned. `c/bin/mogwai_method_guard` |
 | `scripts/verify-release.sh` | downloads a **published** release, checks the published sha256 describes the published bytes, erases the chip, flashes it, and asserts the board comes up 100% resident with 0 MISMATCHED, actuates on a known command at the expected score, and rejects a non-command. Appends to `results/RELEASE_VERIFIED.tsv`, which `regress.sh` checks has a row for every tag |
 
 ## Compile-time switches

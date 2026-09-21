@@ -135,8 +135,9 @@ calibrated probability.
     schema -> examples/negatives -> host evaluator -> operating curve -> typed ABI
 
 Firmware remains untouched until the host-only proof produces stable semantics.
-The next proof must move the wire artifact out of the evaluator into a standalone
-compiler/parser pair, then add corruption guards comparable to `blobguard`.
+The wire compiler/parser now lives outside the evaluator and has a standalone
+guard. The next proof is to make `MOG1` a real on-disk artifact with a separate
+compiler command, rather than a demo artifact built in memory.
 
 ## Non-Goals
 
